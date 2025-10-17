@@ -13,6 +13,11 @@ class AppointmentController extends Controller
 {
     protected $appointmentService;
 
+    public function __construct(AppointmentService $appointmentService)
+    {
+        $this->appointmentService = $appointmentService;
+    }
+
 
 
 
@@ -46,10 +51,9 @@ class AppointmentController extends Controller
 
 
             $appointments = $this->appointmentService->getCustomerAppointments(
-                auth()->user(),
+                request()->user(),
                 $validated
             );
-
             return response()->json([
                 'success' => true,
                 'message' => 'تم جلب قائمة الحجوزات بنجاح',
@@ -138,7 +142,7 @@ class AppointmentController extends Controller
 
 
             $appointments = $this->appointmentService->getUpcomingAppointments(
-                auth()->user(),
+                request()->user(),
                 $days
             );
 
@@ -180,7 +184,7 @@ class AppointmentController extends Controller
 
 
             $appointments = $this->appointmentService->getPastAppointments(
-                auth()->user(),
+                request()->user(),
                 $limit
             );
 
@@ -215,7 +219,7 @@ class AppointmentController extends Controller
         try {
 
             $stats = $this->appointmentService->getAppointmentStatistics(
-                auth()->user()
+                request()->user()
             );
 
 
@@ -253,7 +257,7 @@ class AppointmentController extends Controller
 
 
             $appointments = $this->appointmentService->searchAppointments(
-                auth()->user(),
+                request()->user(),
                 $validated['query']
             );
 
@@ -294,7 +298,7 @@ class AppointmentController extends Controller
 
             $appointment = $this->appointmentService->cancelAppointment(
                 $id,
-                auth()->user(),
+                request()->user(),
                 $validated['reason'] ?? ''
             );
 

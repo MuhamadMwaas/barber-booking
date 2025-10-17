@@ -24,7 +24,6 @@ class AppointmentService
     public function getCustomerAppointments(User $customer, array $filters = []): LengthAwarePaginator
     {
         try {
-
             $query = Appointment::where('customer_id', $customer->id)
                 ->with([
                     'provider:id,first_name,last_name,email,phone,avatar_url',

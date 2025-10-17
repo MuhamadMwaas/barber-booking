@@ -82,7 +82,7 @@ class User extends Authenticatable
         return $this->hasMany(Appointment::class, 'provider_id');
     }
 
-      public function appointmentsFinshedAsProvider()
+    public function appointmentsFinshedAsProvider()
     {
         return $this->hasMany(Appointment::class, 'provider_id')->whereNotIn('status', [ AppointmentStatus::ADMIN_CANCELLED, AppointmentStatus::USER_CANCELLED]);
     }

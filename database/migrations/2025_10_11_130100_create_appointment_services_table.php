@@ -17,7 +17,7 @@ return new class extends Migration
             $table->foreign('appointment_id')->references('id')->on('appointments');
 
             $table->unsignedBigInteger('service_id');
-            $table->foreign('service_id')->references('id')->on('Services');
+            $table->foreign('service_id')->references('id')->on('services');
 
             $table->string('service_name');
             $table->smallInteger('duration_minutes');
