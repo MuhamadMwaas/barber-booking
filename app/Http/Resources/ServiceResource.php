@@ -32,13 +32,12 @@ class ServiceResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
 
-            // Relationships
+            // relationships
             'category' => new ServiceCategoryResource($this->whenLoaded('category')),
             'branch' => new BranchResource($this->whenLoaded('branch')),
             'providers' => ProviderResource::collection($this->whenLoaded('providers')),
             'reviews' => ServiceReviewResource::collection($this->whenLoaded('reviews')),
 
-            // Computed fields
             'has_discount' => $this->discount_price !== null,
         ];
     }

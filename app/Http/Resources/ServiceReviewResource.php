@@ -7,7 +7,6 @@ use Illuminate\Http\Resources\Json\JsonResource;
 class ServiceReviewResource extends JsonResource
 {
     /**
-     * Transform the resource into an array.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return array
@@ -22,7 +21,7 @@ class ServiceReviewResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
 
-            // Relationships
+            // relationships
             'user' => new UserResource($this->whenLoaded('user')),
         ];
     }
