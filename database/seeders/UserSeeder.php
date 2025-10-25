@@ -7,7 +7,8 @@ use App\Models\User;
 use App\Models\Branch;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
-
+use Illuminate\Support\Facades\Storage;
+use Laravolt\Avatar\Facade as Avatar;
 class UserSeeder extends Seeder
 {
     public function run(): void
@@ -29,6 +30,7 @@ class UserSeeder extends Seeder
             'email_verified_at' => now(),
             'branch_id' => $branches->first()->id,
         ]);
+        self::create_random_image($admin);
         $admin->assignRole('admin');
 
 
@@ -47,6 +49,8 @@ class UserSeeder extends Seeder
             'email_verified_at' => now(),
             'branch_id' => $branches->first()->id,
         ]);
+                self::create_random_image($manager);
+
          $manager->assignRole('manager');
         // Create Providers (Stylists/Beauticians)
         $providers = [
@@ -125,7 +129,8 @@ class UserSeeder extends Seeder
                 'email_verified_at' => now(),
                 'branch_id' => $branches->random()->id,
             ]);
-               $providerUser->assignRole('provider');
+            self::create_random_image($providerUser);
+            $providerUser->assignRole('provider');
         }
 
         // Create Customers
@@ -253,12 +258,44 @@ class UserSeeder extends Seeder
                 'email_verified_at' => now(),
                 'branch_id' => $branches->random()->id,
             ]);
-             $customerUser->assignRole('customer');
+            self::create_random_image($customerUser);
+            $customerUser->assignRole('customer');
         }
 
         $this->command->info(' Users seeded successfully');
         $this->command->info('2 Admins/Managers');
         $this->command->info('8 Providers');
         $this->command->info('15 Customers');
+    }
+
+    public static function create_random_image($user)
+    {
+            $name=str_replace(' ','_',trim($user->first_name));
+            $dir = "users/profile_images/{$user->id}";
+            $path = "{$dir}/{$name}_{$user->id}.png";
+
+
+            Storage::disk('public')->makeDirectory($dir);
+
+                if (Storage::disk('public')->exists($path)) {
+                    Storage::disk('public')->delete($path);
+                }
+            Avatar::create($name ?: $user->email)
+                ->setBackground('#E2E8F0')
+                ->setForeground('#0F172A')
+                ->setDimension(300)
+                ->save(storage_path("app/public/{$path}"));
+
+
+
+            $user->profile_image()->create([
+                'name'      => $name . '_'.$user->id,
+                'path'      => $path,
+                'disk'      => 'public',
+                'type'      => 'profile_image',
+                'extension' => 'png',
+                'group'     => 'avatar',
+                'key'       => 'profile',
+            ]);
     }
 }

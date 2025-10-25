@@ -31,10 +31,13 @@ class BookingValidationService
         if ($bookingDate->lt(Carbon::today())) {
             throw new InvalidArgumentException('Cannot book in the past');
         }
+
+
         $max_booking_days = SalonSetting::where('key', 'max_booking_days')->first()->value;
         if ($bookingDate->gt(Carbon::today()->addDays($max_booking_days))) {
             throw new InvalidArgumentException('Cannot book more than ' . $max_booking_days . ' days in advance');
         }
+
 
         $serviceIds = array_column($services, 'service_id');
         if (count($serviceIds) !== count(array_unique($serviceIds))) {
@@ -151,6 +154,7 @@ class BookingValidationService
         // 5. التحقق من عدم وجود حجوزات متداخلة
         $hasConflictingAppointment = Appointment::where('provider_id', $provider->id)
             ->whereDate('appointment_date', $date)
+            ->where('created_status', 1)
             ->whereIn('status', [AppointmentStatus::PENDING->value])
             ->where(function ($query) use ($startTime, $endTime) {
                 $query->where(function ($q) use ($startTime, $endTime) {

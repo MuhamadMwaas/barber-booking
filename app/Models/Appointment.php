@@ -8,6 +8,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+
 class Appointment extends Model
 {
     use HasFactory;
@@ -30,6 +33,7 @@ class Appointment extends Model
         'cancelled_at',
         'notes',
         'payment_status',
+        'created_status'
     ];
 
 
@@ -155,6 +159,14 @@ class Appointment extends Model
             return "{$minutes}m";
         }
     }
+    public function invoice(): HasOne
+    {
+        return $this->hasOne(Invoice::class, 'appointment_id');
+    }
 
+    public function payments(): MorphMany
+    {
+        return $this->morphMany(Payment::class, 'paymentable');
+    }
 
 }

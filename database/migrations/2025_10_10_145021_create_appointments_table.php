@@ -34,6 +34,7 @@ return new class extends Migration
             $table->dateTime('cancelled_at')->nullable();
             $table->text('notes')->nullable();
             $table->tinyInteger('payment_status')->default(0);
+            $table->tinyInteger('created_status')->default(0);
             $table->timestamps();
         });
     }

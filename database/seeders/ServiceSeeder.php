@@ -6,7 +6,8 @@ use App\Models\Service;
 use App\Models\ServiceCategory;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
-
+use Illuminate\Support\Facades\Storage;
+use Laravolt\Avatar\Facade as Avatar;
 class ServiceSeeder extends Seeder
 {
     /**
@@ -145,9 +146,42 @@ class ServiceSeeder extends Seeder
                     'description' => $attrs['description'],
                 ]);
             }
+            self::create_service_image($service);
+
         }
 
         $this->command->info('Services seeded successfully with translations (' . count($services) . ' services)');
 
     }
+
+    public static function create_service_image($service)
+{
+    $name=str_replace(' ','_',trim($service->name));
+    $dir = "services/images/{$service->id}";
+    $path = "{$dir}/{$name}_{$service->id}.png";
+
+    Storage::disk('public')->makeDirectory($dir);
+
+    if (Storage::disk('public')->exists($path)) {
+        Storage::disk('public')->delete($path);
+    }
+
+    Avatar::create($service->name)
+        ->setBackground($service->color_code ?? '#FF6B9D')
+        ->setForeground('#FFFFFF')
+        ->setDimension(400)
+        ->save(storage_path("app/public/{$path}"));
+
+    $service->image()->create([
+        'instance_type' => Service::class,
+        'instance_id' => $service->id,
+        'name' => $name . '_' . $service->id,
+        'path' => $path,
+        'disk' => 'public',
+        'type' => 'service_image',
+        'extension' => 'png',
+        'group' => 'service',
+        'key' => 'main',
+    ]);
+}
 }

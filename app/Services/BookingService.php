@@ -10,10 +10,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
-/**
- * خدمة إدارة الحجوزات المتقدمة
- * تدير عملية الحجز الكاملة مع التحقق من التوفر والتسلسل الزمني
- */
+
 class BookingService
 {
     protected ServiceAvailabilityService $availabilityService;
@@ -35,7 +32,7 @@ class BookingService
     public function validateBooking(User $customer, array $bookingData): array
     {
         $services = $bookingData['services'];
-        $date = $bookingData['date']; // Y-m-d
+        $date = $bookingData['date'];
 
         $this->validationService->validateBasicData($services, $date);
 
@@ -170,6 +167,7 @@ class BookingService
             // 4. استخدام أول مقدم خدمة كمقدم رئيسي للحجز
             $primaryProvider = $validatedServices[0]['provider'];
 
+            $createdStatus = ($paymentMethod === 'cash') ? 1 : 0;
             // 5. إنشاء الحجز
             $appointment = Appointment::create([
                 'number' => $this->generateAppointmentNumber(),
@@ -186,6 +184,8 @@ class BookingService
                 'payment_status' => \App\Enum\PaymentStatus::PENDING,
                 'payment_method' => $paymentMethod,
                 'notes' => $notes,
+                'created_status' => $createdStatus,
+
             ]);
 
             // 6. إضافة الخدمات للحجز
@@ -332,7 +332,7 @@ class BookingService
      */
     private function getTaxRate(): float
     {
-        return 19; 
+        return 19;
     }
 
     /**
@@ -345,5 +345,84 @@ class BookingService
         $random = strtoupper(substr(uniqid(), -6));
 
         return "{$prefix}-{$date}-{$random}";
+    }
+
+    /**
+     * Confirm payment and activate booking
+     *
+     * @param int $appointmentId
+     * @param User $customer
+     * @param string|null $transactionId
+     * @param array $metadata
+     * @return Appointment
+     * @throws InvalidArgumentException
+     */
+    public function confirmPayment(
+        int $appointmentId,
+        User $customer,
+        ?string $transactionId = null,
+        array $metadata = []
+    ): Appointment {
+        try {
+            $appointment = Appointment::with(['services_record', 'provider', 'customer'])
+                ->findOrFail($appointmentId);
+
+
+                if ($appointment->customer_id !== $customer->id) {
+                throw new InvalidArgumentException(
+                    'ليس لديك صلاحية للوصول إلى هذا الحجز'
+                );
+            }
+
+
+            // if ($appointment->created_status == 1) {
+            //     throw new InvalidArgumentException(
+            //         'الحجز مفعل بالفعل'
+            //     );
+            // }
+
+
+            if (in_array($appointment->status->value, [\App\Enum\AppointmentStatus::USER_CANCELLED->value, \App\Enum\AppointmentStatus::ADMIN_CANCELLED->value])) {
+                throw new InvalidArgumentException(
+                    'لا يمكن تأكيد دفع حجز ملغي'
+                );
+            }
+
+
+            $appointment->update([
+                'created_status' => 1,
+                'payment_status' => \App\Enum\PaymentStatus::PAID_ONLINE,
+            ]);
+
+            // إنشاء سجل الدفع (اختياري)
+            if ($transactionId) {
+                \App\Models\Payment::create([
+                    'payment_number' => \App\Models\Payment::generatePaymentNumber(),
+                    'amount' => $appointment->total_amount,
+                    'subtotal' => $appointment->subtotal,
+                    'tax_amount' => $appointment->tax_amount,
+                    'status' => \App\Enum\PaymentStatus::PAID_ONLINE,
+                    'type' => \App\Models\Payment::TYPE_FULL,
+                    'paymentable_id' => $appointment->id,
+                    'paymentable_type' => Appointment::class,
+                    'payment_gateway_id' => $transactionId,
+                    'payment_metadata' => $metadata,
+                ]);
+            }
+
+            // مسح الـ cache للتوفر
+            $this->availabilityService->clearProviderCache($appointment->provider_id);
+
+            return $appointment->fresh(['services_record', 'provider', 'customer']);
+
+        } catch (InvalidArgumentException $e) {
+            throw $e;
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            throw new InvalidArgumentException('الحجز المطلوب غير موجود');
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException(
+                'حدث خطأ أثناء تأكيد الدفع: ' . $e->getMessage()
+            );
+        }
     }
 }

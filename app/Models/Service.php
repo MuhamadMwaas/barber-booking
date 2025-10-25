@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Service extends Model
 {
@@ -29,6 +31,9 @@ class Service extends Model
         'color_code',
         'icon_url',
         'is_featured',
+    ];
+ protected $appends = [
+        'image_url',
     ];
 
 
@@ -148,4 +153,20 @@ class Service extends Model
         return $this->translation($locale)?->description ?? $this->description;
     }
 
+    public function image(): MorphOne{
+        return $this->morphOne(File::class, 'fileable', 'instance_type', 'instance_id')->where('type', 'service_image');
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        if ($this->image) {
+            return $this->image->urlFile();
+        }
+        return null;
+    }
+
+    public function invoiceItems(): MorphMany
+{
+    return $this->morphMany(InvoiceItem::class, 'itemable');
+}
 }

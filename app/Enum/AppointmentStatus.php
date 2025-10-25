@@ -8,6 +8,7 @@ enum AppointmentStatus: int
     case COMPLETED =1;
     case USER_CANCELLED = -1;
     case ADMIN_CANCELLED = -2;
+
     public static function getValues(): array
     {
         return array_column(self::cases(), 'value');

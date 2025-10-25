@@ -25,7 +25,8 @@ class AppointmentService
     {
         try {
             $query = Appointment::where('customer_id', $customer->id)
-                ->with([
+            ->where('created_status', 1)
+            ->with([
                     'provider:id,first_name,last_name,email,phone,avatar_url',
                     'services',
                     'services_record',
@@ -135,7 +136,8 @@ class AppointmentService
     public function getAppointmentStatistics(User $customer): array
     {
         try {
-            $customerAppointments = Appointment::where('customer_id', $customer->id);
+            $customerAppointments = Appointment::where('customer_id', $customer->id)
+            ->where('created_status', 1);
 
             return [
                 'total_appointments' => (clone $customerAppointments)->count(),
@@ -220,6 +222,7 @@ class AppointmentService
             $futureDate = now()->addDays($days);
 
             return Appointment::where('customer_id', $customer->id)
+             ->where('created_status', 1)
                 ->where('status', AppointmentStatus::PENDING->value)
                 ->where('start_time', '>=', now())
                 ->where('start_time', '<=', $futureDate)
@@ -243,6 +246,7 @@ class AppointmentService
     {
         try {
             return Appointment::where('customer_id', $customer->id)
+            ->where('created_status', 1)
                 ->where('status', AppointmentStatus::COMPLETED->value)
                 ->with(['provider:id,first_name,last_name', 'services:id,name'])
                 ->orderBy('start_time', 'desc')
@@ -273,6 +277,7 @@ class AppointmentService
             }
 
             return Appointment::where('customer_id', $customer->id)
+                ->where('created_status', 1)
                 ->where(function ($query) use ($search) {
                     $query->where('number', 'like', "%{$search}%")
                         ->orWhereHas('provider', function ($query) use ($search) {

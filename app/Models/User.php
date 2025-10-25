@@ -13,6 +13,10 @@ use Spatie\Permission\Traits\HasRoles;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
@@ -42,6 +46,9 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = [
+        'profile_image_url',
+    ];
 
     protected function casts(): array
     {
@@ -105,4 +112,35 @@ class User extends Authenticatable
     {
         return trim("{$this->first_name} {$this->last_name}");
     }
+
+
+    public function profile_image(): MorphOne {
+        return $this->morphOne(File::class, 'fileable', 'instance_type', 'instance_id')->where('type', 'profile_image');
+    }
+
+
+
+    public function getProfileImageUrlAttribute(): ?string
+    {
+        if ($this->profile_image) {
+            return $this->profile_image->urlFile();
+        }
+        return null;
+    }
+
+
+    public function invoices(): HasMany
+{
+    return $this->hasMany(Invoice::class, 'customer_id');
+}
+
+public function savedPaymentMethods(): HasMany
+{
+    return $this->hasMany(SavePaymentMethod::class, 'user_id');
+}
+
+public function defaultPaymentMethod(): HasOne
+{
+    return $this->hasOne(SavePaymentMethod::class, 'user_id')->where('is_default', true);
+}
 }

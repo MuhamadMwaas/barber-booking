@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers\Api;
 
+use App\Http\Resources\UserResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
@@ -8,10 +9,14 @@ use Illuminate\Validation\Rules\Password;
 
 class ProfileController
 {
-    public function show(Request $request)
-    {
-        return response()->json($request->user()->only(['id', 'name', 'email', 'avatar_url', 'email_verified_at']));
-    }
+  public function show(Request $request)
+{
+    return response()->json([
+        'success' => true,
+        'message' => 'Profile retrieved successfully',
+        'data' => new UserResource($request->user()),
+    ], 200);
+}
 
     public function update(Request $request)
     {
