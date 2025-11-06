@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class User extends Authenticatable
 {
@@ -37,7 +39,9 @@ class User extends Authenticatable
         'notes',
         'locale',
         'is_active',
-        'branch_id'
+        'branch_id',
+        'email_verified_via_otp_at',
+        'email_verified_at'
     ];
 
 
@@ -126,6 +130,41 @@ class User extends Authenticatable
             return $this->profile_image->urlFile();
         }
         return null;
+    }
+
+    /**
+     * @param UploadedFile $image
+     * @return File
+     */
+    public function updateProfileImage(UploadedFile $image): File
+    {
+        if ($this->profile_image) {
+            $this->profile_image->delete();
+        }
+
+        $name = str_replace(' ', '_', trim($this->first_name));
+        $extension = $image->getClientOriginalExtension();
+        $dir = "users/profile_images/{$this->id}";
+        $fileName = "{$name}_{$this->id}.{$extension}";
+        $path = "{$dir}/{$fileName}";
+
+        Storage::disk('public')->makeDirectory($dir);
+
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
+
+        $image->storeAs($dir, $fileName, 'public');
+
+        return $this->profile_image()->create([
+            'name'      => $name . '_' . $this->id,
+            'path'      => $path,
+            'disk'      => 'public',
+            'type'      => 'profile_image',
+            'extension' => $extension,
+            'group'     => 'avatar',
+            'key'       => 'profile',
+        ]);
     }
 
 

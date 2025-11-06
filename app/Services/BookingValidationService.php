@@ -21,9 +21,11 @@ class BookingValidationService
         if (empty($services)) {
             throw new InvalidArgumentException('At least one service must be selected');
         }
-        $max_services_per_booking = SalonSetting::where('key', 'max_services_per_booking')->first()->value;
+
+        $max_services_per_booking =  SettingsService::get('max_services_per_booking', 10);
+
         if (count($services) > $max_services_per_booking) {
-            throw new InvalidArgumentException('Maximum {$max_services_per_booking} services per booking');
+            throw new InvalidArgumentException("Maximum {$max_services_per_booking} services per booking");
         }
 
         $bookingDate = Carbon::parse($date);
@@ -32,12 +34,12 @@ class BookingValidationService
             throw new InvalidArgumentException('Cannot book in the past');
         }
 
+        // $max_booking_days = get_setting('max_booking_days', 30);
+        $max_booking_days=SettingsService::get('max_booking_days', 10);
 
-        $max_booking_days = SalonSetting::where('key', 'max_booking_days')->first()->value;
         if ($bookingDate->gt(Carbon::today()->addDays($max_booking_days))) {
             throw new InvalidArgumentException('Cannot book more than ' . $max_booking_days . ' days in advance');
         }
-
 
         $serviceIds = array_column($services, 'service_id');
         if (count($serviceIds) !== count(array_unique($serviceIds))) {
@@ -72,6 +74,10 @@ class BookingValidationService
 
     public function validateSequentialTiming(?Carbon $previousEndTime, Carbon $currentStartTime, int $serviceIndex): void
     {
+        if ($previousEndTime === null) {
+            return;
+        }
+
         if ($currentStartTime->lt($previousEndTime)) {
             throw new InvalidArgumentException(
                 "Service at position {$serviceIndex} start time ({$currentStartTime->format('H:i')}) " .
@@ -80,8 +86,9 @@ class BookingValidationService
             );
         }
 
+        // Optional: Check for excessive gaps (more than 2 hours)
         if ($currentStartTime->diffInMinutes($previousEndTime) > 120) {
-            // يمكن إضافة warning أو log هنا
+            // You can add a warning or log here
         }
     }
 
@@ -95,7 +102,7 @@ class BookingValidationService
         $date = $startTime->format('Y-m-d');
         $dayOfWeek = $startTime->dayOfWeek;
 
-        // 1. التحقق من جدول عمل المقدم
+        // 1. Check provider's work schedule
         $schedule = DB::table('provider_scheduled_works')
             ->where('user_id', $provider->id)
             ->where('day_of_week', $dayOfWeek)
@@ -109,7 +116,7 @@ class BookingValidationService
             );
         }
 
-        // 2. التحقق من أن الوقت ضمن ساعات العمل
+        // 2. Check time is within working hours
         $workStart = Carbon::parse($date . ' ' . $schedule->start_time);
         $workEnd = Carbon::parse($date . ' ' . $schedule->end_time);
 
@@ -120,7 +127,7 @@ class BookingValidationService
             );
         }
 
-        // 3. التحقق من عدم وجود إجازة كاملة
+        // 3. Check for full day time off
         $hasFullDayOff = ProviderTimeOff::where('user_id', $provider->id)
             ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
             ->where('start_date', '<=', $date)
@@ -133,7 +140,7 @@ class BookingValidationService
             );
         }
 
-        // 4. التحقق من عدم وجود إجازة ساعية متداخلة
+        // 4. Check for hourly time off conflicts
         $hasHourlyTimeOff = ProviderTimeOff::where('user_id', $provider->id)
             ->where('type', ProviderTimeOff::TYPE_HOURLY)
             ->whereDate('start_date', $date)
@@ -151,11 +158,11 @@ class BookingValidationService
             );
         }
 
-        // 5. التحقق من عدم وجود حجوزات متداخلة
+        // 5. Check for conflicting appointments
         $hasConflictingAppointment = Appointment::where('provider_id', $provider->id)
             ->whereDate('appointment_date', $date)
             ->where('created_status', 1)
-            ->whereIn('status', [AppointmentStatus::PENDING->value])
+            ->whereIn('status', [AppointmentStatus::PENDING->value, AppointmentStatus::COMPLETED->value])
             ->where(function ($query) use ($startTime, $endTime) {
                 $query->where(function ($q) use ($startTime, $endTime) {
                     $q->where('start_time', '<', $endTime)
@@ -171,25 +178,25 @@ class BookingValidationService
             );
         }
 
-        // 6. التحقق من أن الوقت المطلوب ليس في الماضي
+        // 6. Check time slot is not in the past
         if ($startTime->lt(Carbon::now())) {
             throw new InvalidArgumentException(
                 "Cannot book time slot in the past"
             );
         }
 
-        // 7. التحقق من الحد الأدنى للإشعار (مثلاً ساعة واحدة مقدماً)
-        $book_buffer = SalonSetting::where('key', 'book_buffer')->first()->value;
+        // 7. Check minimum advance booking time
+        $book_buffer = get_setting('book_buffer', 60);
 
         if ($startTime->lt(Carbon::now()->addMinutes($book_buffer))) {
             throw new InvalidArgumentException(
-                "Booking must be at least {$book_buffer} Minutes in advance"
+                "Booking must be at least {$book_buffer} minutes in advance"
             );
         }
     }
 
     /**
-     * التحقق من عدم وجود حجز مكرر
+     * Validate no duplicate booking
      */
     public function validateNoDuplicateBooking(User $customer, Carbon $startTime, array $serviceIds): void
     {
@@ -209,11 +216,14 @@ class BookingValidationService
     }
 
     /**
-     * التحقق من الحد الأقصى للحجوزات اليومية للعميل
+     * Validate daily booking limit
      */
     public function validateDailyBookingLimit(User $customer, string $date): void
     {
-        $max_daily_bookings = get_setting('max_daily_bookings');
+        // $max_daily_bookings = get_setting('max_daily_bookings', null);
+        $max_daily_bookings=SettingsService::get('max_daily_bookings', 10);
+
+
 
         if ($max_daily_bookings) {
             $todayBookingsCount = Appointment::where('customer_id', $customer->id)

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AvailabilityController;
+use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProvidersController;
@@ -24,10 +25,24 @@ Route::prefix('auth')->group(function () {
     Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
     Route::post('reset-password', [AuthController::class, 'resetPassword']);
     Route::post('google', [SocialAuthController::class, 'google']);
+
+    // Google Authentication
+    Route::post('google/mobile', [SocialAuthController::class, 'googleMobile']);
+
+    // اختياري: للويب
+    Route::get('google/redirect', [SocialAuthController::class, 'googleWebRedirect']);
+    Route::get('google/callback', [SocialAuthController::class, 'googleWebCallback']);
+
+
+    Route::post('verify-email-otp', [OtpController::class, 'verifyEmailViaOtp']);
+    Route::post('resend-verification-otp', [OtpController::class, 'resendOtpForEmailVerification']);
 });
 Route::post('/auth/request-otp', [OtpController::class, 'requestOtp']);
 Route::post('/auth/verify-otp', [OtpController::class, 'verifyOtp']);
 Route::post('/auth/reset-password', [OtpController::class, 'resetPassword']);
+
+
+
 
 
 Route::get('/providers', [ProvidersController::class, 'index']);
@@ -67,16 +82,24 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/past', [AppointmentController::class, 'past'])
             ->name('past');
 
-        Route::get('/statistics', [AppointmentController::class, 'statistics'])
-            ->name('statistics');
+        Route::get('/statistics', [AppointmentController::class, 'statistics'])->name('statistics');
 
 
-        Route::get('/search', [AppointmentController::class, 'search'])
-            ->name('search');
+        Route::get('/search', [AppointmentController::class, 'search'])->name('search');
 
 
         Route::post('/{id}/cancel', [AppointmentController::class, 'cancel'])
             ->name('cancel')
             ->where('id', '[0-9]+');
     });
+
+
+
+
+    Route::middleware(['auth:sanctum', 'verified'])->prefix('bookings')->group(function () {
+    Route::get('/', [BookingController::class, 'index'])->name('bookings.index');
+    Route::post('/', [BookingController::class, 'store'])->name('bookings.store');
+    Route::get('/{id}', [BookingController::class, 'show'])->name('bookings.show');
+    Route::post('/{id}/cancel', [BookingController::class, 'cancel'])->name('bookings.cancel');
+});
 });

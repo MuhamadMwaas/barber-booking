@@ -4,10 +4,11 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class ServiceResource extends JsonResource
+class SingleServiceResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
+     * Returns complete service details with all relationships.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return array
@@ -29,17 +30,30 @@ class ServiceResource extends JsonResource
             'color_code' => $this->color_code,
             'icon_url' => $this->icon_url,
             'is_featured' => $this->is_featured,
+            'has_discount' => $this->discount_price !== null,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
-            'average_rating' => $this->average_rating ? round((float)$this->average_rating, 1) : 0,
 
-            // relationships
-            'category' => new MinCategoryResource($this->whenLoaded('category')),
-            // 'branch' => new BranchResource($this->whenLoaded('branch')),
-            'providers' => MinProviderResource::collection($this->providers),
-            // 'reviews' => MinServiceReviewResource::collection($this->whenLoaded('reviews')),
+            // Statistics
+            'statistics' => [
+                'average_rating' => $this->when(
+                    $this->relationLoaded('reviews'),
+                    fn() => round($this->reviews->avg('rating') ?? 0, 1)
+                ),
+                'review_count' => $this->when(
+                    $this->relationLoaded('reviews'),
+                    fn() => $this->reviews->count()
+                ),
+                'provider_count' => $this->when(
+                    $this->relationLoaded('providers'),
+                    fn() => $this->providers->count()
+                ),
+            ],
 
-            'has_discount' => $this->discount_price !== null,
+
+            'category' => new ServiceCategoryResource($this->whenLoaded('category')),
+            'providers' => ProviderResource::collection($this->whenLoaded('providers')),
+            'reviews' => ServiceReviewResource::collection($this->whenLoaded('reviews')),
         ];
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RegisterRequest;
 use App\Http\Requests\LoginRequest;
+use App\Http\Resources\UserResource;
 use App\Services\AuthTokenService;
 use App\Models\User;
 use App\Services\OtpService;
@@ -14,7 +15,7 @@ use Illuminate\Http\Request;
 
 class AuthController
 {
-    public function __construct(private AuthTokenService $tokenService)
+    public function __construct(private AuthTokenService $tokenService,private OtpService $otpService)
     {
     }
 
@@ -22,25 +23,35 @@ class AuthController
     {
         $data = $request->validated();
         $user = User::create([
-            'name' => $data['name'],
+            'first_name' => $data['first_name'],
+            'last_name'=> $data['last_name'],
             'email' => $data['email'],
             'phone' => $data['phone'],
             'password' => bcrypt($data['password']),
+
         ]);
 
         // $user->sendEmailVerificationNotification();
-
+        $otp = $this->otpService->generate($user, env('OTP_LENGTH', 6), \App\Enum\OtpType::EMAIL_OTP);
+    // return response()->json([
+    //     'message' => 'Registration successful. Please verify your email using the OTP sent to your email.',
+    //     'user' => $user->only(['id', 'first_name', 'last_name', 'email', 'phone']),
+    //     'email_verified' => false,
+    //     'requires_otp_verification' => true,
+    //     'otp' => $otp
+    // ], 201);
         // اصدار tokens
         $access = $this->tokenService->createAccessToken($user, $request->header('User-Agent'));
         $refresh = $this->tokenService->createRefreshToken($user, $request->header('User-Agent'), $request->ip());
 
         return response()->json([
-            'user' => $user->only(['id', 'name', 'email', 'email_verified_at']),
+            'user' => new UserResource($user),
             'access_token' => $access['access_token'],
             'access_expires_at' => $access['expires_at'],
             'refresh_token' => $refresh['refresh_token'],
             'refresh_expires_at' => $refresh['expires_at'],
             'token_type' => 'bearer',
+            'otp' => $otp
         ], 201);
     }
 
@@ -58,7 +69,7 @@ class AuthController
         $refresh = $this->tokenService->createRefreshToken($user, $request->header('User-Agent'), $request->ip());
 
         return response()->json([
-            'user' => $user->only(['id', 'name', 'email', 'email_verified_at']),
+            'user' => new UserResource($user),
             'access_token' => $access['access_token'],
             'access_expires_at' => $access['expires_at'],
             'refresh_token' => $refresh['refresh_token'],
@@ -80,7 +91,7 @@ class AuthController
         //     return response()->json(['message' => 'Invalid user'], 401);
 
         $token = $this->tokenService->findValidRefreshToken($plain);
-        
+
         if (!$token) {
             return response()->json(['message' => 'Invalid or expired refresh token'], 401);
         }
@@ -115,8 +126,8 @@ class AuthController
     {
         $request->validate(['email' => 'required|email']);
         $user = User::where('email', $request->email)->firstOrFail();
-        $otpService->generate($user);
-        return response()->json(['message' => 'OTP sent to email']);
+        $otp=$otpService->generate($user);
+        return response()->json(['message' => 'OTP sent to email','otp'=>$otp]);
 
 
         // $status = Password::sendResetLink($request->only('email'));

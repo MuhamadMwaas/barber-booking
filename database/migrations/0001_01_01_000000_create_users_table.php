@@ -24,6 +24,8 @@ return new class extends Migration
             $table->string('avatar_url')->nullable();
             $table->string('google_id')->nullable();
             $table->timestamp('email_verified_at')->nullable();
+            $table->timestamp('email_verified_via_otp_at')->nullable();
+
             $table->string( 'password');
             $table->string( 'notes')->nullable();
             $table->boolean('is_active')->default(true);

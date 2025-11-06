@@ -40,4 +40,8 @@ return [
         'redirect' => env('GOOGLE_REDIRECT'),
     ],
 
+    'google_mobile' => [
+        'android_client_id' => env('GOOGLE_ANDROID_CLIENT_ID'),
+        'ios_client_id' => env('GOOGLE_IOS_CLIENT_ID'),
+    ],
 ];

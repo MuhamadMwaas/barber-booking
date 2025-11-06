@@ -29,6 +29,13 @@ return new class extends Migration
             $table->string('icon_url')->nullable();
             $table->boolean('is_featured')->default(false);
             $table->timestamps();
+
+
+            $table->index('category_id');
+            $table->index('is_active');
+
+            // Index للـ search
+            $table->index('name');
         });
     }
 

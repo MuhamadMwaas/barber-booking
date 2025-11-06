@@ -12,21 +12,21 @@ class OtpController
 {
     public function requestOtp(Request $request, OtpService $otpService)
     {
-        if($request->type==OtpType::EMAIL_OTP->value) {
+        if ($request->type == OtpType::EMAIL_OTP->value) {
             $request->validate(['email' => 'required|email']);
             $user = User::where('email', $request->email)->firstOrFail();
-            $message=$user->email;
+            $message = $user->email;
 
 
-        }elseif($request->type==OtpType::SMS_OTP->value) {
-            $request->validate(['phone'=> 'required|string']);
+        } elseif ($request->type == OtpType::SMS_OTP->value) {
+            $request->validate(['phone' => 'required|string']);
             $user = User::where('phone', $request->phone)->firstOrFail();
-            $message=$user->phone;
+            $message = $user->phone;
 
         }
-        $otpService->generate($user,env('OTP_LENGTH',6),OtpType::EMAIL_OTP);
+        $otpService->generate($user, env('OTP_LENGTH', 6), OtpType::EMAIL_OTP);
 
-        return response()->json(['message' => 'OTP sent to '. $message]);
+        return response()->json(['message' => 'OTP sent to ' . $message]);
     }
 
     public function verifyOtp(Request $request, OtpService $otpService)
@@ -36,7 +36,7 @@ class OtpController
                 'email' => 'required|email',
                 'otp' => 'required|string',
             ]);
-             if (!$otpService->validate($request->email, $request->otp)) {
+            if (!$otpService->validate($request->email, $request->otp)) {
                 return response()->json(['error' => 'Invalid or expired OTP'], 422);
             }
 
@@ -78,7 +78,7 @@ class OtpController
             ? $validated['email']
             : $validated['phone'];
 
-        if (!$otpService->validate($identifier, $validated['otp'], $request->type)) {
+        if (!$otpService->validate($identifier, $validated['otp'], OtpType::tryFrom($request->type))) {
             return response()->json(['error' => 'Invalid or expired OTP'], 422);
         }
 
@@ -89,5 +89,52 @@ class OtpController
         $user->update(['password' => Hash::make($validated['password'])]);
 
         return response()->json(['message' => 'Password reset successful']);
+    }
+
+
+
+    public function verifyEmailViaOtp(Request $request, OtpService $otpService)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required|string|size:6',
+        ]);
+
+        if (!$otpService->validate($request->email, $request->otp, OtpType::EMAIL_OTP)) {
+            return response()->json(['error' => 'Invalid or expired OTP'], 422);
+        }
+
+        $user = User::where('email', $request->email)->firstOrFail();
+        $user->update([
+            'email_verified_at' => now(),
+            'email_verified_via_otp_at' => now()
+        ]);
+
+        return response()->json([
+            'message' => 'Email verified successfully',
+            'email_verified' => true
+        ]);
+    }
+
+    public function resendOtpForEmailVerification(Request $request, OtpService $otpService)
+    {
+        $request->validate([
+            'email' => 'required|email|exists:users,email'
+        ]);
+
+        $user = User::where('email', $request->email)->firstOrFail();
+
+        if ($user->email_verified_via_otp_at) {
+            return response()->json([
+                'message' => 'Email already verified'
+            ], 400);
+        }
+
+        $otp = $otpService->generate($user, env('OTP_LENGTH', 6), \App\Enum\OtpType::EMAIL_OTP);
+
+        return response()->json([
+            'message' => 'OTP sent to your email',
+            'otp' => $otp
+        ]);
     }
 }

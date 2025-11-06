@@ -20,7 +20,7 @@ class ServiceAvailabilityService
     private const SLOT_BUFFER = 0;
 
 
-    private const CACHE_DURATION = 120;
+    private const CACHE_DURATION = 1;
 
     /**
      * @param int $serviceId
@@ -253,11 +253,17 @@ class ServiceAvailabilityService
         // $breakEnd = $breakStart->copy()->addMinutes($workSchedule->break_minutes);
 
         // Don't show past time slots for today
-        $now = Carbon::now();
-        if ($date->isToday() && $startTime->lt($now)) {
-            $startTime = $now->copy()->addMinutes(0)->minute(0)->second(0);
-        }
+         $now = Carbon::now();
+        if ($date->isToday()) {
 
+            $minutesSinceStartOfDay = $now->diffInMinutes($now->copy()->startOfDay());
+            $nextSlotMinutes = ceil($minutesSinceStartOfDay / $serviceDuration) * $serviceDuration;
+            $nextAvailableTime = $now->copy()->startOfDay()->addMinutes($nextSlotMinutes);
+
+            if ($startTime->lt($nextAvailableTime)) {
+                $startTime = $nextAvailableTime;
+            }
+        }
         $currentTime = $startTime->copy();
 
         // Get existing appointments

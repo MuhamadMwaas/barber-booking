@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ServiceResource;
+use App\Http\Resources\SingleServiceResource;
 use App\Models\Service;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -17,7 +18,14 @@ class ServicesController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = Service::with(['category', 'branch', 'providers', 'reviews'])
+            $query = Service::with(['category:id,name','image',
+            'providers' => function ($query) {
+                $query->select('users.id', 'users.first_name', 'users.last_name')
+                    ->with('profile_image');
+                }
+            ])
+                // ->withCount('reviews')
+                // ->withAvg('reviews as average_rating', 'rating')
                 ->active();
 
 
@@ -74,25 +82,13 @@ class ServicesController extends Controller
     public function show($id): JsonResponse
     {
         try {
-            $service = Service::with(['category', 'branch', 'providers', 'reviews.user'])
+            $service = Service::with(['category', 'providers', 'reviews.user'])
                 ->active()
                 ->findOrFail($id);
 
-            // Calculate average rating
-            $averageRating = $service->reviews->avg('rating');
-
-            // Count reviews
-            $reviewCount = $service->reviews->count();
-
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'service' => $service,
-                    'statistics' => [
-                        'average_rating' => round($averageRating, 1),
-                        'review_count' => $reviewCount,
-                    ]
-                ],
+                'data' => new SingleServiceResource($service),
                 'message' => 'Service retrieved successfully'
             ], 200);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
