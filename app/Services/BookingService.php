@@ -118,10 +118,16 @@ class BookingService
         $preparedServices = [];
         $previousEndTime = null;
 
-        foreach ($services as $index => $serviceData) {
-            $service = Service::findOrFail($serviceData['service_id']);
-            $provider = User::findOrFail($serviceData['provider_id']);
+        $serviceIds = array_column($services, 'service_id');
+        $providerIds = array_column($services, 'provider_id');
 
+        $servicesCollection = Service::whereIn('id', $serviceIds)->get()->keyBy('id');
+        $providersCollection = User::whereIn('id', $providerIds)->get()->keyBy('id');
+
+        foreach ($services as $index => $serviceData) {
+
+        $service = $servicesCollection->get($serviceData['service_id']);
+        $provider = $providersCollection->get($serviceData['provider_id']);
 
             $this->validationService->validateProviderOffersService($provider, $service);
 
@@ -218,6 +224,7 @@ class BookingService
         $pivot = DB::table('provider_service')
             ->where('provider_id', $provider->id)
             ->where('service_id', $service->id)
+            ->where('is_active', true)
             ->first();
 
         $effectivePrice = $pivot->custom_price ?? $service->price;

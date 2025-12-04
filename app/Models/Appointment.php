@@ -50,6 +50,23 @@ class Appointment extends Model
         'duration_minutes' => 'integer',
     ];
 
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($appointment) {
+            if (empty($appointment->number)) {
+                $prefix = 'APT';
+                $date = \Carbon\Carbon::now()->format('Ymd');
+                $random = strtoupper(substr(uniqid(), -6));
+
+                $appointment->number = "{$prefix}-{$date}-{$random}";
+            }
+        });
+    }
+
+
     // Relationships
 
     public function customer(): BelongsTo
@@ -168,5 +185,6 @@ class Appointment extends Model
     {
         return $this->morphMany(Payment::class, 'paymentable');
     }
+
 
 }

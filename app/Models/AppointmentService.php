@@ -29,6 +29,21 @@ class AppointmentService extends Model
     ];
 
 
+        protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($AppointmentService) {
+            if ( is_null($AppointmentService->service_name)) {
+                $service = Service::find($AppointmentService->service_id);
+                if ($service) {
+                    $AppointmentService->service_name = $service->name;
+                }
+
+            }
+        });
+    }
+
     public function appointment(): BelongsTo
     {
         return $this->belongsTo(Appointment::class, 'appointment_id');

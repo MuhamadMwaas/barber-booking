@@ -6,7 +6,9 @@ use App\Models\Translation\ServiceCategoryTranslation;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-
+use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 class ServiceCategory extends Model
 {
     use HasFactory;
@@ -27,6 +29,12 @@ class ServiceCategory extends Model
         'sort_order' => 'integer',
     ];
 
+
+    protected $appends = [
+        // 'image_url',
+        'translated_name',
+
+    ];
     // relationships
 
     public function services()
@@ -86,5 +94,50 @@ class ServiceCategory extends Model
     public function getDescriptionIn(string $locale): ?string
     {
         return $this->translation($locale)?->description ?? $this->description;
+    }
+
+    public function getTranslatedNameAttribute(): string
+    {
+        $locale = app()->getLocale();
+        return $this->getNameIn($locale);
+    }
+
+      public function image(): MorphOne
+    {
+        return $this->morphOne(File::class, 'fileable', 'instance_type', 'instance_id')->where('type', 'service_category_image');
+    }
+
+        public function updateImage(UploadedFile $image): File
+    {
+        if ($this->image) {
+            $this->image->delete();
+        }
+            $folder = 'images';
+            $type = 'service_category_image';
+
+
+        $name = str_replace(' ', '_', trim($this->name));
+        $extension = $image->getClientOriginalExtension();
+        $dir = "service-categories/{$folder}/{$this->id}";
+        $fileName = "{$name}_{$this->id}.{$extension}";
+        $path = "{$dir}/{$fileName}";
+
+        Storage::disk('public')->makeDirectory($dir);
+
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
+
+        $image->storeAs($dir, $fileName, 'public');
+
+        return $this->image()->create([
+            'name' => $name . '_' . $this->id,
+            'path' => $path,
+            'disk' => 'public',
+            'type' => $type,
+            'extension' => $extension,
+            'group' => 'service-categories',
+            'key' => 'image',
+        ]);
     }
 }

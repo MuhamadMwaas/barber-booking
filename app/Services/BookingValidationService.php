@@ -35,7 +35,7 @@ class BookingValidationService
         }
 
         // $max_booking_days = get_setting('max_booking_days', 30);
-        $max_booking_days=SettingsService::get('max_booking_days', 10);
+        $max_booking_days=intval(SettingsService::get('max_booking_days', 10));
 
         if ($bookingDate->gt(Carbon::today()->addDays($max_booking_days))) {
             throw new InvalidArgumentException('Cannot book more than ' . $max_booking_days . ' days in advance');
@@ -161,6 +161,7 @@ class BookingValidationService
         // 5. Check for conflicting appointments
         $hasConflictingAppointment = Appointment::where('provider_id', $provider->id)
             ->whereDate('appointment_date', $date)
+            // TODO: rmov created_status check and make job for cleaning unpaid bookings
             ->where('created_status', 1)
             ->whereIn('status', [AppointmentStatus::PENDING->value, AppointmentStatus::COMPLETED->value])
             ->where(function ($query) use ($startTime, $endTime) {
@@ -186,7 +187,7 @@ class BookingValidationService
         }
 
         // 7. Check minimum advance booking time
-        $book_buffer = get_setting('book_buffer', 60);
+        $book_buffer = intval(get_setting('book_buffer', 60));
 
         if ($startTime->lt(Carbon::now()->addMinutes($book_buffer))) {
             throw new InvalidArgumentException(

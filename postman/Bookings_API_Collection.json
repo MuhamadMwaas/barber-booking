@@ -1,0 +1,553 @@
+{
+	"info": {
+		"_postman_id": "booking-api-collection",
+		"name": "Barber Booking - Bookings API",
+		"description": "مجموعة طلبات API الخاصة بنظام الحجوزات\n\nتحتوي على جميع endpoints الخاصة بإدارة الحجوزات للعملاء",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{auth_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000/api",
+			"type": "string"
+		},
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "1. Get All Bookings",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/bookings",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"bookings"
+					]
+				},
+				"description": "استرجاع جميع الحجوزات الخاصة بالعميل المسجل دخوله\n\n**Response:**\n```json\n{\n  \"success\": true,\n  \"message\": \"Bookings retrieved successfully\",\n  \"data\": [\n    {\n      \"id\": 1,\n      \"number\": \"BK-2025-00001\",\n      \"appointment_date\": \"2025-11-15\",\n      \"start_time\": \"10:00\",\n      \"end_time\": \"11:30\",\n      \"status\": \"PENDING\",\n      \"total_amount\": 150.00,\n      ...\n    }\n  ]\n}\n```"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/bookings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"bookings"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": true,\n    \"message\": \"Bookings retrieved successfully\",\n    \"data\": [\n        {\n            \"id\": 1,\n            \"number\": \"BK-2025-00001\",\n            \"appointment_date\": \"2025-11-15\",\n            \"formatted_date\": \"Nov 15, 2025\",\n            \"start_time\": \"10:00\",\n            \"end_time\": \"11:30\",\n            \"time_range\": \"10:00 AM - 11:30 AM\",\n            \"duration_minutes\": 90,\n            \"formatted_duration\": \"1h 30m\",\n            \"subtotal\": 140.00,\n            \"tax_amount\": 10.00,\n            \"total_amount\": 150.00,\n            \"status\": \"PENDING\",\n            \"status_value\": 0,\n            \"status_label\": \"قيد الانتظار\",\n            \"payment_status\": \"PENDING\",\n            \"payment_status_value\": 0,\n            \"payment_status_label\": \"في انتظار الدفع\",\n            \"payment_method\": \"cash\",\n            \"cancellation_reason\": null,\n            \"cancelled_at\": null,\n            \"provider\": {\n                \"id\": 5,\n                \"full_name\": \"أحمد محمد\",\n                \"email\": \"provider@example.com\",\n                \"phone\": \"0501234567\",\n                \"avatar_url\": \"https://example.com/avatars/provider.jpg\"\n            },\n            \"services_details\": [\n                {\n                    \"id\": 1,\n                    \"service_id\": 3,\n                    \"service_name\": \"قص شعر رجالي\",\n                    \"duration_minutes\": 45,\n                    \"price\": 70.00,\n                    \"sequence_order\": 1\n                },\n                {\n                    \"id\": 2,\n                    \"service_id\": 5,\n                    \"service_name\": \"تشذيب اللحية\",\n                    \"duration_minutes\": 45,\n                    \"price\": 70.00,\n                    \"sequence_order\": 2\n                }\n            ],\n            \"notes\": \"أفضل الحجز في الصباح\",\n            \"created_at\": \"2025-11-10 08:30:00\",\n            \"updated_at\": \"2025-11-10 08:30:00\",\n            \"is_upcoming\": true,\n            \"is_past\": false,\n            \"is_cancelled\": false,\n            \"is_completed\": false,\n            \"can_cancel\": true\n        }\n    ]\n}"
+				}
+			]
+		},
+		{
+			"name": "2. Get All Bookings (Filter by Status)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/bookings?status=0",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"bookings"
+					],
+					"query": [
+						{
+							"key": "status",
+							"value": "0",
+							"description": "Status values:\n-2: System Cancelled\n-1: User Cancelled\n0: Pending\n1: Completed"
+						}
+					]
+				},
+				"description": "استرجاع الحجوزات مع فلترة حسب الحالة\n\n**Status Values:**\n- `-2`: ملغي من النظام (SYSTEM_CANCELLED)\n- `-1`: ملغي من المستخدم (USER_CANCELLED)\n- `0`: قيد الانتظار (PENDING)\n- `1`: مكتمل (COMPLETED)\n\n**Example:**\n- للحصول على الحجوزات قيد الانتظار: `?status=0`\n- للحصول على الحجوزات المكتملة: `?status=1`\n- للحصول على الحجوزات الملغاة: `?status=-1`"
+			},
+			"response": []
+		},
+		{
+			"name": "3. Create New Booking (Single Service)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"services\": [\n        {\n            \"service_id\": 3,\n            \"provider_id\": 5,\n            \"start_time\": \"10:00\"\n        }\n    ],\n    \"date\": \"2025-11-15\",\n    \"notes\": \"أفضل الحجز في الصباح الباكر\",\n    \"payment_method\": \"cash\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/bookings",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"bookings"
+					]
+				},
+				"description": "إنشاء حجز جديد بخدمة واحدة\n\n**Request Body:**\n```json\n{\n  \"services\": [\n    {\n      \"service_id\": 3,        // معرف الخدمة (مطلوب)\n      \"provider_id\": 5,       // معرف مقدم الخدمة (مطلوب)\n      \"start_time\": \"10:00\"   // وقت البدء بصيغة HH:MM (مطلوب)\n    }\n  ],\n  \"date\": \"2025-11-15\",      // تاريخ الحجز Y-m-d (مطلوب)\n  \"notes\": \"...\",            // ملاحظات (اختياري)\n  \"payment_method\": \"cash\"   // طريقة الدفع: cash أو online (مطلوب)\n}\n```\n\n**Validation Rules:**\n- `services`: مطلوب، array، من 1 إلى 10 خدمات\n- `service_id`: مطلوب، يجب أن يكون موجوداً في جدول services\n- `provider_id`: مطلوب، يجب أن يكون موجوداً في جدول users\n- `start_time`: مطلوب، بصيغة H:i (مثال: 10:00)\n- `date`: مطلوب، بصيغة Y-m-d، لا يمكن أن يكون في الماضي\n- `payment_method`: مطلوب، يجب أن يكون cash أو online"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"services\": [\n        {\n            \"service_id\": 3,\n            \"provider_id\": 5,\n            \"start_time\": \"10:00\"\n        }\n    ],\n    \"date\": \"2025-11-15\",\n    \"notes\": \"أفضل الحجز في الصباح الباكر\",\n    \"payment_method\": \"cash\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/bookings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"bookings"
+							]
+						}
+					},
+					"status": "Created",
+					"code": 201,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": true,\n    \"message\": \"Booking created successfully\",\n    \"data\": {\n        \"id\": 1,\n        \"number\": \"BK-2025-00001\",\n        \"appointment_date\": \"2025-11-15\",\n        \"formatted_date\": \"Nov 15, 2025\",\n        \"start_time\": \"10:00\",\n        \"end_time\": \"10:45\",\n        \"time_range\": \"10:00 AM - 10:45 AM\",\n        \"duration_minutes\": 45,\n        \"formatted_duration\": \"45m\",\n        \"subtotal\": 65.00,\n        \"tax_amount\": 5.00,\n        \"total_amount\": 70.00,\n        \"status\": \"PENDING\",\n        \"status_value\": 0,\n        \"status_label\": \"قيد الانتظار\",\n        \"payment_status\": \"PENDING\",\n        \"payment_status_value\": 0,\n        \"payment_status_label\": \"في انتظار الدفع\",\n        \"payment_method\": \"cash\",\n        \"provider\": {\n            \"id\": 5,\n            \"full_name\": \"أحمد محمد\",\n            \"email\": \"provider@example.com\",\n            \"phone\": \"0501234567\",\n            \"avatar_url\": \"https://example.com/avatars/provider.jpg\"\n        },\n        \"services_details\": [\n            {\n                \"id\": 1,\n                \"service_id\": 3,\n                \"service_name\": \"قص شعر رجالي\",\n                \"duration_minutes\": 45,\n                \"price\": 70.00,\n                \"sequence_order\": 1\n            }\n        ],\n        \"notes\": \"أفضل الحجز في الصباح الباكر\",\n        \"created_at\": \"2025-11-10 08:30:00\",\n        \"updated_at\": \"2025-11-10 08:30:00\",\n        \"is_upcoming\": true,\n        \"is_past\": false,\n        \"is_cancelled\": false,\n        \"is_completed\": false,\n        \"can_cancel\": true\n    }\n}"
+				},
+				{
+					"name": "Validation Error",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"services\": [],\n    \"date\": \"2025-11-15\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/bookings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"bookings"
+							]
+						}
+					},
+					"status": "Unprocessable Entity",
+					"code": 422,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": false,\n    \"message\": \"بيانات غير صحيحة\",\n    \"errors\": {\n        \"services\": [\n            \"يجب تحديد خدمة واحدة على الأقل\"\n        ],\n        \"payment_method\": [\n            \"طريقة الدفع مطلوبة\"\n        ]\n    },\n    \"error_type\": \"validation_error\"\n}"
+				}
+			]
+		},
+		{
+			"name": "4. Create New Booking (Multiple Services)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"services\": [\n        {\n            \"service_id\": 3,\n            \"provider_id\": 5,\n            \"start_time\": \"10:00\"\n        },\n        {\n            \"service_id\": 5,\n            \"provider_id\": 5,\n            \"start_time\": \"10:45\"\n        },\n        {\n            \"service_id\": 8,\n            \"provider_id\": 5,\n            \"start_time\": \"11:30\"\n        }\n    ],\n    \"date\": \"2025-11-20\",\n    \"notes\": \"حجز شامل - قص شعر + لحية + صبغة\",\n    \"payment_method\": \"online\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/bookings",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"bookings"
+					]
+				},
+				"description": "إنشاء حجز جديد بعدة خدمات (حزمة خدمات)\n\n**مثال:** حجز يتضمن قص شعر + تشذيب لحية + صبغة شعر\n\n**ملاحظات:**\n- يمكن إضافة حتى 10 خدمات في الحجز الواحد\n- يجب ترتيب الخدمات حسب start_time\n- سيتم حساب المدة الإجمالية والسعر الإجمالي تلقائياً\n- يمكن أن تكون الخدمات من نفس مقدم الخدمة أو مقدمين مختلفين"
+			},
+			"response": [
+				{
+					"name": "Success Response - Multiple Services",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"services\": [\n        {\n            \"service_id\": 3,\n            \"provider_id\": 5,\n            \"start_time\": \"10:00\"\n        },\n        {\n            \"service_id\": 5,\n            \"provider_id\": 5,\n            \"start_time\": \"10:45\"\n        },\n        {\n            \"service_id\": 8,\n            \"provider_id\": 5,\n            \"start_time\": \"11:30\"\n        }\n    ],\n    \"date\": \"2025-11-20\",\n    \"notes\": \"حجز شامل - قص شعر + لحية + صبغة\",\n    \"payment_method\": \"online\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/bookings",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"bookings"
+							]
+						}
+					},
+					"status": "Created",
+					"code": 201,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": true,\n    \"message\": \"Booking created successfully\",\n    \"data\": {\n        \"id\": 2,\n        \"number\": \"BK-2025-00002\",\n        \"appointment_date\": \"2025-11-20\",\n        \"formatted_date\": \"Nov 20, 2025\",\n        \"start_time\": \"10:00\",\n        \"end_time\": \"12:30\",\n        \"time_range\": \"10:00 AM - 12:30 PM\",\n        \"duration_minutes\": 150,\n        \"formatted_duration\": \"2h 30m\",\n        \"subtotal\": 280.00,\n        \"tax_amount\": 20.00,\n        \"total_amount\": 300.00,\n        \"status\": \"PENDING\",\n        \"status_value\": 0,\n        \"status_label\": \"قيد الانتظار\",\n        \"payment_status\": \"PENDING\",\n        \"payment_status_value\": 0,\n        \"payment_status_label\": \"في انتظار الدفع\",\n        \"payment_method\": \"online\",\n        \"provider\": {\n            \"id\": 5,\n            \"full_name\": \"أحمد محمد\",\n            \"email\": \"provider@example.com\",\n            \"phone\": \"0501234567\",\n            \"avatar_url\": \"https://example.com/avatars/provider.jpg\"\n        },\n        \"services_details\": [\n            {\n                \"id\": 3,\n                \"service_id\": 3,\n                \"service_name\": \"قص شعر رجالي\",\n                \"duration_minutes\": 45,\n                \"price\": 70.00,\n                \"sequence_order\": 1\n            },\n            {\n                \"id\": 4,\n                \"service_id\": 5,\n                \"service_name\": \"تشذيب اللحية\",\n                \"duration_minutes\": 45,\n                \"price\": 70.00,\n                \"sequence_order\": 2\n            },\n            {\n                \"id\": 5,\n                \"service_id\": 8,\n                \"service_name\": \"صبغة شعر\",\n                \"duration_minutes\": 60,\n                \"price\": 140.00,\n                \"sequence_order\": 3\n            }\n        ],\n        \"notes\": \"حجز شامل - قص شعر + لحية + صبغة\",\n        \"created_at\": \"2025-11-10 09:15:00\",\n        \"updated_at\": \"2025-11-10 09:15:00\",\n        \"is_upcoming\": true,\n        \"is_past\": false,\n        \"is_cancelled\": false,\n        \"is_completed\": false,\n        \"can_cancel\": true\n    }\n}"
+				}
+			]
+		},
+		{
+			"name": "5. Get Booking Details",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/bookings/1",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"bookings",
+						"1"
+					]
+				},
+				"description": "الحصول على تفاصيل حجز معين\n\n**URL Parameters:**\n- `id`: معرف الحجز (مطلوب)\n\n**Authorization:**\n- يمكن للعميل الحصول على تفاصيل حجوزاته فقط\n- في حالة محاولة الوصول لحجز خاص بعميل آخر، سيتم إرجاع خطأ 403\n\n**Response:**\nإرجاع كامل تفاصيل الحجز مع معلومات مقدم الخدمة والخدمات المحجوزة"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/bookings/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"bookings",
+								"1"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": true,\n    \"message\": \"Booking details retrieved successfully\",\n    \"data\": {\n        \"id\": 1,\n        \"number\": \"BK-2025-00001\",\n        \"appointment_date\": \"2025-11-15\",\n        \"formatted_date\": \"Nov 15, 2025\",\n        \"start_time\": \"10:00\",\n        \"end_time\": \"10:45\",\n        \"time_range\": \"10:00 AM - 10:45 AM\",\n        \"duration_minutes\": 45,\n        \"formatted_duration\": \"45m\",\n        \"subtotal\": 65.00,\n        \"tax_amount\": 5.00,\n        \"total_amount\": 70.00,\n        \"status\": \"PENDING\",\n        \"status_value\": 0,\n        \"status_label\": \"قيد الانتظار\",\n        \"payment_status\": \"PENDING\",\n        \"payment_status_value\": 0,\n        \"payment_status_label\": \"في انتظار الدفع\",\n        \"payment_method\": \"cash\",\n        \"cancellation_reason\": null,\n        \"cancelled_at\": null,\n        \"provider\": {\n            \"id\": 5,\n            \"full_name\": \"أحمد محمد\",\n            \"email\": \"provider@example.com\",\n            \"phone\": \"0501234567\",\n            \"avatar_url\": \"https://example.com/avatars/provider.jpg\"\n        },\n        \"services_details\": [\n            {\n                \"id\": 1,\n                \"service_id\": 3,\n                \"service_name\": \"قص شعر رجالي\",\n                \"duration_minutes\": 45,\n                \"price\": 70.00,\n                \"sequence_order\": 1\n            }\n        ],\n        \"notes\": \"أفضل الحجز في الصباح الباكر\",\n        \"created_at\": \"2025-11-10 08:30:00\",\n        \"updated_at\": \"2025-11-10 08:30:00\",\n        \"is_upcoming\": true,\n        \"is_past\": false,\n        \"is_cancelled\": false,\n        \"is_completed\": false,\n        \"can_cancel\": true\n    }\n}"
+				},
+				{
+					"name": "Authorization Error",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/bookings/999",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"bookings",
+								"999"
+							]
+						}
+					},
+					"status": "Forbidden",
+					"code": 403,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": false,\n    \"message\": \"You are not authorized to access this booking\",\n    \"error_type\": \"authorization_error\"\n}"
+				}
+			]
+		},
+		{
+			"name": "6. Cancel Booking",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"cancellation_reason\": \"لدي ظرف طارئ ولا أستطيع الحضور\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/bookings/1/cancel",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"bookings",
+						"1",
+						"cancel"
+					]
+				},
+				"description": "إلغاء حجز موجود\n\n**URL Parameters:**\n- `id`: معرف الحجز المراد إلغاؤه (مطلوب)\n\n**Request Body:**\n```json\n{\n  \"cancellation_reason\": \"سبب الإلغاء\" // اختياري\n}\n```\n\n**Business Rules:**\n- يمكن إلغاء الحجوزات التي في حالة PENDING فقط\n- لا يمكن إلغاء الحجوزات المكتملة أو الملغاة مسبقاً\n- لا يمكن إلغاء الحجوزات التي مضى موعدها\n- سبب الإلغاء اختياري ولكن يُفضل تقديمه\n\n**Response:**\nإرجاع تفاصيل الحجز بعد الإلغاء مع تحديث الحالة إلى USER_CANCELLED"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"cancellation_reason\": \"لدي ظرف طارئ ولا أستطيع الحضور\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/bookings/1/cancel",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"bookings",
+								"1",
+								"cancel"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": true,\n    \"message\": \"Booking cancelled successfully\",\n    \"data\": {\n        \"id\": 1,\n        \"number\": \"BK-2025-00001\",\n        \"appointment_date\": \"2025-11-15\",\n        \"formatted_date\": \"Nov 15, 2025\",\n        \"start_time\": \"10:00\",\n        \"end_time\": \"10:45\",\n        \"time_range\": \"10:00 AM - 10:45 AM\",\n        \"duration_minutes\": 45,\n        \"formatted_duration\": \"45m\",\n        \"subtotal\": 65.00,\n        \"tax_amount\": 5.00,\n        \"total_amount\": 70.00,\n        \"status\": \"USER_CANCELLED\",\n        \"status_value\": -1,\n        \"status_label\": \"ملغي من المستخدم\",\n        \"payment_status\": \"PENDING\",\n        \"payment_status_value\": 0,\n        \"payment_status_label\": \"في انتظار الدفع\",\n        \"payment_method\": \"cash\",\n        \"cancellation_reason\": \"لدي ظرف طارئ ولا أستطيع الحضور\",\n        \"cancelled_at\": \"2025-11-10 10:30:00\",\n        \"provider\": {\n            \"id\": 5,\n            \"full_name\": \"أحمد محمد\",\n            \"email\": \"provider@example.com\",\n            \"phone\": \"0501234567\",\n            \"avatar_url\": \"https://example.com/avatars/provider.jpg\"\n        },\n        \"services_details\": [\n            {\n                \"id\": 1,\n                \"service_id\": 3,\n                \"service_name\": \"قص شعر رجالي\",\n                \"duration_minutes\": 45,\n                \"price\": 70.00,\n                \"sequence_order\": 1\n            }\n        ],\n        \"notes\": \"أفضل الحجز في الصباح الباكر\",\n        \"created_at\": \"2025-11-10 08:30:00\",\n        \"updated_at\": \"2025-11-10 10:30:00\",\n        \"is_upcoming\": true,\n        \"is_past\": false,\n        \"is_cancelled\": true,\n        \"is_completed\": false,\n        \"can_cancel\": false\n    }\n}"
+				},
+				{
+					"name": "Validation Error - Already Cancelled",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"cancellation_reason\": \"سبب الإلغاء\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/bookings/1/cancel",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"bookings",
+								"1",
+								"cancel"
+							]
+						}
+					},
+					"status": "Unprocessable Entity",
+					"code": 422,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": false,\n    \"message\": \"This booking cannot be cancelled\",\n    \"error_type\": \"validation_error\"\n}"
+				},
+				{
+					"name": "Validation Error - Past Appointment",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"cancellation_reason\": \"سبب الإلغاء\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/bookings/5/cancel",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"bookings",
+								"5",
+								"cancel"
+							]
+						}
+					},
+					"status": "Unprocessable Entity",
+					"code": 422,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"success\": false,\n    \"message\": \"Cannot cancel past appointments\",\n    \"error_type\": \"validation_error\"\n}"
+				}
+			]
+		}
+	]
+}

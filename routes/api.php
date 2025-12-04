@@ -97,9 +97,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
     Route::middleware(['auth:sanctum', 'verified'])->prefix('bookings')->group(function () {
-    Route::get('/', [BookingController::class, 'index'])->name('bookings.index');
-    Route::post('/', [BookingController::class, 'store'])->name('bookings.store');
-    Route::get('/{id}', [BookingController::class, 'show'])->name('bookings.show');
-    Route::post('/{id}/cancel', [BookingController::class, 'cancel'])->name('bookings.cancel');
-});
+        Route::get('/', [BookingController::class, 'index'])->name('bookings.index');
+        Route::post('/', [BookingController::class, 'store'])->name('bookings.store');
+        Route::get('/{id}', [BookingController::class, 'show'])->name('bookings.show');
+        Route::post('/{id}/cancel', [BookingController::class, 'cancel'])->name('bookings.cancel');
+    });
 });

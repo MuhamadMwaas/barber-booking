@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 
 class Service extends Model
 {
@@ -32,8 +34,10 @@ class Service extends Model
         'icon_url',
         'is_featured',
     ];
- protected $appends = [
+    protected $appends = [
         'image_url',
+        'translated_name',
+
     ];
 
 
@@ -73,7 +77,12 @@ class Service extends Model
     {
         return $this->hasMany(AppointmentService::class, 'service_id');
     }
-
+    public function appointments()
+    {
+        return $this->belongsToMany(Appointment::class, 'appointment_services')
+            ->withPivot([ 'duration_minutes', 'price', 'sequence_order'])
+            ->withTimestamps();
+    }
     public function activeProviders()
     {
         return $this->providers()
@@ -84,9 +93,15 @@ class Service extends Model
 
     // accessors
 
-    public function getDisplayPriceAttribute()
+    public function getDisplayPriceAttribute(): mixed
     {
         return $this->discount_price ?? $this->price;
+    }
+
+    public function getTranslatedNameAttribute(): string
+    {
+        $locale = app()->getLocale();
+        return $this->getNameIn($locale);
     }
 
 
@@ -153,10 +168,15 @@ class Service extends Model
         return $this->translation($locale)?->description ?? $this->description;
     }
 
-    public function image(): MorphOne{
+    public function image(): MorphOne
+    {
         return $this->morphOne(File::class, 'fileable', 'instance_type', 'instance_id')->where('type', 'service_image');
     }
 
+    public function icon(): MorphOne
+    {
+        return $this->morphOne(File::class, 'fileable', 'instance_type', 'instance_id')->where('type', 'service_icon');
+    }
     public function getImageUrlAttribute(): ?string
     {
         if ($this->image) {
@@ -166,7 +186,45 @@ class Service extends Model
     }
 
     public function invoiceItems(): MorphMany
-{
-    return $this->morphMany(InvoiceItem::class, 'itemable');
-}
+    {
+        return $this->morphMany(InvoiceItem::class, 'itemable');
+    }
+    public function updateProfileImage(UploadedFile $image, $relation): File
+    {
+        if ($this->$relation) {
+            $this->$relation->delete();
+        }
+        if ($relation == 'image') {
+            $folder = 'images';
+            $type = 'service_image';
+        } else {
+            $type = 'service_icon';
+            $folder = 'icon';
+        }
+
+        $name = str_replace(' ', '_', trim($this->name));
+        $extension = $image->getClientOriginalExtension();
+        $dir = "services/{$folder}/{$this->id}";
+        $fileName = "{$name}_{$this->id}.{$extension}";
+        $path = "{$dir}/{$fileName}";
+
+        Storage::disk('public')->makeDirectory($dir);
+
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
+
+        $image->storeAs($dir, $fileName, 'public');
+
+        return $this->$relation()->create([
+            'name' => $name . '_' . $this->id,
+            'path' => $path,
+            'disk' => 'public',
+            'type' => $type,
+            'extension' => $extension,
+            'group' => 'service',
+            'key' => $relation,
+        ]);
+    }
+
 }

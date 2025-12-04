@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 
 use App\Enum\AppointmentStatus;
+use Filament\Models\Contracts\FilamentUser;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -18,8 +19,10 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Filament\Panel;
+use Filament\Models\Contracts\HasName;
 
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser, HasName
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens,HasRoles;
@@ -52,14 +55,19 @@ class User extends Authenticatable
 
     protected $appends = [
         'profile_image_url',
+        'full_name'
     ];
-
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $this->hasRole('admin');
+    }
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'email_verified_via_otp_at' => 'datetime',
         ];
     }
 
@@ -181,5 +189,10 @@ public function savedPaymentMethods(): HasMany
 public function defaultPaymentMethod(): HasOne
 {
     return $this->hasOne(SavePaymentMethod::class, 'user_id')->where('is_default', true);
+}
+
+public function getFilamentName(): string
+{
+    return $this->full_name;
 }
 }

@@ -8,7 +8,7 @@ class Language extends Model
 {
 
 
-        protected $fillable = [
+    protected $fillable = [
         'name',
         'native_name',
         'code',
@@ -16,7 +16,7 @@ class Language extends Model
         'is_active',
         'is_default'
     ];
-        protected $casts = [
+    protected $casts = [
         'is_active' => 'boolean',
         'is_default' => 'boolean',
         'order' => 'integer'

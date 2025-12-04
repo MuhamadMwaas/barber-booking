@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 
-class BookingService
+class BookingService2
 {
     protected ServiceAvailabilityService $availabilityService;
     protected BookingValidationService $validationService;
