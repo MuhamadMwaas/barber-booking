@@ -88,7 +88,7 @@ class UsersTable
 
                 // اللغة المفضلة
                 TextColumn::make('locale')
-                    ->label(__('resources.language'))
+                    ->label(__('resources.user.language'))
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'ar' => 'success',

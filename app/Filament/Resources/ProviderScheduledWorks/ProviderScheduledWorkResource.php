@@ -7,6 +7,7 @@ use App\Filament\Resources\ProviderScheduledWorks\Pages\EditProviderScheduledWor
 use App\Filament\Resources\ProviderScheduledWorks\Pages\ListProviderScheduledWorks;
 use App\Filament\Resources\ProviderScheduledWorks\Pages\ViewProviderScheduledWork;
 use App\Filament\Resources\ProviderScheduledWorks\Schemas\ProviderScheduledWorkForm;
+use App\Filament\Resources\ProviderScheduledWorks\Schemas\ProviderScheduledWorkSimpleForm;
 use App\Filament\Resources\ProviderScheduledWorks\Schemas\ProviderScheduledWorkInfolist;
 use App\Filament\Resources\ProviderScheduledWorks\Tables\ProviderScheduledWorksTable;
 use App\Models\ProviderScheduledWork;

@@ -2,164 +2,170 @@
 
 namespace App\Filament\Resources\ProviderScheduledWorks\Tables;
 
-use App\Models\ProviderScheduledWork;
+use App\Filament\Pages\ViewProviderScheduleTimeline;
+use App\Models\User;
 use Carbon\Carbon;
+use Filament\Actions\Action as ActionsAction;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
+use Filament\Actions\DeleteBulkAction as ActionsDeleteBulkAction;
 use Filament\Actions\ViewAction;
 use Filament\Support\Enums\FontWeight;
+use Filament\Tables\Actions\Action;
+use Filament\Tables\Actions\DeleteBulkAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Filament\Actions\EditAction;
+use Filament\Tables\Actions\Action as TableAction;
 
 class ProviderScheduledWorksTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+            ->query(
+                User::query()
+                    ->whereHas('roles', function ($q) {
+                        $q->where('name', 'provider');
+                    })
+                    ->with(['scheduledWorks', 'timeOffs'])
+            )
             ->columns([
-                // Provider Name with Image
-                TextColumn::make('provider.full_name')
+                // Provider Name with Email
+                TextColumn::make('full_name')
                     ->label(__('resources.provider_scheduled_work.provider'))
-                    ->searchable(['first_name', 'last_name'])
+                    ->searchable(['first_name', 'last_name', 'email'])
                     ->sortable()
                     ->weight(FontWeight::Bold)
                     ->icon('heroicon-o-user')
                     ->color('primary')
-                    ->description(fn ($record) => $record->provider?->email),
+                    ->description(fn($record) => $record->email),
 
-                // Day of Week Badge
-                TextColumn::make('day_of_week')
-                    ->label(__('resources.provider_scheduled_work.day_of_week'))
-                    ->sortable()
+                // Work Days Count
+                TextColumn::make('work_days_count')
+                    ->label(__('resources.provider_scheduled_work.work_days_count'))
+                    ->getStateUsing(function ($record) {
+                        return $record->scheduledWorks()
+                            ->where('is_work_day', true)
+                            ->where('is_active', true)
+                            ->count();
+                    })
                     ->badge()
-                    ->color(fn (int $state): string => match ($state) {
-                        0, 6 => 'warning',  // Weekend
-                        5 => 'success',      // Friday
-                        default => 'info',   // Weekdays
-                    })
-                    ->formatStateUsing(fn (int $state): string => match ($state) {
-                        0 => __('resources.provider_scheduled_work.sunday'),
-                        1 => __('resources.provider_scheduled_work.monday'),
-                        2 => __('resources.provider_scheduled_work.tuesday'),
-                        3 => __('resources.provider_scheduled_work.wednesday'),
-                        4 => __('resources.provider_scheduled_work.thursday'),
-                        5 => __('resources.provider_scheduled_work.friday'),
-                        6 => __('resources.provider_scheduled_work.saturday'),
-                        default => $state,
-                    })
-                    ->icon(fn (int $state): string => match ($state) {
-                        0, 6 => 'heroicon-o-sun',
-                        5 => 'heroicon-o-moon',
-                        default => 'heroicon-o-calendar-days',
+                    ->color('success')
+                    ->icon('heroicon-o-calendar-days')
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return $query->withCount([
+                            'scheduledWorks as work_days_count' => function ($q) {
+                                $q->where('is_work_day', true)->where('is_active', true);
+                            }
+                        ])->orderBy('work_days_count', $direction);
                     }),
 
-                // Work Day Status
-                IconColumn::make('is_work_day')
-                    ->label(__('resources.provider_scheduled_work.is_work_day'))
-                    ->boolean()
-                    ->trueIcon('heroicon-o-check-circle')
-                    ->falseIcon('heroicon-o-x-circle')
-                    ->trueColor('success')
-                    ->falseColor('danger')
-                    ->sortable()
-                    ->alignCenter(),
-
-                // Working Hours Range
-                TextColumn::make('working_hours')
-                    ->label(__('resources.provider_scheduled_work.working_hours'))
+                // Off Days Count
+                TextColumn::make('off_days_count')
+                    ->label(__('resources.provider_scheduled_work.off_days_count'))
                     ->getStateUsing(function ($record) {
-                        if (!$record->is_work_day) {
-                            return __('resources.provider_scheduled_work.day_off');
+                        $workDays = $record->scheduledWorks()
+                            ->where('is_work_day', true)
+                            ->where('is_active', true)
+                            ->count();
+                        return 7 - $workDays;
+                    })
+                    ->badge()
+                    ->color('warning')
+                    ->icon('heroicon-o-x-circle')
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return $query->withCount([
+                            'scheduledWorks as work_days_count' => function ($q) {
+                                $q->where('is_work_day', true)->where('is_active', true);
+                            }
+                        ])->orderBy('work_days_count', $direction === 'asc' ? 'desc' : 'asc');
+                    }),
+
+                // Weekly Hours
+                TextColumn::make('weekly_hours')
+                    ->label(__('resources.provider_scheduled_work.weekly_hours'))
+                    ->getStateUsing(function ($record) {
+                        $totalMinutes = 0;
+                        $workSchedules = $record->scheduledWorks()
+                            ->where('is_work_day', true)
+                            ->where('is_active', true)
+                            ->get();
+
+                        foreach ($workSchedules as $schedule) {
+                            if ($schedule->start_time && $schedule->end_time) {
+                                $start = Carbon::parse($schedule->start_time);
+                                $end = Carbon::parse($schedule->end_time);
+                                $dayMinutes = $start->diffInMinutes($end);
+
+                                // Subtract break time
+                                if ($schedule->break_minutes > 0) {
+                                    // $dayMinutes -= $schedule->break_minutes;
+                                }
+
+                                $totalMinutes += $dayMinutes;
+                            }
                         }
-                        return $record->start_time . ' - ' . $record->end_time;
+
+                        $hours = floor($totalMinutes / 60);
+                        $minutes = $totalMinutes % 60;
+
+                        return $hours . 'h' . ($minutes > 0 ? ' ' . $minutes . 'm' : '');
                     })
                     ->icon('heroicon-o-clock')
-                    ->color(fn ($record) => $record->is_work_day ? 'success' : 'gray')
-                    ->weight(FontWeight::SemiBold)
-                    ->description(function ($record) {
-                        if (!$record->is_work_day || !$record->start_time || !$record->end_time) {
-                            return null;
-                        }
-
-                        $start = Carbon::parse($record->start_time);
-                        $end = Carbon::parse($record->end_time);
-                        $totalMinutes = $start->diffInMinutes($end);
-                        $totalHours = floor($totalMinutes / 60);
-                        $remainingMinutes = $totalMinutes % 60;
-
-                        if ($record->break_minutes > 0) {
-                            $effectiveMinutes = $totalMinutes - $record->break_minutes;
-                            $effectiveHours = floor($effectiveMinutes / 60);
-                            $effectiveRemaining = $effectiveMinutes % 60;
-
-                            return __('resources.provider_scheduled_work.total_hours') . ': ' .
-                                   $totalHours . 'h ' . $remainingMinutes . 'm | ' .
-                                   __('resources.provider_scheduled_work.effective_hours') . ': ' .
-                                   $effectiveHours . 'h ' . $effectiveRemaining . 'm';
-                        }
-
-                        return __('resources.provider_scheduled_work.total_hours') . ': ' .
-                               $totalHours . 'h ' . $remainingMinutes . 'm';
-                    }),
-
-                // Start Time
-                TextColumn::make('start_time')
-                    ->label(__('resources.provider_scheduled_work.start_time'))
-                    ->time('H:i')
-                    ->icon('heroicon-o-arrow-right-start-on-rectangle')
                     ->color('info')
-                    ->sortable()
-                    ->toggleable()
-                    ->visible(fn ($record) => $record?->is_work_day ?? true),
+                    ->weight(FontWeight::SemiBold)
+                    ->description(__('resources.provider_scheduled_work.effective_hours')),
 
-                // End Time
-                TextColumn::make('end_time')
-                    ->label(__('resources.provider_scheduled_work.end_time'))
-                    ->time('H:i')
-                    ->icon('heroicon-o-arrow-left-end-on-rectangle')
-                    ->color('warning')
-                    ->sortable()
-                    ->toggleable()
-                    ->visible(fn ($record) => $record?->is_work_day ?? true),
-
-                // Break Duration
-                TextColumn::make('break_minutes')
-                    ->label(__('resources.provider_scheduled_work.break_duration'))
-                    ->sortable()
+                // Time Offs Count
+                TextColumn::make('time_offs_count')
+                    ->label(__('resources.provider_scheduled_work.time_offs_count'))
+                    ->getStateUsing(function ($record) {
+                        return $record->timeOffs()->count();
+                    })
                     ->badge()
-                    ->color(fn (int $state): string => match (true) {
+                    ->color(fn($state) => match (true) {
                         $state === 0 => 'gray',
-                        $state <= 30 => 'info',
-                        $state <= 60 => 'warning',
+                        $state <= 3 => 'success',
+                        $state <= 6 => 'warning',
                         default => 'danger',
                     })
-                    ->formatStateUsing(function (int $state): string {
-                        if ($state === 0) {
-                            return __('resources.provider_scheduled_work.no_break');
-                        }
-                        if ($state < 60) {
-                            return $state . ' ' . __('resources.provider_scheduled_work.minutes');
-                        }
-                        $hours = floor($state / 60);
-                        $minutes = $state % 60;
-                        return $hours . 'h ' . ($minutes > 0 ? $minutes . 'm' : '');
+                    ->icon('heroicon-o-calendar-days')
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return $query->withCount('timeOffs')->orderBy('time_offs_count', $direction);
                     })
-                    ->icon('heroicon-o-pause')
+                    ->description(__('resources.provider_scheduled_work.total_time_offs')),
+
+                // Upcoming Time Offs
+                TextColumn::make('upcoming_time_offs')
+                    ->label(__('resources.provider_scheduled_work.upcoming_time_offs'))
+                    ->getStateUsing(function ($record) {
+                        return $record->timeOffs()
+                            ->where('start_date', '>=', now()->toDateString())
+                            ->count();
+                    })
+                    ->badge()
+                    ->color('info')
+                    ->icon('heroicon-o-calendar')
                     ->toggleable(),
 
-                // Active Status
-                IconColumn::make('is_active')
-                    ->label(__('resources.provider_scheduled_work.status'))
+                // Active Schedule Status
+                IconColumn::make('has_active_schedule')
+                    ->label(__('resources.provider_scheduled_work.schedule_status'))
+                    ->getStateUsing(function ($record) {
+                        return $record->scheduledWorks()
+                            ->where('is_work_day', true)
+                            ->where('is_active', true)
+                            ->exists();
+                    })
                     ->boolean()
                     ->trueIcon('heroicon-o-check-badge')
-                    ->falseIcon('heroicon-o-no-symbol')
+                    ->falseIcon('heroicon-o-exclamation-triangle')
                     ->trueColor('success')
-                    ->falseColor('gray')
-                    ->sortable(),
+                    ->falseColor('danger'),
 
                 // Timestamps
                 TextColumn::make('created_at')
@@ -179,50 +185,91 @@ class ProviderScheduledWorksTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                // فلتر حسب المقدم
-                SelectFilter::make('user_id')
-                    ->label(__('resources.provider_scheduled_work.filter_by_provider'))
-                    ->relationship('provider', 'first_name')
-                    ->searchable()
-                    ->preload()
-                    ->multiple(),
-
-                // فلتر حسب اليوم
-                SelectFilter::make('day_of_week')
-                    ->label(__('resources.provider_scheduled_work.filter_by_day'))
+                // Filter by work days count
+                SelectFilter::make('work_days_range')
+                    ->label(__('resources.provider_scheduled_work.filter_by_work_days'))
                     ->options([
-                        0 => __('resources.provider_scheduled_work.sunday'),
-                        1 => __('resources.provider_scheduled_work.monday'),
-                        2 => __('resources.provider_scheduled_work.tuesday'),
-                        3 => __('resources.provider_scheduled_work.wednesday'),
-                        4 => __('resources.provider_scheduled_work.thursday'),
-                        5 => __('resources.provider_scheduled_work.friday'),
-                        6 => __('resources.provider_scheduled_work.saturday'),
+                        '0' => __('resources.provider_scheduled_work.no_work_days'),
+                        '1-3' => '1-3 ' . __('resources.provider_scheduled_work.days'),
+                        '4-5' => '4-5 ' . __('resources.provider_scheduled_work.days'),
+                        '6-7' => '6-7 ' . __('resources.provider_scheduled_work.days'),
                     ])
-                    ->multiple(),
+                    ->query(function (Builder $query, array $data) {
+                        if (!isset($data['value'])) {
+                            return $query;
+                        }
 
-                // فلتر أيام العمل
-                TernaryFilter::make('is_work_day')
-                    ->label(__('resources.provider_scheduled_work.is_work_day'))
-                    ->placeholder(__('resources.salon_setting.all_settings'))
-                    ->trueLabel(__('resources.provider_scheduled_work.work_days_only'))
-                    ->falseLabel(__('resources.provider_scheduled_work.days_off_only')),
+                        $value = $data['value'];
 
-                // فلتر الحالة النشطة
-                TernaryFilter::make('is_active')
-                    ->label(__('resources.provider_scheduled_work.status'))
+                        return $query->withCount([
+                            'scheduledWorks as work_days_count' => function ($q) {
+                                $q->where('is_work_day', true)->where('is_active', true);
+                            }
+                        ])->having('work_days_count', '>=', match ($value) {
+                                    '0' => 0,
+                                    '1-3' => 1,
+                                    '4-5' => 4,
+                                    '6-7' => 6,
+                                    default => 0,
+                                })->having('work_days_count', '<=', match ($value) {
+                                    '0' => 0,
+                                    '1-3' => 3,
+                                    '4-5' => 5,
+                                    '6-7' => 7,
+                                    default => 7,
+                                });
+                    }),
+
+                // Filter by active schedule
+                TernaryFilter::make('has_active_schedule')
+                    ->label(__('resources.provider_scheduled_work.has_schedule'))
                     ->placeholder(__('resources.salon_setting.all_settings'))
-                    ->trueLabel(__('resources.provider_scheduled_work.active_only'))
-                    ->falseLabel(__('resources.provider_scheduled_work.inactive_only')),
+                    ->trueLabel(__('resources.provider_scheduled_work.with_schedule'))
+                    ->falseLabel(__('resources.provider_scheduled_work.without_schedule'))
+                    ->queries(
+                        true: fn(Builder $query) => $query->whereHas('scheduledWorks', function ($q) {
+                            $q->where('is_work_day', true)->where('is_active', true);
+                        }),
+                        false: fn(Builder $query) => $query->whereDoesntHave('scheduledWorks', function ($q) {
+                            $q->where('is_work_day', true)->where('is_active', true);
+                        }),
+                    ),
+
+                // Filter by time offs
+                TernaryFilter::make('has_time_offs')
+                    ->label(__('resources.provider_scheduled_work.has_time_offs'))
+                    ->placeholder(__('resources.salon_setting.all_settings'))
+                    ->trueLabel(__('resources.provider_scheduled_work.with_time_offs'))
+                    ->falseLabel(__('resources.provider_scheduled_work.without_time_offs'))
+                    ->queries(
+                        true: fn(Builder $query) => $query->whereHas('timeOffs'),
+                        false: fn(Builder $query) => $query->whereDoesntHave('timeOffs'),
+                    ),
             ])
-            ->defaultSort('day_of_week', 'asc')
+            ->defaultSort('first_name', 'asc')
             ->recordActions([
+                EditAction::make()->url(fn($record) => route('filament.admin.resources.provider-scheduled-works.edit', [
+                    'record' => $record->id,
+                    'userId' => $record->user_id,
+                ])),
                 ViewAction::make(),
-                EditAction::make(),
+      ViewAction::make('timeline')
+                    ->label(__('schedule.view_timeline') ?? 'View Timeline')
+                    ->icon('heroicon-o-presentation-chart-bar')
+                    ->color('info')
+                    ->url(fn ($record) => ViewProviderScheduleTimeline::getUrl(['userId' => $record->id]))
+                    ->openUrlInNewTab(),
+                ActionsAction::make('manage_schedule')
+                    ->label(__('resources.provider_scheduled_work.manage_schedule'))
+                    ->icon('heroicon-o-pencil-square')
+                    ->color('primary')
+                    ->url(fn($record) => ViewProviderScheduleTimeline::getUrl() . '?userId=' . $record->id)
+                    ->tooltip(__('resources.provider_scheduled_work.manage_schedule_tooltip')),
             ])
-            ->toolbarActions([
+
+            ->bulkActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    ActionsDeleteBulkAction::make(),
                 ]),
             ]);
     }

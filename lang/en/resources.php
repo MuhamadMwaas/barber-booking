@@ -925,6 +925,191 @@ return [
     'revenue_from_service' => 'Revenue from Service',
     'from_completed_only' => 'From completed bookings only',
 
+    // Provider Scheduled Work
+    'provider_scheduled_work' => [
+        'label' => 'Work Schedule',
+        'plural_label' => 'Work Schedules',
+        'navigation_label' => 'Provider Work Schedules',
+
+        // Table columns
+        'provider' => 'Provider',
+        'provider_name' => 'Provider Name',
+        'day_of_week' => 'Day',
+        'start_time' => 'Start Time',
+        'end_time' => 'End Time',
+        'working_hours' => 'Working Hours',
+        'is_work_day' => 'Work Day',
+        'break_minutes' => 'Break Time',
+        'break_duration' => 'Break Duration',
+        'is_active' => 'Active',
+        'status' => 'Status',
+        'created_at' => 'Created At',
+        'updated_at' => 'Last Updated',
+
+        // Days
+        'sunday' => 'Sunday',
+        'monday' => 'Monday',
+        'tuesday' => 'Tuesday',
+        'wednesday' => 'Wednesday',
+        'thursday' => 'Thursday',
+        'friday' => 'Friday',
+        'saturday' => 'Saturday',
+
+        // Status
+        'work_day' => 'Work Day',
+        'day_off' => 'Day Off',
+        'active' => 'Active',
+        'inactive' => 'Inactive',
+
+        // Filters
+        'filter_by_provider' => 'Filter by Provider',
+        'filter_by_day' => 'Filter by Day',
+        'work_days_only' => 'Work Days Only',
+        'days_off_only' => 'Days Off Only',
+        'active_only' => 'Active Only',
+        'inactive_only' => 'Inactive Only',
+
+        // Helpers
+        'minutes' => 'minutes',
+        'hours' => 'hours',
+        'no_break' => 'No Break',
+        'total_hours' => 'Total Hours',
+        'effective_hours' => 'Effective Hours',
+
+        // Summary Fields
+        'work_days_count' => 'Work Days',
+        'off_days_count' => 'Days Off',
+        'weekly_hours' => 'Weekly Hours',
+        'time_offs_count' => 'Time Offs',
+        'upcoming_time_offs' => 'Upcoming Time Offs',
+        'total_time_offs' => 'Total Time Offs',
+        'schedule_status' => 'Schedule Status',
+
+        // Filter Labels
+        'filter_by_work_days' => 'Filter by Work Days',
+        'no_work_days' => 'No Work Days',
+        'days' => 'days',
+        'has_schedule' => 'Schedule Status',
+        'with_schedule' => 'With Schedule',
+        'without_schedule' => 'Without Schedule',
+        'has_time_offs' => 'Time Off Status',
+        'with_time_offs' => 'With Time Offs',
+        'without_time_offs' => 'Without Time Offs',
+
+        // Actions
+        'view_timeline' => 'View Timeline',
+        'view_timeline_tooltip' => 'View provider\'s visual schedule timeline',
+        'manage_schedule' => 'Edit Schedule',
+        'manage_schedule_tooltip' => 'Edit and manage this provider\'s work schedule',
+
+        // Form Tabs
+        'provider_info' => 'Provider Information',
+        'weekly_schedule' => 'Weekly Schedule',
+        'instructions' => 'Instructions',
+        'help' => 'Help',
+
+        // Provider Selection
+        'select_provider' => 'Select Provider',
+        'select_provider_desc' => 'Choose a provider to manage their weekly work schedule',
+        'select_provider_placeholder' => '-- Select a provider --',
+        'select_provider_helper' => 'You can search by provider name or email',
+        'no_provider_selected' => 'No provider selected',
+        'no_provider_selected_desc' => 'Please select a provider from the first tab to view the timeline',
+        'go_to_provider_tab' => 'Go to Provider Information tab',
+        'select_provider_first' => 'Please select a provider first to view the timeline',
+
+        // Timeline Section
+        'schedule_timeline' => 'Schedule Timeline',
+        'schedule_timeline_desc' => 'Visual representation of the weekly schedule with shifts and hours',
+
+        // Instructions
+        'how_to_use' => 'How to Use',
+        'how_to_use_desc' => 'Step-by-step guide for managing work schedules',
+        'instructions_intro_title' => 'Welcome to Work Schedule Management System',
+        'instructions_intro_text' => 'This tool helps you manage provider work schedules visually and easily',
+
+        // Steps
+        'step_1' => 'Select a provider from the dropdown list in the first tab',
+        'step_2' => 'Go to the "Weekly Schedule" tab to view the provider\'s current schedule',
+        'step_3' => 'View shifts displayed on a 24-hour timeline for each day',
+        'step_4' => 'To edit the schedule, use the main schedule management page',
+
+        // Timeline Legend
+        'timeline_legend' => 'Color Legend',
+        'shift_block' => 'Work Shift',
+        'branch_hours_bg' => 'Branch Operating Hours',
+        'day_off_indicator' => 'Day Off',
+
+        // Tips
+        'tips_title' => 'Helpful Tips',
+        'tip_1' => 'You can see shift details by hovering over them',
+        'tip_2' => 'The blue background represents the official branch operating hours',
+        'tip_3' => 'Different shift colors help distinguish between them',
+
+        // Important Note
+        'important_note' => 'Note: This is a visual display only. To edit the schedule, use the schedule management page or click the "Manage Schedule" button in the provider table.',
+
+        // Form Sections
+        'basic_information' => 'Basic Information',
+        'basic_information_description' => 'Provider, day and status information',
+        'work_schedule' => 'Work Schedule',
+        'work_schedule_description' => 'Set start time, end time and break duration',
+        'additional_notes' => 'Additional Notes',
+        'additional_notes_description' => 'Special notes for this shift',
+
+        // Form Fields
+        'form_select_provider' => 'Select Provider',
+        'form_provider_helper' => 'Choose the employee whose shift you want to edit',
+        'form_provider_required' => 'Provider is required',
+        'select_day' => 'Select Day',
+        'day_helper' => 'Choose the day of the week for this shift',
+        'day_required' => 'Day is required',
+        'is_active_helper' => 'Inactive shifts will not appear in the booking system',
+        'start_time_placeholder' => '09:00',
+        'start_time_helper' => 'Work start time',
+        'start_time_required' => 'Start time is required',
+        'end_time_placeholder' => '17:00',
+        'end_time_helper' => 'Work end time',
+        'end_time_required' => 'End time is required',
+        'break_minutes_placeholder' => '30',
+        'break_minutes_helper' => 'Number of break minutes during the shift',
+        'break_minutes_numeric' => 'Break minutes must be a number',
+        'break_minutes_min' => 'Break minutes must be 0 or more',
+        'break_minutes_max' => 'Break minutes must be less than 480 minutes',
+        'is_work_day_helper' => 'Specify if this is a work day or day off',
+        'notes' => 'Notes',
+        'notes_placeholder' => 'Add special notes for this shift...',
+        'notes_helper' => 'Optional notes (max 1000 characters)',
+
+        // Validation Messages
+        'validation' => [
+            'end_time_must_differ' => 'End time must be different from start time',
+            'break_exceeds_duration' => 'Break minutes cannot be greater than or equal to shift duration',
+            'shift_overlap' => 'Conflict with another shift on :day from :start to :end',
+        ],
+
+        // Weekly Schedule Form
+        'shifts' => 'Shifts',
+        'shift' => 'Shift',
+        'add_shift' => 'Add Shift',
+        'summary' => 'Summary',
+        'summary_description' => 'Live overview of weekly workload.',
+        'total_working_minutes' => 'Total working time (week)',
+        'active_days_count' => 'Days with active shifts',
+        'total_shifts_count' => 'Total shifts',
+        'managing_schedule' => 'Managing work schedule for the selected provider',
+        'weekly_schedule_description' => 'Set work hours for each day of the week',
+        'edit_schedule_for' => 'Edit Schedule for :name',
+        'edit_weekly_schedule_description' => 'Manage weekly work hours and breaks for all days',
+        'back_to_list' => 'Back to List',
+        'save_schedule' => 'Save Schedule',
+        'cancel' => 'Cancel',
+        'schedule_saved' => 'Schedule Saved',
+        'schedule_saved_successfully' => 'The work schedule has been saved successfully',
+        'save_error' => 'Save Error',
+        'validation_error' => 'Validation Error',
+    ],
+
     // Common Actions
     'view' => 'View',
     'edit' => 'Edit',

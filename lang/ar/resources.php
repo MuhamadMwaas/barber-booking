@@ -787,6 +787,139 @@ return [
         'no_break' => 'بدون استراحة',
         'total_hours' => 'إجمالي الساعات',
         'effective_hours' => 'الساعات الفعلية',
+
+        // New Summary Fields
+        'work_days_count' => 'أيام العمل',
+        'off_days_count' => 'أيام الإجازة',
+        'weekly_hours' => 'ساعات العمل الأسبوعية',
+        'time_offs_count' => 'عدد الإجازات',
+        'upcoming_time_offs' => 'الإجازات القادمة',
+        'total_time_offs' => 'إجمالي الإجازات',
+        'schedule_status' => 'حالة الجدول',
+
+        // Filter Labels
+        'filter_by_work_days' => 'تصفية حسب أيام العمل',
+        'no_work_days' => 'بدون أيام عمل',
+        'days' => 'أيام',
+        'has_schedule' => 'حالة الجدول',
+        'with_schedule' => 'لديه جدول',
+        'without_schedule' => 'بدون جدول',
+        'has_time_offs' => 'حالة الإجازات',
+        'with_time_offs' => 'لديه إجازات',
+        'without_time_offs' => 'بدون إجازات',
+
+        // Actions
+        'view_timeline' => 'عرض Timeline',
+        'view_timeline_tooltip' => 'عرض الجدول الزمني المرئي للموظف',
+        'manage_schedule' => 'تعديل الجدول',
+        'manage_schedule_tooltip' => 'تعديل وإدارة جدول دوام هذا الموظف',
+
+        // Form Tabs
+        'provider_info' => 'معلومات الموظف',
+        'weekly_schedule' => 'الجدول الأسبوعي',
+        'instructions' => 'الإرشادات',
+        'help' => 'مساعدة',
+
+        // Provider Selection
+        'select_provider' => 'اختر الموظف',
+        'select_provider_desc' => 'اختر موظفاً لإدارة جدول دوامه الأسبوعي',
+        'select_provider_placeholder' => '-- اختر موظفاً --',
+        'select_provider_helper' => 'يمكنك البحث باسم الموظف أو البريد الإلكتروني',
+        'no_provider_selected' => 'لم يتم اختيار موظف',
+        'no_provider_selected_desc' => 'الرجاء اختيار موظفاً من التبويب الأول لعرض الجدول الزمني',
+        'go_to_provider_tab' => 'انتقل إلى تبويب معلومات الموظف',
+        'select_provider_first' => 'الرجاء اختيار موظف أولاً لعرض الجدول الزمني',
+
+        // Timeline Section
+        'schedule_timeline' => 'الجدول الزمني',
+        'schedule_timeline_desc' => 'عرض مرئي للجدول الأسبوعي مع الشفتات والساعات',
+
+        // Instructions
+        'how_to_use' => 'كيفية الاستخدام',
+        'how_to_use_desc' => 'دليل خطوة بخطوة لإدارة جداول الدوام',
+        'instructions_intro_title' => 'مرحباً بك في نظام إدارة جداول الدوام',
+        'instructions_intro_text' => 'هذه الأداة تساعدك على إدارة جداول عمل الموظفين بشكل مرئي وسهل',
+
+        // Steps
+        'step_1' => 'اختر موظفاً من القائمة المنسدلة في التبويب الأول',
+        'step_2' => 'انتقل إلى تبويب "الجدول الأسبوعي" لعرض جدول الموظف الحالي',
+        'step_3' => 'شاهد الشفتات موضحة على مقياس زمني 24 ساعة لكل يوم',
+        'step_4' => 'لتعديل الجدول، استخدم صفحة إدارة الجداول الرئيسية',
+
+        // Timeline Legend
+        'timeline_legend' => 'دليل الألوان',
+        'shift_block' => 'شفت العمل',
+        'branch_hours_bg' => 'ساعات عمل الفرع',
+        'day_off_indicator' => 'يوم إجازة',
+
+        // Tips
+        'tips_title' => 'نصائح مفيدة',
+        'tip_1' => 'يمكنك رؤية تفاصيل كل شفت بالمرور بالماوس فوقه',
+        'tip_2' => 'الخلفية الزرقاء تمثل ساعات عمل الفرع الرسمية',
+        'tip_3' => 'الألوان المختلفة للشفتات تساعد على التمييز بينها',
+
+        // Important Note
+        'important_note' => 'ملاحظة: هذا عرض مرئي فقط. لتعديل الجدول، استخدم صفحة إدارة الجداول أو انقر على زر "إدارة الجدول" في جدول الموظفين.',
+
+        // Form Sections
+        'basic_information' => 'المعلومات الأساسية',
+        'basic_information_description' => 'معلومات الموظف واليوم والحالة',
+        'work_schedule' => 'أوقات العمل',
+        'work_schedule_description' => 'تحديد أوقات البداية والنهاية ووقت الاستراحة',
+        'additional_notes' => 'ملاحظات إضافية',
+        'additional_notes_description' => 'ملاحظات خاصة بهذا الشفت',
+
+        // Form Fields
+        'form_select_provider' => 'اختر مزود الخدمة',
+        'form_provider_helper' => 'اختر الموظف الذي تريد تعديل شفته',
+        'form_provider_required' => 'الموظف مطلوب',
+        'select_day' => 'اختر اليوم',
+        'day_helper' => 'اختر يوم الأسبوع لهذا الشفت',
+        'day_required' => 'اليوم مطلوب',
+        'is_active_helper' => 'الشفتات غير النشطة لن تظهر في نظام الحجز',
+        'start_time_placeholder' => '09:00',
+        'start_time_helper' => 'وقت بداية العمل',
+        'start_time_required' => 'وقت البداية مطلوب',
+        'end_time_placeholder' => '17:00',
+        'end_time_helper' => 'وقت انتهاء العمل',
+        'end_time_required' => 'وقت النهاية مطلوب',
+        'break_minutes_placeholder' => '30',
+        'break_minutes_helper' => 'عدد دقائق الاستراحة خلال الشفت',
+        'break_minutes_numeric' => 'دقائق الاستراحة يجب أن تكون رقماً',
+        'break_minutes_min' => 'دقائق الاستراحة يجب أن تكون 0 أو أكثر',
+        'break_minutes_max' => 'دقائق الاستراحة يجب أن تكون أقل من 480 دقيقة',
+        'is_work_day_helper' => 'حدد إذا كان هذا يوم عمل أو يوم إجازة',
+        'notes' => 'ملاحظات',
+        'notes_placeholder' => 'أضف ملاحظات خاصة بهذا الشفت...',
+        'notes_helper' => 'ملاحظات اختيارية (حد أقصى 1000 حرف)',
+
+        // Validation Messages
+        'validation' => [
+            'end_time_must_differ' => 'وقت النهاية يجب أن يكون مختلفاً عن وقت البداية',
+            'break_exceeds_duration' => 'دقائق الاستراحة لا يمكن أن تكون أكبر من أو تساوي مدة الشفت',
+            'shift_overlap' => 'يوجد تعارض مع شفت آخر في يوم :day من :start إلى :end',
+        ],
+
+        // Weekly Schedule Form
+        'shifts' => 'الشفتات',
+        'shift' => 'شفت',
+        'add_shift' => 'إضافة شفت',
+        'summary' => 'الملخص',
+        'summary_description' => 'إحصائيات حية عن عبء العمل الأسبوعي.',
+        'total_working_minutes' => 'إجمالي وقت العمل الأسبوعي',
+        'active_days_count' => 'عدد الأيام التي تحتوي على شفت فعّال',
+        'total_shifts_count' => 'إجمالي عدد الشفتات',
+        'managing_schedule' => 'إدارة جدول العمل للموظف المختار',
+        'weekly_schedule_description' => 'تحديد ساعات العمل لكل يوم من أيام الأسبوع',
+        'edit_schedule_for' => 'تعديل جدول :name',
+        'edit_weekly_schedule_description' => 'إدارة ساعات العمل الأسبوعية والاستراحات لجميع الأيام',
+        'back_to_list' => 'العودة للقائمة',
+        'save_schedule' => 'حفظ الجدول',
+        'cancel' => 'إلغاء',
+        'schedule_saved' => 'تم حفظ الجدول',
+        'schedule_saved_successfully' => 'تم حفظ جدول العمل بنجاح',
+        'save_error' => 'خطأ في الحفظ',
+        'validation_error' => 'خطأ في التحقق',
     ],
 
     // Common Actions

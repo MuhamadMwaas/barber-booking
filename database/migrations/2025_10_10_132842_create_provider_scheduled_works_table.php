@@ -22,6 +22,7 @@ return new class extends Migration
             $table->boolean('is_work_day')->default(value: true);
             $table->smallInteger('break_minutes')->default(0);
             $table->boolean('is_active')->default(true);
+            $table->string('notes')->nullable();
             $table->timestamps();
         });
     }

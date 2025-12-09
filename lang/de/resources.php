@@ -250,6 +250,191 @@ return [
         'metadata' => 'Metadaten',
     ],
 
+    // Provider Scheduled Work
+    'provider_scheduled_work' => [
+        'label' => 'Arbeitsplan',
+        'plural_label' => 'Arbeitspläne',
+        'navigation_label' => 'Mitarbeiter-Arbeitspläne',
+
+        // Table columns
+        'provider' => 'Dienstleister',
+        'provider_name' => 'Name des Dienstleisters',
+        'day_of_week' => 'Tag',
+        'start_time' => 'Startzeit',
+        'end_time' => 'Endzeit',
+        'working_hours' => 'Arbeitszeiten',
+        'is_work_day' => 'Arbeitstag',
+        'break_minutes' => 'Pause',
+        'break_duration' => 'Pausendauer',
+        'is_active' => 'Aktiv',
+        'status' => 'Status',
+        'created_at' => 'Erstellt am',
+        'updated_at' => 'Zuletzt aktualisiert',
+
+        // Days
+        'sunday' => 'Sonntag',
+        'monday' => 'Montag',
+        'tuesday' => 'Dienstag',
+        'wednesday' => 'Mittwoch',
+        'thursday' => 'Donnerstag',
+        'friday' => 'Freitag',
+        'saturday' => 'Samstag',
+
+        // Status
+        'work_day' => 'Arbeitstag',
+        'day_off' => 'Freier Tag',
+        'active' => 'Aktiv',
+        'inactive' => 'Inaktiv',
+
+        // Filters
+        'filter_by_provider' => 'Nach Dienstleister filtern',
+        'filter_by_day' => 'Nach Tag filtern',
+        'work_days_only' => 'Nur Arbeitstage',
+        'days_off_only' => 'Nur freie Tage',
+        'active_only' => 'Nur Aktive',
+        'inactive_only' => 'Nur Inaktive',
+
+        // Helpers
+        'minutes' => 'Minuten',
+        'hours' => 'Stunden',
+        'no_break' => 'Keine Pause',
+        'total_hours' => 'Gesamtstunden',
+        'effective_hours' => 'Effektive Stunden',
+
+        // Summary Fields
+        'work_days_count' => 'Arbeitstage',
+        'off_days_count' => 'Freie Tage',
+        'weekly_hours' => 'Wochenstunden',
+        'time_offs_count' => 'Abwesenheiten',
+        'upcoming_time_offs' => 'Bevorstehende Abwesenheiten',
+        'total_time_offs' => 'Gesamte Abwesenheiten',
+        'schedule_status' => 'Plan-Status',
+
+        // Filter Labels
+        'filter_by_work_days' => 'Nach Arbeitstagen filtern',
+        'no_work_days' => 'Keine Arbeitstage',
+        'days' => 'Tage',
+        'has_schedule' => 'Plan-Status',
+        'with_schedule' => 'Mit Plan',
+        'without_schedule' => 'Ohne Plan',
+        'has_time_offs' => 'Abwesenheits-Status',
+        'with_time_offs' => 'Mit Abwesenheiten',
+        'without_time_offs' => 'Ohne Abwesenheiten',
+
+        // Actions
+        'view_timeline' => 'Timeline anzeigen',
+        'view_timeline_tooltip' => 'Visuelle Zeitplan-Zeitleiste des Mitarbeiters anzeigen',
+        'manage_schedule' => 'Plan bearbeiten',
+        'manage_schedule_tooltip' => 'Arbeitsplan dieses Mitarbeiters bearbeiten und verwalten',
+
+        // Form Tabs
+        'provider_info' => 'Mitarbeiterinformationen',
+        'weekly_schedule' => 'Wochenplan',
+        'instructions' => 'Anleitungen',
+        'help' => 'Hilfe',
+
+        // Provider Selection
+        'select_provider' => 'Mitarbeiter auswählen',
+        'select_provider_desc' => 'Wählen Sie einen Mitarbeiter aus, um dessen Wochenarbeitsplan zu verwalten',
+        'select_provider_placeholder' => '-- Mitarbeiter auswählen --',
+        'select_provider_helper' => 'Sie können nach Name oder E-Mail-Adresse suchen',
+        'no_provider_selected' => 'Kein Mitarbeiter ausgewählt',
+        'no_provider_selected_desc' => 'Bitte wählen Sie einen Mitarbeiter aus dem ersten Tab aus, um die Zeitleiste anzuzeigen',
+        'go_to_provider_tab' => 'Gehen Sie zum Tab Mitarbeiterinformationen',
+        'select_provider_first' => 'Bitte wählen Sie zuerst einen Mitarbeiter aus, um die Zeitleiste anzuzeigen',
+
+        // Timeline Section
+        'schedule_timeline' => 'Zeitplan-Zeitleiste',
+        'schedule_timeline_desc' => 'Visuelle Darstellung des Wochenplans mit Schichten und Stunden',
+
+        // Instructions
+        'how_to_use' => 'Verwendung',
+        'how_to_use_desc' => 'Schritt-für-Schritt-Anleitung zur Verwaltung von Arbeitsplänen',
+        'instructions_intro_title' => 'Willkommen im Arbeitsplan-Verwaltungssystem',
+        'instructions_intro_text' => 'Dieses Tool hilft Ihnen, Arbeitszeiten visuell und einfach zu verwalten',
+
+        // Steps
+        'step_1' => 'Wählen Sie einen Mitarbeiter aus der Dropdown-Liste im ersten Tab',
+        'step_2' => 'Gehen Sie zum Tab "Wochenplan", um den aktuellen Plan des Mitarbeiters anzuzeigen',
+        'step_3' => 'Sehen Sie sich die Schichten auf einer 24-Stunden-Zeitleiste für jeden Tag an',
+        'step_4' => 'Um den Plan zu bearbeiten, verwenden Sie die Hauptseite zur Planverwaltung',
+
+        // Timeline Legend
+        'timeline_legend' => 'Farblegende',
+        'shift_block' => 'Arbeitsschicht',
+        'branch_hours_bg' => 'Filial-Öffnungszeiten',
+        'day_off_indicator' => 'Freier Tag',
+
+        // Tips
+        'tips_title' => 'Hilfreiche Tipps',
+        'tip_1' => 'Sie können Schichtdetails sehen, indem Sie mit der Maus darüber fahren',
+        'tip_2' => 'Der blaue Hintergrund stellt die offiziellen Filial-Öffnungszeiten dar',
+        'tip_3' => 'Verschiedene Schichtfarben helfen, sie zu unterscheiden',
+
+        // Important Note
+        'important_note' => 'Hinweis: Dies ist nur eine visuelle Anzeige. Um den Plan zu bearbeiten, verwenden Sie die Planverwaltungsseite oder klicken Sie auf die Schaltfläche "Plan verwalten" in der Mitarbeitertabelle.',
+
+        // Form Sections
+        'basic_information' => 'Grundinformationen',
+        'basic_information_description' => 'Mitarbeiter-, Tages- und Statusinformationen',
+        'work_schedule' => 'Arbeitsplan',
+        'work_schedule_description' => 'Startzeit, Endzeit und Pausendauer festlegen',
+        'additional_notes' => 'Zusätzliche Notizen',
+        'additional_notes_description' => 'Besondere Notizen für diese Schicht',
+
+        // Form Fields
+        'form_select_provider' => 'Anbieter auswählen',
+        'form_provider_helper' => 'Wählen Sie den Mitarbeiter aus, dessen Schicht Sie bearbeiten möchten',
+        'form_provider_required' => 'Anbieter ist erforderlich',
+        'select_day' => 'Tag auswählen',
+        'day_helper' => 'Wählen Sie den Wochentag für diese Schicht',
+        'day_required' => 'Tag ist erforderlich',
+        'is_active_helper' => 'Inaktive Schichten erscheinen nicht im Buchungssystem',
+        'start_time_placeholder' => '09:00',
+        'start_time_helper' => 'Arbeitsbeginn',
+        'start_time_required' => 'Startzeit ist erforderlich',
+        'end_time_placeholder' => '17:00',
+        'end_time_helper' => 'Arbeitsende',
+        'end_time_required' => 'Endzeit ist erforderlich',
+        'break_minutes_placeholder' => '30',
+        'break_minutes_helper' => 'Anzahl der Pausenminuten während der Schicht',
+        'break_minutes_numeric' => 'Pausenminuten müssen eine Zahl sein',
+        'break_minutes_min' => 'Pausenminuten müssen 0 oder mehr sein',
+        'break_minutes_max' => 'Pausenminuten müssen weniger als 480 Minuten sein',
+        'is_work_day_helper' => 'Geben Sie an, ob dies ein Arbeitstag oder ein freier Tag ist',
+        'notes' => 'Notizen',
+        'notes_placeholder' => 'Besondere Notizen für diese Schicht hinzufügen...',
+        'notes_helper' => 'Optionale Notizen (max. 1000 Zeichen)',
+
+        // Validation Messages
+        'validation' => [
+            'end_time_must_differ' => 'Endzeit muss sich von der Startzeit unterscheiden',
+            'break_exceeds_duration' => 'Pausenminuten können nicht größer oder gleich der Schichtdauer sein',
+            'shift_overlap' => 'Konflikt mit einer anderen Schicht am :day von :start bis :end',
+        ],
+
+        // Weekly Schedule Form
+        'shifts' => 'Schichten',
+        'shift' => 'Schicht',
+        'add_shift' => 'Schicht hinzufügen',
+        'summary' => 'Zusammenfassung',
+        'summary_description' => 'Live-Überblick über die Wochenlast.',
+        'total_working_minutes' => 'Arbeitszeit gesamt (Woche)',
+        'active_days_count' => 'Tage mit aktiven Schichten',
+        'total_shifts_count' => 'Anzahl Schichten',
+        'managing_schedule' => 'Arbeitsplan für den ausgewählten Mitarbeiter verwalten',
+        'weekly_schedule_description' => 'Arbeitszeiten für jeden Wochentag festlegen',
+        'edit_schedule_for' => 'Plan bearbeiten für :name',
+        'edit_weekly_schedule_description' => 'Wöchentliche Arbeitszeiten und Pausen für alle Tage verwalten',
+        'back_to_list' => 'Zurück zur Liste',
+        'save_schedule' => 'Plan speichern',
+        'cancel' => 'Abbrechen',
+        'schedule_saved' => 'Plan gespeichert',
+        'schedule_saved_successfully' => 'Der Arbeitsplan wurde erfolgreich gespeichert',
+        'save_error' => 'Speicherfehler',
+        'validation_error' => 'Validierungsfehler',
+    ],
+
     // Common Actions
     'view' => 'Ansehen',
     'edit' => 'Bearbeiten',
