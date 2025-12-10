@@ -20,6 +20,9 @@ class Appointment extends Model
         'number',
         'customer_id',
         'provider_id',
+        'customer_name',
+        'customer_email',
+        'customer_phone',
         'appointment_date',
         'start_time',
         'end_time',
@@ -82,8 +85,8 @@ class Appointment extends Model
     public function services()
     {
         return $this->belongsToMany(Service::class, 'appointment_services')
-                    ->withPivot(['service_name', 'duration_minutes', 'price', 'sequence_order'])
-                    ->withTimestamps();
+            ->withPivot(['service_name', 'duration_minutes', 'price', 'sequence_order'])
+            ->withTimestamps();
     }
 
 
@@ -134,7 +137,7 @@ class Appointment extends Model
 
     public function complete(): bool
     {
-        return $this->update(['status' =>  AppointmentStatus::COMPLETED]);
+        return $this->update(['status' => AppointmentStatus::COMPLETED]);
     }
 
     /**
@@ -185,6 +188,27 @@ class Appointment extends Model
     {
         return $this->morphMany(Payment::class, 'paymentable');
     }
+
+    public function getCustomerEmailAttribute()
+    {
+        return $this->customer ? $this->customer->email : $this->customer_email;
+    }
+
+    public function getCustomerPhoneAttribute()
+    {
+        return $this->customer ? $this->customer->phone : $this->customer_phone;
+    }
+    public function getCustomerNameAttribute(): string
+    {
+        return $this->customer?->full_name
+            ?? ($this->customer_name ?: 'Guest');
+    }
+
+    public function getHasCustomerAccountAttribute(): bool
+    {
+        return (bool) $this->customer_id;
+    }
+
 
 
 }

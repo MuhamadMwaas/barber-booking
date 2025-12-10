@@ -50,6 +50,7 @@ return [
 
     // Actions
     'save_schedule' => 'حفظ الجدول',
+    'reload' => 'إعادة تحميل',
     'schedule_saved' => 'تم حفظ الجدول',
     'schedule_saved_successfully' => 'تم حفظ جدول الصالون بنجاح',
     'save_error' => 'خطأ في حفظ الجدول',
@@ -58,7 +59,23 @@ return [
     // Validation
     'validation' => [
         'close_time_must_differ' => 'يجب أن يكون وقت الإغلاق مختلفاً عن وقت الفتح',
+        'invalid_time_format' => 'صيغة الوقت غير صحيحة',
     ],
     'open_time_required' => 'وقت الفتح مطلوب لـ :day',
     'close_time_required' => 'وقت الإغلاق مطلوب لـ :day',
+
+    // Messages
+    'messages' => [
+        'day_copied' => 'تم نسخ جدول :day',
+        'day_pasted' => 'تم لصق الجدول إلى :day',
+        'day_applied_to_week' => 'تم تطبيق جدول :day على جميع الأيام',
+    ],
+
+    // Errors
+    'errors' => [
+        'nothing_to_paste' => 'لا يوجد شيء للصق. انسخ يوماً أولاً.',
+    ],
+
+    // Additional
+    'schedule_reloaded' => 'تم إعادة تحميل الجدول بنجاح',
 ];

@@ -50,23 +50,15 @@ class ManageSalonSchedules extends Page
     }
 
     /**
-     * أيقونة التنقل
-     */
-    public static function getNavigationIcon(): ?string
-    {
-        return 'heroicon-o-building-storefront';
-    }
-
-    /**
      * ترتيب الصفحة في القائمة
      */
     public static function getNavigationSort(): ?int
     {
-        return 30;
+        return 20;
     }
 
     /**
-     * صلاحيات الوصول
+     * التحقق من صلاحية الوصول
      */
     public static function canAccess(): bool
     {
@@ -81,13 +73,13 @@ class ManageSalonSchedules extends Page
             return true;
         }
 
-        // Manager يمكنه الوصول
-        if ($user->hasRole('manager')) {
+        // التحقق من صلاحية محددة
+        if ($user->can('manage salon schedules')) {
             return true;
         }
 
-        // التحقق من صلاحية محددة
-        if ($user->can('manage salon schedules')) {
+        // Manager يمكنه الوصول
+        if ($user->hasRole('manager')) {
             return true;
         }
 
@@ -122,27 +114,32 @@ class ManageSalonSchedules extends Page
     }
 
     /**
-     * أزرار Header Actions
+     * أزرار Header Actions (اختياري)
      */
     protected function getHeaderActions(): array
     {
         return [
             // يمكن إضافة أزرار هنا مثل:
-            // - تطبيق نفس المواعيد على كل الفروع
-            // - استيراد/تصدير المواعيد
+            // - تصدير الجداول
+            // - استيراد من ملف
+            // - إعدادات افتراضية
         ];
     }
 
     /**
-     * Widget الخاصة بالصفحة
+     * Widget الخاصة بالصفحة (اختياري)
      */
     protected function getHeaderWidgets(): array
     {
-        return [];
+        return [
+            // يمكن إضافة widgets هنا مثل:
+            // - إحصائيات الفروع
+            // - التقويم الشهري
+        ];
     }
 
     /**
-     * Widget أسفل الصفحة
+     * Widget أسفل الصفحة (اختياري)
      */
     protected function getFooterWidgets(): array
     {

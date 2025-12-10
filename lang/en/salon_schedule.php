@@ -50,6 +50,7 @@ return [
 
     // Actions
     'save_schedule' => 'Save Schedule',
+    'reload' => 'Reload',
     'schedule_saved' => 'Schedule Saved',
     'schedule_saved_successfully' => 'Salon schedule has been saved successfully',
     'save_error' => 'Error Saving Schedule',
@@ -58,7 +59,23 @@ return [
     // Validation
     'validation' => [
         'close_time_must_differ' => 'Closing time must be different from opening time',
+        'invalid_time_format' => 'Invalid time format',
     ],
     'open_time_required' => 'Opening time is required for :day',
     'close_time_required' => 'Closing time is required for :day',
+
+    // Messages
+    'messages' => [
+        'day_copied' => ':day schedule copied',
+        'day_pasted' => 'Schedule pasted to :day',
+        'day_applied_to_week' => ':day schedule applied to all days',
+    ],
+
+    // Errors
+    'errors' => [
+        'nothing_to_paste' => 'Nothing to paste. Copy a day first.',
+    ],
+
+    // Additional
+    'schedule_reloaded' => 'Schedule reloaded successfully',
 ];

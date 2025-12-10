@@ -29,13 +29,16 @@ class BookingService
      * @return Appointment
      * @throws InvalidArgumentException
      */
-    public function createBooking(User $customer, array $bookingData): Appointment
+    public function createBooking(?User $customer, array $bookingData): Appointment
     {
 
         $services = $bookingData['services'];
         $date = $bookingData['date'];
         $paymentMethod = $bookingData['payment_method'];
         $notes = $bookingData['notes'] ?? null;
+        $customerName = $bookingData['customer_name'] ?? ($customer->name?? null);
+        $customerEmail = $bookingData['customer_email'] ?? $customer->email?? null;
+        $customerPhone = $bookingData['customer_phone'] ?? $customer->phone?? null;
 
 
         $this->validationService->validateBasicData($services, $date);
@@ -53,7 +56,7 @@ class BookingService
         $totals = $this->calculateTotals($preparedServices);
 
         // 6. Create booking in transaction
-        return DB::transaction(function () use ($customer, $date, $paymentMethod, $notes, $preparedServices, $totals) {
+        return DB::transaction(function () use ($customer, $date, $paymentMethod, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone) {
             // Determine created_status based on payment method
             $createdStatus = $paymentMethod === 'cash' ? 1 : 0;
             $paymentStatus = $paymentMethod === 'cash'
@@ -80,6 +83,9 @@ class BookingService
                 'payment_status' => $paymentStatus,
                 'notes' => $notes,
                 'created_status' => $createdStatus,
+                'customer_name' => $customerName,
+                'customer_email' => $customerEmail,
+                'customer_phone' => $customerPhone,
             ]);
 
             // Create appointment services

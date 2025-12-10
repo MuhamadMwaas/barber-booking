@@ -15,12 +15,16 @@ return new class extends Migration
         Schema::create('appointments', function (Blueprint $table) {
             $table->id();
             $table->string('number');
-            $table->unsignedBigInteger('customer_id');
+            $table->unsignedBigInteger('customer_id')->nullable()->default(null);
             $table->foreign('customer_id')->references('id')->on('users');
 
             $table->unsignedBigInteger('provider_id');
             $table->foreign('provider_id')->references('id')->on('users');
 
+            $table->string('customer_name')->nullable();
+            $table->string('customer_email')->nullable();
+            $table->string('customer_phone')->nullable();
+            
             $table->dateTime('appointment_date');
             $table->dateTime('start_time');
             $table->dateTime('end_time');

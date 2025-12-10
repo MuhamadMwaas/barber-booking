@@ -42,13 +42,49 @@ class AppointmentsTable
                     ->color('primary'),
 
                 // العميل
-                TextColumn::make('customer.full_name')
-                    ->label(__('resources.appointment.customer_name'))
-                    ->searchable(['first_name', 'last_name'])
-                    ->sortable(['first_name', 'last_name'])
-                    ->weight(FontWeight::SemiBold)
-                    ->description(fn($record) => $record->customer->phone ?? __('resources.user.not_provided')),
+                // TextColumn::make('customer.full_name')
+                //     ->label(__('resources.appointment.customer_name'))
+                //     ->searchable(['first_name', 'last_name'])
+                //     ->sortable(['first_name', 'last_name'])
+                //     ->weight(FontWeight::SemiBold)
+                //     ->description(fn($record) => $record->customer->phone ?? __('resources.user.not_provided')),
 
+TextColumn::make('customer_display') // اسم افتراضي للعمود
+    ->label(__('resources.appointment.customer_name'))
+    ->state(fn ($record) => $record->customer_display_name) // من الـ accessor
+    ->description(function ($record) {
+        return $record->customer_phone
+            ?? $record->customer_email
+            ?? __('resources.user.not_provided');
+    })
+
+    ->searchable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $search) {
+        $query->where(function ($q) use ($search) {
+            $q->where('customer_name', 'like', "%{$search}%")
+              ->orWhere('customer_email', 'like', "%{$search}%")
+              ->orWhere('customer_phone', 'like', "%{$search}%")
+              ->orWhereHas('customer', function ($qq) use ($search) {
+                  $qq->where('first_name', 'like', "%{$search}%")
+                     ->orWhere('last_name', 'like', "%{$search}%")
+                     ->orWhereRaw("CONCAT(first_name,' ',last_name) like ?", ["%{$search}%"])
+                     ->orWhere('email', 'like', "%{$search}%")
+                     ->orWhere('phone', 'like', "%{$search}%");
+              });
+        });
+    })
+
+    ->sortable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $direction) {
+        $usersFullName = <<<SQL
+            (SELECT CONCAT(u.first_name, ' ', u.last_name)
+             FROM users u
+             WHERE u.id = appointments.customer_id)
+        SQL;
+
+        $query->orderByRaw(
+            "COALESCE(customer_name, {$usersFullName}) " . ($direction === 'asc' ? 'asc' : 'desc')
+        );
+    })
+    ->weight(\Filament\Support\Enums\FontWeight::SemiBold),
                 // مزود الخدمة
                 ImageColumn::make('provider.profile_image_url')
                     ->label(__('resources.appointment.provider'))

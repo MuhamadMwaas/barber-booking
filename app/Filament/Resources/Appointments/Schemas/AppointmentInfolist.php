@@ -87,19 +87,19 @@ class AppointmentInfolist
                         Section::make(__('resources.appointment.customer_info'))
                             ->icon('heroicon-o-user')
                             ->schema([
-                                TextEntry::make('customer.full_name')
+                                TextEntry::make('customer_name')
                                     ->label(__('resources.user.name'))
                                     ->size('md')
                                     ->weight(FontWeight::Bold)
                                     ->color('primary')
                                     ->icon('heroicon-o-user-circle'),
 
-                                TextEntry::make('customer.email')
+                                TextEntry::make('customer_email')
                                     ->label(__('resources.user.email'))
                                     ->icon('heroicon-o-envelope')
                                     ->copyable(),
 
-                                TextEntry::make('customer.phone')
+                                TextEntry::make('customer_phone')
                                     ->label(__('resources.user.phone'))
                                     ->icon('heroicon-o-phone')
                                     ->copyable(),
@@ -108,10 +108,12 @@ class AppointmentInfolist
                                     ->label(__('resources.user.customer_id'))
                                     ->badge()
                                     ->color('info')
-                                    ->formatStateUsing(fn ($state) => "#{$state}"),
+                                    ->formatStateUsing(fn ($state) => $state ? "#{$state}" : __('N/A'))
+                                    ->visible(fn ($record) => $record->has_customer_account),
 
-                                TextEntry::make('customer_stats')
+                                    TextEntry::make('customer_stats')
                                     ->label(__('resources.appointment.customer_stats'))
+                                    ->visible(fn ($record) => $record->has_customer_account)
                                     ->state(function ($record) {
                                         if (!$record->customer) {
                                             return new HtmlString('<span style="color: #94a3b8;">N/A</span>');
