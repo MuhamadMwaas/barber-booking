@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AvailabilityController;
 use App\Http\Controllers\Api\BookingController;
+use App\Http\Controllers\Api\DevicesController;
+use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProvidersController;
@@ -69,31 +71,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('profile/change-password', [ProfileController::class, 'changePassword']);
 
 
-    Route::prefix('appointments')->name('appointments.')->group(function () {
+Route::prefix('noticifation')->name('noticifation.')->group(function () {
+    Route::post('/test-send-to-all', [NotificationController::class, 'testSendToAll'])->name('test-send-to-all');
 
 
-        Route::get('/', [AppointmentController::class, 'index'])
-            ->name('index');
-
-        Route::get('/{id}', [AppointmentController::class, 'show'])
-            ->name('show')
-            ->where('id', '[0-9]+');
-
-        Route::get('/past', [AppointmentController::class, 'past'])
-            ->name('past');
-
-        Route::get('/statistics', [AppointmentController::class, 'statistics'])->name('statistics');
+});
 
 
-        Route::get('/search', [AppointmentController::class, 'search'])->name('search');
-
-
-        Route::post('/{id}/cancel', [AppointmentController::class, 'cancel'])
-            ->name('cancel')
-            ->where('id', '[0-9]+');
-    });
-
-
+    Route::post('/register-device', [DevicesController::class, 'registerDevice']);
+    Route::post('/deregister-device', [DevicesController::class, 'unregisterDevice']);
 
 
     Route::middleware(['auth:sanctum', 'verified'])->prefix('bookings')->group(function () {
@@ -103,3 +89,5 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/cancel', [BookingController::class, 'cancel'])->name('bookings.cancel');
     });
 });
+
+Route::middleware('auth:sanctum')->post('/appointments/reminders', [\App\Http\Controllers\Api\AppointmentReminderController::class, 'store']);

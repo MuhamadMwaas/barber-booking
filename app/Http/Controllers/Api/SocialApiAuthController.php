@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\AuthTokenService;
 use Illuminate\Http\Request;
@@ -15,6 +16,11 @@ class SocialApiAuthController extends Controller
 {
     public function __construct(private AuthTokenService $tokenService)
     {
+    }
+
+    public function redirectToGoogle()
+    {
+        return Socialite::driver('google')->redirect();
     }
 
     public function googleMobile(Request $request)
@@ -140,7 +146,7 @@ class SocialApiAuthController extends Controller
                 'google_id' => $googleUser['google_id'],
                 'avatar_url' => $googleUser['picture'] ?? $user->avatar_url,
                 'email_verified_at' => $googleUser['email_verified'] ? now() : $user->email_verified_at,
-                'email_verified_via_otp_at' => $googleUser['email_verified'] ? now() : $user->email_verified_via_otp_at,
+                // 'email_verified_via_otp_at' => $googleUser['email_verified'] ? now() : $user->email_verified_via_otp_at,
             ]);
             return $user;
         }
@@ -152,8 +158,8 @@ class SocialApiAuthController extends Controller
             'last_name' => $googleUser['family_name'] ?: '',
             'avatar_url' => $googleUser['picture'],
             'password' => bcrypt(Str::random(32)), // كلمة مرور عشوائية
-            'email_verified_at' => $googleUser['email_verified'] ? now() : null,
-            'email_verified_via_otp_at' => $googleUser['email_verified'] ? now() : null,
+            'email_verified_at' => $googleUser['email_verified'] ? now() : now(),
+            'email_verified_via_otp_at' => $googleUser['email_verified'] ? now() : now(),
         ]);
     }
 
@@ -176,14 +182,22 @@ class SocialApiAuthController extends Controller
                 'email' => $googleUser->getEmail(),
                 'email_verified' => true,
                 'name' => $googleUser->getName(),
-                'given_name' => $googleUser->offsetGet('given_name'),
-                'family_name' => $googleUser->offsetGet('family_name'),
+                'given_name' => $googleUser->getName(),
+                'family_name' => $googleUser->getNickname(),
                 'picture' => $googleUser->getAvatar(),
             ]);
 
+        $access = $this->tokenService->createAccessToken($user, $request->header('User-Agent'));
+        $refresh = $this->tokenService->createRefreshToken($user, $request->header('User-Agent'), $request->ip());
+
             return response()->json([
-                'message' => 'Login successful',
-                'user' => $user
+            'message' => 'Login successful',
+            'user' => new UserResource($user),
+            'access_token' => $access['access_token'],
+            'access_expires_at' => $access['expires_at'],
+            'refresh_token' => $refresh['refresh_token'],
+            'refresh_expires_at' => $refresh['expires_at'],
+            'token_type' => 'bearer',
             ]);
 
         } catch (\Exception $e) {

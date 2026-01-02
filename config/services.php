@@ -44,4 +44,10 @@ return [
         'android_client_id' => env('GOOGLE_ANDROID_CLIENT_ID'),
         'ios_client_id' => env('GOOGLE_IOS_CLIENT_ID'),
     ],
+
+    'onesignal' => [
+        'app_id' => env('ONESIGNAL_APP_ID'),
+        'rest_api_key' => env('ONESIGNAL_REST_API_KEY'),
+        'base_url' => env('ONESIGNAL_API_BASE_URL', 'https://onesignal.com'),
+    ],
 ];

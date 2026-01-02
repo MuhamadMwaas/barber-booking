@@ -28,6 +28,7 @@ class DatabaseSeeder extends Seeder
             ServiceSeeder::class,
             ProviderServiceSeeder::class,
             AppointmentSeeder::class,
+            StaticPagesSeeder::class
         ]);
 
 

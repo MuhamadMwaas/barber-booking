@@ -98,7 +98,7 @@ class User extends Authenticatable implements FilamentUser, HasName
 
     public function appointmentsAsProvider()
     {
-        return $this->hasMany(Appointment::class, 'provider_id');
+        return $this->hasMany(Appointment::class, 'provider_id','id');
     }
 
     public function appointmentsFinshedAsProvider()
@@ -194,5 +194,18 @@ public function defaultPaymentMethod(): HasOne
 public function getFilamentName(): string
 {
     return $this->full_name;
+}
+
+public function devices(): HasMany
+    {
+        return $this->hasMany(UserDevice::class, 'user_id');
+    }
+
+    public function getDeviceIds(): array
+{
+    return $this->devices()
+        ->where('is_active', true)
+        ->pluck('device_id')
+        ->toArray();
 }
 }

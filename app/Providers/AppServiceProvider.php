@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use App\Notifications\Filament\TranslatableNotification;
+use Filament\Notifications\Notification as BaseNotification;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -11,7 +13,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+            $this->app->bind(BaseNotification::class, TranslatableNotification::class);
     }
 
     /**

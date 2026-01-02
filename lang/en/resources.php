@@ -1110,9 +1110,284 @@ return [
         'validation_error' => 'Validation Error',
     ],
 
+    'provider_resource' => [
+        'label' => 'Provider',
+        'plural_label' => 'Providers',
+        'navigation_label' => 'Providers',
+        'title' => 'Provider Management',
+
+        // Table columns
+        'avatar' => 'Avatar',
+        'full_name' => 'Full Name',
+        'phone' => 'Phone',
+        'phone_copied' => 'Phone copied!',
+        'branch' => 'Branch',
+        'no_branch' => 'No Branch',
+        'services' => 'Services',
+        'appointments' => 'Appointments',
+        'upcoming_leaves' => 'Upcoming Leaves',
+        'status' => 'Status',
+        'language' => 'Language',
+        'joined_at' => 'Joined At',
+
+        // Filters
+        'all_providers' => 'All Providers',
+        'active_only' => 'Active Only',
+        'inactive_only' => 'Inactive Only',
+        'filter_by_branch' => 'Filter by Branch',
+        'filter_by_language' => 'Filter by Language',
+        'has_upcoming_leaves' => 'Upcoming Leaves',
+        'with_upcoming_leaves' => 'With Upcoming Leaves',
+        'without_upcoming_leaves' => 'Without Upcoming Leaves',
+
+        // Languages
+        'arabic' => 'Arabic',
+        'english' => 'English',
+        'german' => 'German',
+
+        // Empty state
+        'no_providers_yet' => 'No providers yet',
+        'create_first_provider' => 'Add your first provider to get started.',
+
+        // Form sections
+        'personal_information' => 'Personal Information',
+        'contact_information' => 'Contact Information',
+        'account_settings' => 'Account Settings',
+        'additional_information' => 'Additional Information',
+
+        // Form fields
+        'profile_image' => 'Profile Picture',
+        'profile_image_helper' => 'JPG or PNG image, maximum 2MB',
+        'first_name' => 'First Name',
+        'last_name' => 'Last Name',
+        'email' => 'Email Address',
+        'password' => 'Password',
+        'password_confirmation' => 'Confirm Password',
+        'password_helper' => 'Password must be at least 8 characters',
+        'address' => 'Address',
+        'city' => 'City',
+        'locale' => 'Language',
+        'select_language' => 'Select Language',
+        'locale_helper' => 'Preferred user interface language',
+        'select_branch' => 'Select Branch',
+        'branch_helper' => 'The branch where the provider works',
+        'is_active' => 'Active',
+        'status_helper' => 'Inactive providers cannot login',
+        'notes' => 'Notes',
+
+        // View/Infolist
+        'view_complete_profile' => 'View complete provider profile',
+        'email_verified' => 'Email Verified',
+        'not_verified' => 'Not verified',
+        'not_provided' => 'Not provided',
+        'verified_at' => 'Verified at',
+        'last_updated' => 'Last Updated',
+        'no_notes_available' => 'No notes available',
+
+        // Provider Statistics
+        'provider_statistics' => 'Provider Statistics',
+        'provider_stats' => 'Performance and achievements statistics',
+        'services_count' => 'Number of Services',
+        'completed_bookings' => 'Completed Bookings',
+        'average_rating' => 'Average Rating',
+        'no_reviews_yet' => 'No reviews yet',
+        'total_reviews' => 'Total Reviews',
+        'total_earnings' => 'Total Earnings',
+        'current_month_earnings' => 'Current Month Earnings',
+        'total_appointments' => 'Total Appointments',
+        'upcoming_appointments' => 'Upcoming Appointments',
+        'pending_appointments' => 'Pending Appointments',
+        'services_offered' => 'Services Offered',
+        'sar_currency' => 'SAR',
+        'all_time' => 'All Time',
+        'vs_last_month' => 'vs Last Month',
+        'total_completed' => 'Total Completed',
+        'all_statuses' => 'All Statuses',
+        'scheduled_future' => 'Scheduled for Future',
+        'awaiting_completion' => 'Awaiting Completion',
+        'active_services' => 'Active Services',
+
+        // Actions in table
+        'add_leave' => 'Add Leave',
+        'add_leave_tooltip' => 'Add hourly or daily leave',
+
+        // Header Actions in View Page
+        'add_hourly_leave' => 'Add Hourly Leave',
+        'add_hourly_leave_description' => 'Add leave for specific hours in a single day',
+        'add_daily_leave' => 'Add Daily Leave',
+        'add_daily_leave_description' => 'Add leave for a full day or multiple days',
+
+        // Leave Management
+        'leave_management' => 'Leave Management',
+        'leave_type' => 'Leave Type',
+        'hourly_leave' => 'Hourly Leave',
+        'daily_leave' => 'Daily Leave',
+        'leave_date' => 'Leave Date',
+        'start_date' => 'Start Date',
+        'end_date' => 'End Date',
+        'start_time' => 'Start Time',
+        'end_time' => 'End Time',
+        'duration_hours' => 'Duration (Hours)',
+        'duration_days' => 'Duration (Days)',
+        'hours' => 'hours',
+        'days' => 'days',
+        'reason' => 'Reason',
+        'leave_status' => 'Leave Status',
+        'upcoming' => 'Upcoming',
+        'active' => 'Active',
+        'past' => 'Past',
+        'edit_leave' => 'Edit Leave',
+        'no_leaves_yet' => 'No leaves yet',
+        'add_first_leave' => 'Add the first leave for the provider',
+        'leave_added_successfully' => 'Leave added successfully',
+
+        // Work Schedule
+        'work_schedule' => 'Work Schedule',
+        'day' => 'Day',
+        'work_day' => 'Work Day',
+        'day_off' => 'Day Off',
+        'break_time' => 'Break Time',
+        'break_minutes' => 'Break Minutes',
+        'minutes' => 'minutes',
+        'working_hours' => 'Working Hours',
+        'add_schedule' => 'Add Schedule',
+        'edit_schedule' => 'Edit Schedule',
+        'no_schedule_yet' => 'No schedule yet',
+        'add_first_schedule' => 'Add the first schedule for the provider',
+
+        // Leave Statistics Widget
+        'total_leaves_this_year' => 'Total Leaves This Year',
+        'all_leave_types' => 'All leave types',
+        'total_days_used' => 'Total Days Used',
+        'full_day_leaves_only' => 'Full-day leaves only',
+        'total_hours_used' => 'Total Hours Used',
+        'hourly_leaves_only' => 'Hourly leaves only',
+        'scheduled_for_future' => 'Scheduled for future',
+        'current_month_leaves' => 'Current Month Leaves',
+        'active_leaves' => 'Active Leaves',
+        'currently_on_leave' => 'Currently on leave',
+        'not_on_leave' => 'Not on leave',
+
+        // All Provider Leaves Page
+        'all_provider_leaves' => 'All Provider Leaves',
+        'provider_management' => 'Provider Management',
+        'provider_name' => 'Provider Name',
+        'duration' => 'Duration',
+        'total_leaves' => 'Total Leaves',
+        'this_month' => 'This Month',
+        'this_year' => 'This Year',
+        'no_leaves_description' => 'No leaves recorded in the system',
+
+        // Appointments Management (RelationManager)
+        'appointments_management' => 'Appointments Management',
+        'booking_number' => 'Booking Number',
+        'number_copied' => 'Number copied!',
+        'customer_name' => 'Customer Name',
+        'appointment_date' => 'Appointment Date',
+        'appointment_status' => 'Appointment Status',
+        'status_pending' => 'Pending',
+        'status_completed' => 'Completed',
+        'status_user_cancelled' => 'Cancelled by User',
+        'status_admin_cancelled' => 'Cancelled by Admin',
+        'payment_pending' => 'Payment Pending',
+        'paid_online' => 'Paid Online',
+        'paid_cash' => 'Paid Cash',
+        'paid_card' => 'Paid by Card',
+        'payment_failed' => 'Payment Failed',
+        'refunded' => 'Refunded',
+        'partially_refunded' => 'Partially Refunded',
+        'total_price' => 'Total Price',
+        'includes_tax' => 'Includes Tax',
+        'no_services' => 'No Services',
+        'filter_status' => 'Filter by Status',
+        'filter_payment' => 'Filter by Payment Status',
+        'filter_time' => 'Filter by Time',
+        'past_appointments' => 'Past Appointments',
+        'filter_today' => 'Today\'s Appointments',
+        'today_only' => 'Today Only',
+        'not_today' => 'Not Today',
+        'from_date' => 'From Date',
+        'to_date' => 'To Date',
+        'mark_as_paid' => 'Mark as Paid',
+        'payment_method' => 'Payment Method',
+        'end_time_helper' => 'Set the actual end time of the appointment',
+        'amount_paid' => 'Amount Paid',
+        'includes_tax_suffix' => '(includes tax)',
+        'breakdown' => 'Breakdown',
+        'subtotal' => 'Subtotal',
+        'tax' => 'Tax',
+        'amount_paid_helper' => 'Enter total amount paid including tax',
+        'payment_notes' => 'Payment Notes',
+        'payment_success' => 'Payment successful',
+        'invoice_created' => 'Invoice created',
+        'payment_error' => 'Payment error',
+        'no_appointments_yet' => 'No appointments yet',
+        'no_appointments_desc' => 'No appointments have been added for this provider yet',
+    ],
+
+    'page_resource' => [
+        // Resource Labels
+        'label' => 'Page',
+        'plural_label' => 'Pages',
+        'navigation_label' => 'Page Management',
+        'navigation_group' => 'Content Management',
+
+        // Page Information Section
+        'page_information' => 'Page Information',
+        'page_information_description' => 'Basic page information (read-only)',
+        'page_key' => 'Page Key',
+        'template' => 'Template',
+        'version' => 'Version',
+        'published' => 'Published',
+        'published_helper' => 'Determine whether this page is visible to the public',
+
+        // Language Sections
+        'default_language_suffix' => '(Default Language)',
+        'default_language_description' => 'Default translation is required for all fields',
+        'translation_optional' => 'Optional translation in %s',
+
+        // Content Fields
+        'title' => 'Title',
+        'title_placeholder' => 'Enter page title',
+        'content' => 'Content',
+
+        // SEO Fields
+        'seo_title' => 'SEO Title',
+        'seo_title_placeholder' => 'Search engine title (max 60 characters)',
+        'seo_title_helper' => 'Title that appears in search engine results',
+        'seo_description' => 'SEO Description',
+        'seo_description_placeholder' => 'Brief page description',
+        'seo_description_helper' => 'Description that appears in search engine results (max 160 characters)',
+
+        // Table Columns
+        'last_updated' => 'Last Updated',
+
+        // Filters
+        'filter_published' => 'Publication Status',
+        'all_pages' => 'All Pages',
+        'published_only' => 'Published Only',
+        'unpublished_only' => 'Unpublished Only',
+        'filter_by_template' => 'Filter by Template',
+
+        // Actions
+        'preview' => 'Preview',
+        'edit' => 'Edit',
+        'live_preview' => 'Live Preview',
+
+        // Empty States
+        'no_pages_yet' => 'No pages yet',
+        'no_pages_description' => 'Pages are pre-created via Seeders',
+
+        // Messages
+        'saved_successfully' => 'Page saved successfully',
+        'preview_error' => 'An error occurred while displaying the page',
+
+        // Validation
+        'default_translation_required' => 'Default language translation is required',
+    ],
+
     // Common Actions
     'view' => 'View',
     'edit' => 'Edit',
     'delete' => 'Delete',
-
 ];

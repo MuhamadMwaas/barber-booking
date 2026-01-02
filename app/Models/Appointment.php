@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enum\AppointmentStatus;
 use App\Enum\PaymentStatus;
+use App\Services\AppointmentReminderService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -67,6 +68,13 @@ class Appointment extends Model
                 $appointment->number = "{$prefix}-{$date}-{$random}";
             }
         });
+
+        static::deleting(function ($appointment) {
+
+            $reminderService = app(AppointmentReminderService::class);
+            $reminderService->cancelRemindersForAppointment($appointment);
+
+        });
     }
 
 
@@ -94,7 +102,10 @@ class Appointment extends Model
     {
         return $this->hasMany(AppointmentService::class, 'appointment_id');
     }
-
+public function reminders(): HasMany
+{
+    return $this->hasMany(AppointmentReminder::class, 'appointment_idappointment_id','id');
+}
     // Accessors
 
     public function getStatusLabelAttribute()

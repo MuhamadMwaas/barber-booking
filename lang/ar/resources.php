@@ -922,8 +922,285 @@ return [
         'validation_error' => 'خطأ في التحقق',
     ],
 
+    'provider_resource' => [
+        'label' => 'موظف',
+        'plural_label' => 'الموظفون',
+        'navigation_label' => 'الموظفون',
+        'title' => 'إدارة الموظفين',
+
+        // Table columns
+        'avatar' => 'الصورة',
+        'full_name' => 'الاسم الكامل',
+        'phone' => 'رقم الهاتف',
+        'phone_copied' => 'تم نسخ رقم الهاتف!',
+        'branch' => 'الفرع',
+        'no_branch' => 'لا يوجد فرع',
+        'services' => 'الخدمات',
+        'appointments' => 'الحجوزات',
+        'upcoming_leaves' => 'الإجازات القادمة',
+        'status' => 'الحالة',
+        'language' => 'اللغة',
+        'joined_at' => 'تاريخ الانضمام',
+
+        // Filters
+        'all_providers' => 'كل الموظفين',
+        'active_only' => 'النشطون فقط',
+        'inactive_only' => 'غير النشطين فقط',
+        'filter_by_branch' => 'تصفية حسب الفرع',
+        'filter_by_language' => 'تصفية حسب اللغة',
+        'has_upcoming_leaves' => 'الإجازات القادمة',
+        'with_upcoming_leaves' => 'لديهم إجازات قادمة',
+        'without_upcoming_leaves' => 'بدون إجازات قادمة',
+
+        // Languages
+        'arabic' => 'العربية',
+        'english' => 'الإنجليزية',
+        'german' => 'الألمانية',
+
+        // Empty state
+        'no_providers_yet' => 'لا يوجد موظفون بعد',
+        'create_first_provider' => 'قم بإضافة أول موظف للبدء.',
+
+        // Form sections
+        'personal_information' => 'المعلومات الشخصية',
+        'contact_information' => 'معلومات التواصل',
+        'account_settings' => 'إعدادات الحساب',
+        'additional_information' => 'معلومات إضافية',
+
+        // Form fields
+        'profile_image' => 'الصورة الشخصية',
+        'profile_image_helper' => 'صورة بصيغة JPG أو PNG، بحد أقصى 2 ميجابايت',
+        'first_name' => 'الاسم الأول',
+        'last_name' => 'الاسم الأخير',
+        'email' => 'البريد الإلكتروني',
+        'password' => 'كلمة المرور',
+        'password_confirmation' => 'تأكيد كلمة المرور',
+        'password_helper' => 'يجب أن تحتوي كلمة المرور على 8 أحرف على الأقل',
+        'address' => 'العنوان',
+        'city' => 'المدينة',
+        'locale' => 'اللغة',
+        'select_language' => 'اختر اللغة',
+        'locale_helper' => 'لغة واجهة المستخدم المفضلة',
+        'select_branch' => 'اختر الفرع',
+        'branch_helper' => 'الفرع الذي يعمل به الموظف',
+        'is_active' => 'نشط',
+        'status_helper' => 'الموظفون غير النشطين لا يمكنهم تسجيل الدخول',
+        'notes' => 'ملاحظات',
+
+        // View/Infolist
+        'view_complete_profile' => 'عرض الملف الشخصي الكامل للموظف',
+        'email_verified' => 'البريد محقق',
+        'not_verified' => 'غير محقق',
+        'not_provided' => 'غير متوفر',
+        'verified_at' => 'تم التحقق في',
+        'last_updated' => 'آخر تحديث',
+        'no_notes_available' => 'لا توجد ملاحظات متاحة',
+
+        // Provider Statistics
+        'provider_statistics' => 'إحصائيات الموظف',
+        'provider_stats' => 'إحصائيات الأداء والإنجازات',
+        'services_count' => 'عدد الخدمات',
+        'completed_bookings' => 'الحجوزات المكتملة',
+        'average_rating' => 'متوسط التقييم',
+        'no_reviews_yet' => 'لا توجد تقييمات بعد',
+        'total_reviews' => 'إجمالي التقييمات',
+        'total_earnings' => 'إجمالي الأرباح',
+        'current_month_earnings' => 'أرباح هذا الشهر',
+        'total_appointments' => 'إجمالي المواعيد',
+        'upcoming_appointments' => 'المواعيد القادمة',
+        'pending_appointments' => 'المواعيد المعلقة',
+        'services_offered' => 'الخدمات المقدمة',
+        'sar_currency' => 'ريال',
+        'all_time' => 'منذ البداية',
+        'vs_last_month' => 'مقارنة بالشهر الماضي',
+        'total_completed' => 'إجمالي المكتملة',
+        'all_statuses' => 'جميع الحالات',
+        'scheduled_future' => 'مجدولة للمستقبل',
+        'awaiting_completion' => 'بانتظار الإتمام',
+        'active_services' => 'الخدمات النشطة',
+
+        // Actions in table
+        'add_leave' => 'إضافة إجازة',
+        'add_leave_tooltip' => 'إضافة إجازة ساعية أو يومية',
+
+        // Header Actions in View Page
+        'add_hourly_leave' => 'إضافة إجازة ساعية',
+        'add_hourly_leave_description' => 'إضافة إجازة لساعات محددة في يوم واحد',
+        'add_daily_leave' => 'إضافة إجازة يومية',
+        'add_daily_leave_description' => 'إضافة إجازة ليوم كامل أو عدة أيام',
+
+        // Leave Management
+        'leave_management' => 'إدارة الإجازات',
+        'leave_type' => 'نوع الإجازة',
+        'hourly_leave' => 'إجازة ساعية',
+        'daily_leave' => 'إجازة يومية',
+        'leave_date' => 'تاريخ الإجازة',
+        'start_date' => 'تاريخ البداية',
+        'end_date' => 'تاريخ النهاية',
+        'start_time' => 'وقت البداية',
+        'end_time' => 'وقت النهاية',
+        'duration_hours' => 'المدة بالساعات',
+        'duration_days' => 'المدة بالأيام',
+        'hours' => 'ساعة',
+        'days' => 'يوم',
+        'reason' => 'السبب',
+        'leave_status' => 'حالة الإجازة',
+        'upcoming' => 'قادمة',
+        'active' => 'نشطة',
+        'past' => 'سابقة',
+        'edit_leave' => 'تعديل الإجازة',
+        'no_leaves_yet' => 'لا توجد إجازات بعد',
+        'add_first_leave' => 'قم بإضافة أول إجازة للموظف',
+        'leave_added_successfully' => 'تم إضافة الإجازة بنجاح',
+
+        // Work Schedule
+        'work_schedule' => 'جدول العمل',
+        'day' => 'اليوم',
+        'work_day' => 'يوم عمل',
+        'day_off' => 'يوم إجازة',
+        'break_time' => 'وقت الاستراحة',
+        'break_minutes' => 'دقائق الاستراحة',
+        'minutes' => 'دقيقة',
+        'working_hours' => 'ساعات العمل',
+        'add_schedule' => 'إضافة جدول',
+        'edit_schedule' => 'تعديل الجدول',
+        'no_schedule_yet' => 'لا يوجد جدول بعد',
+        'add_first_schedule' => 'قم بإضافة أول جدول للموظف',
+
+        // Leave Statistics Widget
+        'total_leaves_this_year' => 'إجمالي الإجازات هذا العام',
+        'all_leave_types' => 'جميع أنواع الإجازات',
+        'total_days_used' => 'إجمالي الأيام المستخدمة',
+        'full_day_leaves_only' => 'الإجازات اليومية فقط',
+        'total_hours_used' => 'إجمالي الساعات المستخدمة',
+        'hourly_leaves_only' => 'الإجازات الساعية فقط',
+        'scheduled_for_future' => 'المجدولة للمستقبل',
+        'current_month_leaves' => 'إجازات هذا الشهر',
+        'active_leaves' => 'الإجازات النشطة',
+        'currently_on_leave' => 'في إجازة حالياً',
+        'not_on_leave' => 'ليس في إجازة',
+
+        // All Provider Leaves Page
+        'all_provider_leaves' => 'جميع إجازات الموظفين',
+        'provider_management' => 'إدارة الموظفين',
+        'provider_name' => 'اسم الموظف',
+        'duration' => 'المدة',
+        'total_leaves' => 'إجمالي الإجازات',
+        'this_month' => 'هذا الشهر',
+        'this_year' => 'هذا العام',
+        'no_leaves_description' => 'لا توجد إجازات مسجلة في النظام',
+
+        // Appointments Management (RelationManager)
+        'appointments_management' => 'إدارة الحجوزات',
+        'booking_number' => 'رقم الحجز',
+        'number_copied' => 'تم نسخ الرقم!',
+        'customer_name' => 'اسم العميل',
+        'appointment_date' => 'تاريخ الحجز',
+        'appointment_status' => 'حالة الحجز',
+        'status_pending' => 'قيد الانتظار',
+        'status_completed' => 'مكتمل',
+        'status_user_cancelled' => 'ملغي من العميل',
+        'status_admin_cancelled' => 'ملغي من الإدارة',
+        'payment_pending' => 'بانتظار الدفع',
+        'paid_online' => 'مدفوع أونلاين',
+        'paid_cash' => 'مدفوع كاش',
+        'paid_card' => 'مدفوع بالبطاقة',
+        'payment_failed' => 'فشل الدفع',
+        'refunded' => 'مسترد',
+        'partially_refunded' => 'مسترد جزئياً',
+        'total_price' => 'السعر الإجمالي',
+        'includes_tax' => 'يشمل الضريبة',
+        'no_services' => 'لا توجد خدمات',
+        'filter_status' => 'تصفية حسب الحالة',
+        'filter_payment' => 'تصفية حسب حالة الدفع',
+        'filter_time' => 'تصفية حسب الوقت',
+        'past_appointments' => 'الحجوزات السابقة',
+        'filter_today' => 'حجوزات اليوم',
+        'today_only' => 'اليوم فقط',
+        'not_today' => 'ليس اليوم',
+        'from_date' => 'من تاريخ',
+        'to_date' => 'إلى تاريخ',
+        'mark_as_paid' => 'تحديد كـ مدفوع',
+        'payment_method' => 'طريقة الدفع',
+        'end_time_helper' => 'حدد وقت نهاية الحجز الفعلي',
+        'amount_paid' => 'المبلغ المدفوع',
+        'includes_tax_suffix' => '(يشمل الضريبة)',
+        'breakdown' => 'التفصيل',
+        'subtotal' => 'المجموع الفرعي',
+        'tax' => 'الضريبة',
+        'amount_paid_helper' => 'أدخل المبلغ الإجمالي المدفوع شامل الضريبة',
+        'payment_notes' => 'ملاحظات الدفع',
+        'payment_success' => 'تم الدفع بنجاح',
+        'invoice_created' => 'تم إنشاء الفاتورة',
+        'payment_error' => 'خطأ في الدفع',
+        'no_appointments_yet' => 'لا توجد حجوزات بعد',
+        'no_appointments_desc' => 'لم يتم إضافة أي حجوزات لهذا الموظف بعد',
+    ],
+
+    'page_resource' => [
+        // Resource Labels
+        'label' => 'صفحة',
+        'plural_label' => 'الصفحات',
+        'navigation_label' => 'إدارة الصفحات',
+        'navigation_group' => 'إدارة المحتوى',
+
+        // Page Information Section
+        'page_information' => 'معلومات الصفحة',
+        'page_information_description' => 'معلومات الصفحة الأساسية (للعرض فقط)',
+        'page_key' => 'معرّف الصفحة',
+        'template' => 'القالب',
+        'version' => 'الإصدار',
+        'published' => 'منشورة',
+        'published_helper' => 'تحديد ما إذا كانت هذه الصفحة مرئية للعامة',
+
+        // Language Sections
+        'default_language_suffix' => '(اللغة الافتراضية)',
+        'default_language_description' => 'الترجمة الافتراضية مطلوبة لجميع الحقول',
+        'translation_optional' => 'ترجمة اختيارية بلغة %s',
+
+        // Content Fields
+        'title' => 'العنوان',
+        'title_placeholder' => 'أدخل عنوان الصفحة',
+        'content' => 'المحتوى',
+
+        // SEO Fields
+        'seo_title' => 'عنوان SEO',
+        'seo_title_placeholder' => 'عنوان محرك البحث (60 حرف كحد أقصى)',
+        'seo_title_helper' => 'العنوان الذي يظهر في نتائج محركات البحث',
+        'seo_description' => 'وصف SEO',
+        'seo_description_placeholder' => 'وصف موجز للصفحة',
+        'seo_description_helper' => 'الوصف الذي يظهر في نتائج محركات البحث (160 حرف كحد أقصى)',
+
+        // Table Columns
+        'last_updated' => 'آخر تحديث',
+
+        // Filters
+        'filter_published' => 'حالة النشر',
+        'all_pages' => 'كل الصفحات',
+        'published_only' => 'المنشورة فقط',
+        'unpublished_only' => 'غير المنشورة فقط',
+        'filter_by_template' => 'تصفية حسب القالب',
+
+        // Actions
+        'preview' => 'معاينة',
+        'edit' => 'تعديل',
+        'live_preview' => 'معاينة مباشرة',
+
+        // Empty States
+        'no_pages_yet' => 'لا توجد صفحات بعد',
+        'no_pages_description' => 'الصفحات يتم إنشاؤها مسبقاً عبر Seeders',
+
+        // Messages
+        'saved_successfully' => 'تم حفظ الصفحة بنجاح',
+        'preview_error' => 'حدث خطأ أثناء عرض الصفحة',
+
+        // Validation
+        'default_translation_required' => 'يجب توفير ترجمة للغة الافتراضية',
+    ],
+
     // Common Actions
     'view' => 'عرض',
     'edit' => 'تعديل',
     'delete' => 'حذف',
+    'all' => 'الكل',
 ];
