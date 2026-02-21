@@ -49,7 +49,7 @@ class ProvidersRelationManager extends RelationManager
                 // السعر المخصص
                 TextColumn::make('pivot.custom_price')
                     ->label(__('resources.service.custom_price'))
-                    ->money('SAR')
+                    ->money('EUR')
                     ->badge()
                     ->color('success')
                     ->default(fn ($record) => $this->getOwnerRecord()->price)
@@ -159,7 +159,7 @@ class ProvidersRelationManager extends RelationManager
                             ->where('id', $serviceId)
                             ->sum('pivot.price');
 
-                        return 'SAR ' . number_format($totalRevenue, 2);
+                        return 'EUR ' . number_format($totalRevenue, 2);
                     })
                     ->badge()
                     ->color('primary')
@@ -225,7 +225,7 @@ class ProvidersRelationManager extends RelationManager
                         TextInput::make('custom_price')
                             ->label(__('resources.service.custom_price'))
                             ->numeric()
-                            ->prefix('SAR')
+                            ->prefix('EUR')
                             ->helperText(__('resources.service.custom_price_desc')),
 
                         TextInput::make('custom_duration')
@@ -251,7 +251,7 @@ class ProvidersRelationManager extends RelationManager
                         TextInput::make('custom_price')
                             ->label(__('resources.service.custom_price'))
                             ->numeric()
-                            ->prefix('SAR')
+                            ->prefix('EUR')
                             ->helperText(__('resources.service.custom_price_desc')),
 
                         TextInput::make('custom_duration')

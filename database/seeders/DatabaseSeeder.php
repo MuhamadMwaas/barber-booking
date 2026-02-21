@@ -20,6 +20,8 @@ class DatabaseSeeder extends Seeder
             SalonSettingSeeder::class,
             RoleSeeder::class,
             UserSeeder::class,
+            PrinterSeeder::class,
+            InvoiceTemplateSeeder::class,
             SalonScheduleSeeder::class,
             ReasonLeaveSeeder::class,
             ProviderScheduledWorkSeeder::class,
@@ -27,6 +29,7 @@ class DatabaseSeeder extends Seeder
             ServiceCategorySeeder::class,
             ServiceSeeder::class,
             ProviderServiceSeeder::class,
+            PaymentMethodSeeder::class,
             AppointmentSeeder::class,
             StaticPagesSeeder::class
         ]);

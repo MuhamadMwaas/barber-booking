@@ -49,42 +49,42 @@ class AppointmentsTable
                 //     ->weight(FontWeight::SemiBold)
                 //     ->description(fn($record) => $record->customer->phone ?? __('resources.user.not_provided')),
 
-TextColumn::make('customer_display') // اسم افتراضي للعمود
-    ->label(__('resources.appointment.customer_name'))
-    ->state(fn ($record) => $record->customer_display_name) // من الـ accessor
-    ->description(function ($record) {
-        return $record->customer_phone
-            ?? $record->customer_email
-            ?? __('resources.user.not_provided');
-    })
+                TextColumn::make('customer_display') // اسم افتراضي للعمود
+                    ->label(__('resources.appointment.customer_name'))
+                    ->state(fn($record) => $record->customer_name) // من الـ accessor
+                    ->description(function ($record) {
+                        return $record->customer_phone
+                            ?? $record->customer_email
+                            ?? __('resources.user.not_provided');
+                    })
 
-    ->searchable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $search) {
-        $query->where(function ($q) use ($search) {
-            $q->where('customer_name', 'like', "%{$search}%")
-              ->orWhere('customer_email', 'like', "%{$search}%")
-              ->orWhere('customer_phone', 'like', "%{$search}%")
-              ->orWhereHas('customer', function ($qq) use ($search) {
-                  $qq->where('first_name', 'like', "%{$search}%")
-                     ->orWhere('last_name', 'like', "%{$search}%")
-                     ->orWhereRaw("CONCAT(first_name,' ',last_name) like ?", ["%{$search}%"])
-                     ->orWhere('email', 'like', "%{$search}%")
-                     ->orWhere('phone', 'like', "%{$search}%");
-              });
-        });
-    })
+                    ->searchable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $search) {
+                        $query->where(function ($q) use ($search) {
+                            $q->where('customer_name', 'like', "%{$search}%")
+                                ->orWhere('customer_email', 'like', "%{$search}%")
+                                ->orWhere('customer_phone', 'like', "%{$search}%")
+                                ->orWhereHas('customer', function ($qq) use ($search) {
+                                    $qq->where('first_name', 'like', "%{$search}%")
+                                        ->orWhere('last_name', 'like', "%{$search}%")
+                                        ->orWhereRaw("CONCAT(first_name,' ',last_name) like ?", ["%{$search}%"])
+                                        ->orWhere('email', 'like', "%{$search}%")
+                                        ->orWhere('phone', 'like', "%{$search}%");
+                                });
+                        });
+                    })
 
-    ->sortable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $direction) {
-        $usersFullName = <<<SQL
+                    ->sortable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $direction) {
+                        $usersFullName = <<<SQL
             (SELECT CONCAT(u.first_name, ' ', u.last_name)
              FROM users u
              WHERE u.id = appointments.customer_id)
         SQL;
 
-        $query->orderByRaw(
-            "COALESCE(customer_name, {$usersFullName}) " . ($direction === 'asc' ? 'asc' : 'desc')
-        );
-    })
-    ->weight(\Filament\Support\Enums\FontWeight::SemiBold),
+                        $query->orderByRaw(
+                            "COALESCE(customer_name, {$usersFullName}) " . ($direction === 'asc' ? 'asc' : 'desc')
+                        );
+                    })
+                    ->weight(\Filament\Support\Enums\FontWeight::SemiBold),
                 // مزود الخدمة
                 ImageColumn::make('provider.profile_image_url')
                     ->label(__('resources.appointment.provider'))
@@ -143,13 +143,13 @@ TextColumn::make('customer_display') // اسم افتراضي للعمود
                 // السعر الإجمالي
                 TextColumn::make('total_amount')
                     ->label(__('resources.appointment.total_price'))
-                    ->money('SAR')
+                    ->money('EUR')
                     ->sortable()
                     ->weight(FontWeight::Bold)
                     ->color('success')
                     ->description(function ($record) {
                         if ($record->tax_amount > 0) {
-                            return __('resources.appointment.includes_tax') . ': SAR ' . number_format($record->tax_amount, 2);
+                            return __('resources.appointment.includes_tax') . ': EUR ' . number_format($record->tax_amount, 2);
                         }
                         return null;
                     }),
@@ -314,77 +314,42 @@ TextColumn::make('customer_display') // اسم افتراضي للعمود
                     }),
             ])
             ->recordActions([
-                // زر الدفع
+                // زر الدفع - المنطق الجديد مع Invoice + Payment + Fiskaly
                 Action::make('pay')
                     ->label(__('resources.appointment.mark_as_paid'))
                     ->icon('heroicon-o-currency-dollar')
                     ->color('success')
-                    ->visible(fn($record) => $record->payment_status === PaymentStatus::PENDING && $record->status !== AppointmentStatus::ADMIN_CANCELLED && $record->status !== AppointmentStatus::USER_CANCELLED)
+                    // ->visible(fn($record) => $record->payment_status === PaymentStatus::PENDING
+                    //     && $record->status !== AppointmentStatus::ADMIN_CANCELLED
+                    //     && $record->status !== AppointmentStatus::USER_CANCELLED)
                     ->fillForm(fn($record) => [
-                        'payment_type' => PaymentStatus::PAID_ONSTIE_CASH->value,
-                        'adjusted_duration' => $record->duration_minutes,
-                        'amount_paid' => $record->total_amount,
-                        'start_time_display' => $record->start_time->format('h:i A'),
-                        'start_time_value' => $record->start_time->format('Y-m-d H:i:s'),
-                        'adjusted_end_time' => $record->end_time->format('H:i'),
-                        'duration_display' => $record->duration_minutes,
+                        'amount_paid' => $record?->total_amount, // أو total_amount ?? 0
+                        'calculated_subtotal' => $record?->subtotal,
+                        'calculated_tax' => $record?->tax_amount,
+                        'payment_method_id' => \App\Models\PaymentMethod::query()
+                                ->where('status', true)
+                                ->where('type', \App\Models\PaymentMethod::TYPE_CASH)
+                                ->value('id'),
                     ])
                     ->schema([
-                        Select::make('payment_type')
+                        Select::make('payment_method_id')
                             ->label(__('resources.appointment.payment_method'))
-                            ->options([
-                                PaymentStatus::PAID_ONSTIE_CASH->value => __('resources.appointment.paid_cash'),
-                                PaymentStatus::PAID_ONSTIE_CARD->value => __('resources.appointment.paid_card'),
-                                PaymentStatus::PAID_ONLINE->value => __('resources.appointment.paid_online'),
-                            ])
-                            ->default(PaymentStatus::PAID_ONSTIE_CASH->value)
+                            ->options(fn() => \App\Models\PaymentMethod::query()
+                                ->where('status', true)
+                                ->pluck('name', 'id')
+                                ->toArray())
                             ->required()
+                            ->default(fn() => \App\Models\PaymentMethod::query()
+                                ->where('status', true)
+                                ->where('type', \App\Models\PaymentMethod::TYPE_CASH::value)
+                                ->value('id'))
                             ->columnSpanFull(),
 
-                        Hidden::make('start_time_value'),
-
-                        TextInput::make('start_time_display')
-                            ->label(__('resources.appointment.start_time'))
-                            ->disabled()
-                            ->dehydrated(false)
-                            ->columnSpan(1),
-
-                        TimePicker::make('adjusted_end_time')
-                            ->label(__('resources.appointment.end_time'))
-                            ->seconds(false)
-                            ->required()
-                            ->helperText(__('resources.appointment.end_time_helper'))
-                            ->live(debounce: 500)
-                            ->afterStateUpdated(function ($state, $set, $get) {
-                                if ($state && $get('start_time_value')) {
-                                    $startTime = \Carbon\Carbon::parse($get('start_time_value'));
-                                    $endTimeParts = explode(':', $state);
-
-                                    $newEndTime = $startTime->copy()
-                                        ->setTime((int) $endTimeParts[0], (int) $endTimeParts[1], 0);
-
-                                    $durationMinutes = $startTime->diffInMinutes($newEndTime);
-
-                                    $set('adjusted_duration', $durationMinutes);
-                                    $set('duration_display', $durationMinutes);
-                                }
-                            })
-                            ->columnSpan(1),
-
-                        TextInput::make('duration_display')
-                            ->label(__('resources.appointment.duration'))
-                            ->disabled()
-                            ->dehydrated(false)
-                            ->suffix('min')
-                            ->columnSpan(1),
-
-                        Hidden::make('adjusted_duration'),
-
                         TextInput::make('amount_paid')
-                            ->label(__('resources.appointment.amount_paid'))
+                            ->label(__('resources.provider_resource.amount_paid'))
                             ->numeric()
-                            ->prefix('SAR')
-                            ->suffix(__('resources.appointment.includes_tax_suffix'))
+                            ->prefix('EUR')
+                            ->suffix(__('resources.provider_resource.includes_tax_suffix'))
                             ->default(fn($record) => $record->total_amount)
                             ->required()
                             ->afterStateUpdated(function ($state, $set) {
@@ -401,73 +366,117 @@ TextColumn::make('customer_display') // اسم افتراضي للعمود
                             ->helperText(
                                 fn($get) =>
                                 $get('calculated_subtotal')
-                                ? __('resources.appointment.breakdown') . ': ' .
-                                __('resources.appointment.subtotal') . ' SAR ' . number_format($get('calculated_subtotal'), 2) . ' + ' .
-                                __('resources.appointment.tax') . ' (19%) SAR ' . number_format($get('calculated_tax'), 2)
-                                : __('resources.appointment.amount_paid_helper')
+                                ? __('resources.provider_resource.breakdown') . ': ' .
+                                __('resources.provider_resource.subtotal') . ' EUR ' . number_format($get('calculated_subtotal'), 2) . ' + ' .
+                                __('resources.provider_resource.tax') . ' (19%) EUR ' . number_format($get('calculated_tax'), 2)
+                                : __('resources.provider_resource.amount_paid_helper')
                             ),
-
-                        Textarea::make('notes')
-                            ->label(__('resources.appointment.payment_notes'))
-                            ->rows(3)
-                            ->maxLength(500)
-                            ->columnSpanFull(),
                     ])
                     ->action(function ($record, array $data) {
                         try {
-                            // استخدام InvoiceService لإنشاء الفاتورة بشكل احترافي
                             $invoiceService = app(InvoiceService::class);
+                            $invoicePaymentService = app(\App\Services\Payments\InvoicePaymentService::class);
+                            $fiskalyService = app(\App\Services\Fiskaly\FiskalyService::class);
 
-                            // التحقق من صحة العملية قبل الإنشاء
-                            $invoiceService->validateInvoiceCreation($record);
+                            // Step 1: Get or create invoice
 
-                            if(!is_null($data['adjusted_duration']) && $data['adjusted_duration'] > 0 ){
-                            $adjustedDuration = $data['adjusted_duration'] ?? $record->duration_minutes;
+                                $invoice = $record->invoice;
 
-                            }else{
-                            $adjustedDuration = $record->duration_minutes;
+                                if (!$invoice) {
+                                    // Create draft invoice
+                                    $invoice = $invoiceService->createDtaftInvoiceFromAppointment(
+                                        appointment: $record,
+                                        paymentType: PaymentStatus::PAID_ONSTIE_CASH->value,
+                                        amountPaid: $data['amount_paid'],
+                                        notes: null,
+                                        adjustedDuration: null,
+                                        amountIncludesTax: true
+                                    );
+                                }
+
+                            // Transaction for payment operations only
+                            $invoice = \Illuminate\Support\Facades\DB::transaction(function () use ($record, $data, $invoiceService,$invoice, $invoicePaymentService) {
+
+
+                                // Step 2: Convert DRAFT to PENDING if needed
+                                if ($invoice->status === \App\Enum\InvoiceStatus::DRAFT) {
+                                    $invoice->update(['status' => \App\Enum\InvoiceStatus::PENDING]);
+                                    $invoice->refresh();
+                                }
+
+                                // Step 3: Determine PaymentStatus based on PaymentMethod type
+                                $paymentMethod = \App\Models\PaymentMethod::find($data['payment_method_id']);
+                                $paymentStatus = match ($paymentMethod->type) {
+                                    \App\Models\PaymentMethod::TYPE_CASH => PaymentStatus::PAID_ONSTIE_CASH,
+                                    \App\Models\PaymentMethod::TYPE_CREDIT_CARD,
+                                    \App\Models\PaymentMethod::TYPE_DEBIT_CARD => PaymentStatus::PAID_ONSTIE_CARD,
+                                    default => PaymentStatus::PAID_ONSTIE_CASH,
+                                };
+
+                                // Step 4: Create payment record
+                                $payment = $invoicePaymentService->createFromInvoice(
+                                    invoice: $invoice,
+                                    amount: $data['amount_paid'],
+                                    paymentMethod: $data['payment_method_id'],
+                                    status: $paymentStatus,
+                                    metadata: [
+                                        'appointment_id' => $record->id,
+                                        'appointment_number' => $record->number,
+                                        'paid_at' => now()->toIso8601String(),
+                                        'paid_by' => \Illuminate\Support\Facades\Auth::user()?->full_name ?? 'System',
+                                    ]
+                                );
+
+                                // Step 5: Update appointment status
+                                $record->update([
+                                    'status' => AppointmentStatus::COMPLETED,
+                                    'payment_status' => $paymentStatus,
+                                    'payment_method' => $paymentMethod->name,
+                                ]);
+
+                                return $invoice->fresh();
+                            });
+
+                            // Step 6: Sign invoice with Fiskaly (OUTSIDE transaction for offline support)
+                            $fiskalyWarning = false;
+
+                            try {
+                                $fiskalyService->signInvoice($invoice);
+                            } catch (\Exception $fiskalyException) {
+                                $fiskalyWarning = true;
+                                \Illuminate\Support\Facades\Log::warning('[Fiskaly] Signing failed', [
+                                    'invoice_id' => $invoice->id,
+                                    'error' => $fiskalyException->getMessage(),
+                                ]);
                             }
 
-                            $amountPaid = $data['amount_paid'];
-
-                            // حساب الضريبة العكسية لتحديث الحجز
-                            $taxCalculation = $invoiceService->calculateReverseTax($amountPaid, 19);
-
-                            // تحديث السعر والضريبة في الحجز
-                            $record->update([
-                                'total_amount' => $amountPaid,
-                                'tax_amount' => $taxCalculation['tax_amount'],
-                                'duration_minutes' =>  $adjustedDuration ,
-                                'end_time' =>  $record->end_time->setTimeFromTimeString($data['adjusted_end_time']),
-                                'status' => AppointmentStatus::COMPLETED->value,
-
-                            ]);
-
-                            // إنشاء الفاتورة مع جميع البنود (سيقوم بتحديث المدة تلقائياً)
-                            $invoice = $invoiceService->createInvoiceFromAppointment(
-                                appointment: $record->fresh(),
-                                paymentType: $data['payment_type'],
-                                amountPaid: $amountPaid,
-                                notes: $data['notes'] ?? null,
-                                adjustedDuration: $adjustedDuration,
-                                amountIncludesTax: true // المبلغ يتضمن الضريبة
-                            );
-
-                            Notification::make()
-                                ->title(__('resources.appointment.payment_success'))
-                                ->body(__('resources.appointment.invoice_created') . ': ' . $invoice->invoice_number)
-                                ->success()
-                                ->send();
+                            // Step 7: Show appropriate notification
+                            if ($fiskalyWarning) {
+                                Notification::make()
+                                    ->title(__('resources.appointment.payment_success'))
+                                    ->body(__('resources.appointment.payment_done_fiskaly_failed'))
+                                    ->warning()
+                                    ->duration(8000)
+                                    ->send();
+                            } else {
+                                Notification::make()
+                                    ->title(__('resources.appointment.payment_success'))
+                                    ->body(__('resources.appointment.invoice_created') . ': ' . $invoice->invoice_number)
+                                    ->success()
+                                    ->duration(8000)
+                                    ->send();
+                            }
 
                         } catch (\Exception $e) {
                             Notification::make()
                                 ->title(__('resources.appointment.payment_error'))
                                 ->body($e->getMessage())
+                                 ->duration(8000)
                                 ->danger()
                                 ->send();
                         }
                     })
-                    ->modalWidth('2xl'),
+                    ->modalWidth('md'),
 
                 Action::make('ajuste_duration')
                     ->label(__('resources.appointment.ajuste_duration'))

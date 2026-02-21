@@ -1,0 +1,3684 @@
+AppointmentReminderService.php
+<?php
+
+namespace App\Services;
+
+use App\Jobs\SendAppointmentReminderJob;
+use App\Models\Appointment;
+use App\Models\AppointmentReminder;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
+
+class AppointmentReminderService
+{
+    public function scheduleReminder(
+        Appointment $appointment,
+        Carbon $remindAt,
+        array $params = [],
+        array $data = [],
+        $titleKey = 'appointment_reminder.title',
+        $messageKey = 'appointment_reminder.message'
+    ): AppointmentReminder {
+        if ($remindAt->lte(now())) {
+            throw new InvalidArgumentException('Remind_at must be in the future.');
+        }
+
+        if ($remindAt->gte($appointment->start_time)) {
+            throw new InvalidArgumentException('Remind_at must be before appointment start time.');
+        }
+
+        $customer = $appointment->customer;
+        if (!$customer) {
+            throw new InvalidArgumentException('Appointment has no customer to notify.');
+        }
+        Log::info('Scheduling appointment reminder', [
+            'appointment_id' => $appointment->id,
+            'user_id' => $customer->id,
+            'remind_at' => $remindAt->toDateTimeString(),
+            'title_key' => $titleKey,
+            'message_key' => $messageKey,
+            'params' => $params,
+            'data' => $data,
+        ]);
+
+        return DB::transaction(function () use ($appointment, $customer, $remindAt, $params, $data, $titleKey, $messageKey) {
+
+
+
+            $reminder = AppointmentReminder::create([
+                'appointment_id' => $appointment->id,
+                'user_id' => $customer->id,
+                'remind_at' => $remindAt,
+                'status' => 'pending',
+                'locale' => $customer->locale ?? app()->getLocale(),
+                'title_key' =>  $titleKey ,
+                'message_key' =>  $messageKey,
+                'params' => $params,
+                'data' => $data,
+            ]);
+
+            SendAppointmentReminderJob::dispatch($reminder->id)
+                ->delay($remindAt);
+
+            return $reminder;
+        });
+    }
+
+    public function rescheduleReminder(
+        Appointment $appointment,
+        Carbon $remindAt,
+        array $params = [],
+        array $data = [],
+        $titleKey = 'appointment_reminder.title',
+        $messageKey = 'appointment_reminder.message'
+    ): AppointmentReminder {
+        $this->cancelRemindersForAppointment($appointment);
+        return $this->scheduleReminder($appointment, $remindAt, $params, $data, $titleKey, $messageKey);
+    }
+
+    public function cancelRemindersForAppointment(Appointment $appointment): int
+    {
+        return AppointmentReminder::where('appointment_id', $appointment->id)
+            ->where('status', 'pending')
+            ->whereNull('cancelled_at')
+            ->update([
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+            ]);
+    }
+}
+
+++++++++++++++++++++
+
+AppointmentService.php
+<?php
+
+namespace App\Services;
+
+use App\Models\Appointment;
+use App\Models\User;
+use App\Enum\AppointmentStatus;
+use App\Enum\PaymentStatus;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use InvalidArgumentException;
+use Carbon\Carbon;
+
+class AppointmentService
+{
+    /**
+     * @param User $customer
+     * @param array $filters
+     * @return LengthAwarePaginator
+     *
+     * @throws InvalidArgumentException
+     */
+    public function getCustomerAppointments(User $customer, array $filters = []): LengthAwarePaginator
+    {
+        try {
+            $query = Appointment::where('customer_id', $customer->id)
+            ->where('created_status', 1)
+            ->with([
+                    'provider:id,first_name,last_name,email,phone,avatar_url',
+                    'services',
+                    'services_record',
+                ]);
+
+            if (!empty($filters['status']) && $filters['status'] !== 'ALL') {
+                $statusValue = $this->parseStatus($filters['status']);
+                $query->where('status', $statusValue);
+            }
+
+            if (!empty($filters['payment_status'])) {
+                $paymentStatusValue = $this->parsePaymentStatus($filters['payment_status']);
+                $query->where('payment_status', $paymentStatusValue);
+            }
+
+            if (!empty($filters['date_from'])) {
+                $dateFrom = Carbon::createFromFormat('Y-m-d', $filters['date_from'])
+                    ->startOfDay();
+                $query->where('appointment_date', '>=', $dateFrom);
+            }
+
+            if (!empty($filters['date_to'])) {
+                $dateTo = Carbon::createFromFormat('Y-m-d', $filters['date_to'])
+                    ->endOfDay();
+                $query->where('appointment_date', '<=', $dateTo);
+            }
+
+            if (!empty($filters['type'])) {
+                if ($filters['type'] === 'upcoming') {
+                    $query->where('start_time', '>', now());
+                } elseif ($filters['type'] === 'past') {
+                    $query->where('start_time', '<', now());
+                }
+            }
+
+            $sortBy = $filters['sort_by'] ?? 'appointment_date';
+            $sortDirection = strtoupper($filters['sort_direction'] ?? 'desc');
+
+            $validSortColumns = ['appointment_date', 'created_at', 'total_amount', 'start_time'];
+            if (!in_array($sortBy, $validSortColumns)) {
+                $sortBy = 'appointment_date';
+            }
+
+            if (!in_array($sortDirection, ['ASC', 'DESC'])) {
+                $sortDirection = 'DESC';
+            }
+
+            $query->orderBy($sortBy, $sortDirection);
+
+            $perPage = min((int)($filters['per_page'] ?? 15), 100);
+            $perPage = max($perPage, 3);
+
+            return $query->paginate($perPage);
+
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException(
+                __('message.error_in') . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     *
+     * @param int $appointmentId
+     * @param User $custome
+     * @return Appointment
+     *
+     * @throws ModelNotFoundException
+     * @throws InvalidArgumentException
+     */
+    public function getAppointmentDetails(int $appointmentId, User $customer): Appointment
+    {
+        try {
+            $appointment = Appointment::with([
+                'customer:id,first_name,last_name,email,phone,avatar_url,created_at',
+                'provider:id,first_name,last_name,email,phone,avatar_url,branch_id',
+                'provider.branch:id,name,adress,phone,email,latitude,longitude',
+                'services:id,name,description,price,discount_price,duration_minutes,image_url,color_code',
+                'services.category:id,name,description',
+                'services_record',
+            ])->findOrFail($appointmentId);
+
+
+            if ($appointment->customer_id !== $customer->id) {
+                throw new InvalidArgumentException(
+                    __('message.you_have_authorize_to')
+                );
+            }
+
+            return $appointment;
+
+        } catch (ModelNotFoundException $e) {
+            throw new ModelNotFoundException(
+                'الحجز المطلوب غير موجود'
+            );
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException(
+                'حدث خطأ في جلب بيانات الحجز: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * @param User $customer
+     * @return array
+     */
+    public function getAppointmentStatistics(User $customer): array
+    {
+        try {
+            $customerAppointments = Appointment::where('customer_id', $customer->id)
+            ->where('created_status', 1);
+
+            return [
+                'total_appointments' => (clone $customerAppointments)->count(),
+                'pending_count' => (clone $customerAppointments)
+                    ->where('status', AppointmentStatus::PENDING->value)
+                    ->count(),
+                'completed_count' => (clone $customerAppointments)
+                    ->where('status', AppointmentStatus::COMPLETED->value)
+                    ->count(),
+                'cancelled_count' => (clone $customerAppointments)
+                    ->whereIn('status', [
+                        AppointmentStatus::USER_CANCELLED->value,
+                        AppointmentStatus::ADMIN_CANCELLED->value,
+                    ])
+                    ->count(),
+                'total_spent' => (clone $customerAppointments)
+                    ->where('status', AppointmentStatus::COMPLETED->value)
+                    ->sum('total_amount'),
+                'upcoming_count' => (clone $customerAppointments)
+                    ->where('status', AppointmentStatus::PENDING->value)
+                    ->where('start_time', '>', now())
+                    ->count(),
+                'payment_pending_count' => (clone $customerAppointments)
+                    ->where('payment_status', PaymentStatus::PENDING->value)
+                    ->count(),
+            ];
+
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException(
+                'حدث خطأ في جلب الإحصائيات: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * @param int $appointmentId
+     * @param User $customer
+     * @param string $reason
+     * @return Appointment
+     *
+     * @throws InvalidArgumentException
+     */
+    public function cancelAppointment(int $appointmentId, User $customer, string $reason = ''): Appointment
+    {
+        try {
+            $appointment = $this->getAppointmentDetails($appointmentId, $customer);
+
+            if ($appointment->status !== AppointmentStatus::PENDING) {
+                throw new InvalidArgumentException(
+                    'لا يمكن إلغاء الحجز في حالته الحالية'
+                );
+            }
+
+            if ($appointment->start_time <= now()) {
+                throw new InvalidArgumentException(
+                    'لا يمكن إلغاء الحجز بعد بدء الموعد'
+                );
+            }
+
+            $appointment->cancel($reason);
+
+            return $appointment;
+
+        } catch (InvalidArgumentException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException(
+                'حدث خطأ في إلغاء الحجز: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     *
+     * @param User $customer
+     * @param int $days
+     * @return Collection
+     */
+    public function getUpcomingAppointments(User $customer, int $days = 7): Collection
+    {
+        try {
+            $futureDate = now()->addDays($days);
+
+            return Appointment::where('customer_id', $customer->id)
+             ->where('created_status', 1)
+                ->where('status', AppointmentStatus::PENDING->value)
+                ->where('start_time', '>=', now())
+                ->where('start_time', '<=', $futureDate)
+                ->with(['provider:id,first_name,last_name', 'services:id,name'])
+                ->orderBy('start_time', 'asc')
+                ->get();
+
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException(
+                'حدث خطأ في جلب الحجوزات المقبلة: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * @param User $customer
+     * @param int $limit
+     * @return Collection
+     */
+    public function getPastAppointments(User $customer, int $limit = 10): Collection
+    {
+        try {
+            return Appointment::where('customer_id', $customer->id)
+            ->where('created_status', 1)
+                ->where('status', AppointmentStatus::COMPLETED->value)
+                ->with(['provider:id,first_name,last_name', 'services:id,name'])
+                ->orderBy('start_time', 'desc')
+                ->limit($limit)
+                ->get();
+
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException(
+                'حدث خطأ في جلب الحجوزات السابقة: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * @param User $customer
+     * @param string $search
+     * @return Collection
+     */
+    public function searchAppointments(User $customer, string $search): Collection
+    {
+        try {
+            $search = trim($search);
+
+            if (strlen($search) < 2) {
+                throw new InvalidArgumentException(
+                    'يجب أن يكون البحث بأكثر من حرف واحد'
+                );
+            }
+
+            return Appointment::where('customer_id', $customer->id)
+                ->where('created_status', 1)
+                ->where(function ($query) use ($search) {
+                    $query->where('number', 'like', "%{$search}%")
+                        ->orWhereHas('provider', function ($query) use ($search) {
+                            $query->where('first_name', 'like', "%{$search}%")
+                                ->orWhere('last_name', 'like', "%{$search}%");
+                        });
+                })
+                ->with(['provider:id,first_name,last_name', 'services:id,name'])
+                ->orderBy('appointment_date', 'desc')
+                ->get();
+
+        } catch (InvalidArgumentException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException(
+                'حدث خطأ في البحث: ' . $e->getMessage()
+            );
+        }
+    }
+
+    /**
+     * @param string $status
+     * @return int
+     */
+    private function parseStatus(string $status): int
+    {
+        $statusMap = [
+            'PENDING' => AppointmentStatus::PENDING->value,
+            'COMPLETED' => AppointmentStatus::COMPLETED->value,
+            'USER_CANCELLED' => AppointmentStatus::USER_CANCELLED->value,
+            'ADMIN_CANCELLED' => AppointmentStatus::ADMIN_CANCELLED->value,
+        ];
+
+        if (!isset($statusMap[$status])) {
+            throw new InvalidArgumentException(
+                "حالة غير صحيحة: {$status}"
+            );
+        }
+
+        return $statusMap[$status];
+    }
+
+    /**
+     * @param string $paymentStatus
+     * @return int
+     */
+    private function parsePaymentStatus(string $paymentStatus): int
+    {
+        $paymentStatusMap = [
+            'PENDING' => PaymentStatus::PENDING->value,
+            'PAID_ONLINE' => PaymentStatus::PAID_ONLINE->value,
+            'PAID_ONSTIE_CASH' => PaymentStatus::PAID_ONSTIE_CASH->value,
+            'PAID_ONSTIE_CARD' => PaymentStatus::PAID_ONSTIE_CARD->value,
+            'FAILED' => PaymentStatus::FAILED->value,
+            'REFUNDED' => PaymentStatus::REFUNDED->value,
+            'PARTIALLY_REFUNDED' => PaymentStatus::PARTIALLY_REFUNDED->value,
+        ];
+
+        if (!isset($paymentStatusMap[$paymentStatus])) {
+            throw new InvalidArgumentException(
+                "حالة دفع غير صحيحة: {$paymentStatus}"
+            );
+        }
+
+        return $paymentStatusMap[$paymentStatus];
+    }
+}
+
+++++++++++++++++++++
+
+AuthTokenService.php
+<?php
+namespace App\Services;
+
+use App\Models\User;
+use App\Models\RefreshToken;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
+
+class AuthTokenService
+{
+    public function createAccessToken(User $user, ?string $device = null, int $minutes = 15)
+    {
+        $token = $user->createToken($device ?? 'mobile-token', ['*']);
+        $accessToken = $token->plainTextToken;
+
+        $expiresAt = Carbon::now()->addMinutes($minutes);
+
+        // $tokenModel = $token->accessToken;
+        // $tokenModel->expires_at = $expiresAt;
+        // $tokenModel->save();
+        return ['access_token' => $accessToken, 'expires_at' => $expiresAt->toDateTimeString()];
+    }
+
+    public function createRefreshToken(User $user, ?string $device = null, ?string $ip = null, int $days = 30)
+    {
+        $plain = Str::random(64);
+        $hashed = hash('sha256', $plain . config('app.key'));
+        $expiresAt = Carbon::now()->addDays($days);
+
+        $rt = RefreshToken::create([
+            'user_id' => $user->id,
+            'token_hash' => $hashed,
+            'device' => $device,
+            'ip' => $ip,
+            'expires_at' => $expiresAt,
+        ]);
+
+        return ['refresh_token' => $plain, 'expires_at' => $expiresAt->toDateTimeString()];
+    }
+
+    public function revokeRefreshTokenByPlain(User $user, string $plain)
+    {
+        $hashed = hash('sha256', $plain . config('app.key'));
+        $token = RefreshToken::where('user_id', $user->id)->where('token_hash', $hashed)->first();
+        if ($token) {
+            $token->update(['revoked' => true]);
+        }
+    }
+
+    public function validateRefreshToken(User $user, string $plain)
+    {
+        $hashed = hash('sha256', $plain . config('app.key'));
+        $token = RefreshToken::where('user_id', $user->id)
+            ->where('token_hash', $hashed)
+            ->where('revoked', false)
+            ->where('expires_at', '>', now())
+            ->first();
+        return $token;
+    }
+
+    public function findValidRefreshToken(string $plain): ?\App\Models\RefreshToken
+    {
+        $hashed = hash('sha256', $plain . config('app.key'));
+
+        return RefreshToken::where('token_hash', $hashed)
+            ->where('revoked', false)
+            ->where('expires_at', '>', now())
+            ->first();
+    }
+}
+++++++++++++++++++++
+
+BookingService.php
+<?php
+
+namespace App\Services;
+
+use App\Enum\AppointmentStatus;
+use App\Enum\PaymentStatus;
+use App\Models\Appointment;
+use App\Models\AppointmentService;
+use App\Models\Service;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
+use Illuminate\Support\Facades\Auth;
+class BookingService
+{
+    protected BookingValidationService $validationService;
+
+    public function __construct(BookingValidationService $validationService)
+    {
+        $this->validationService = $validationService;
+    }
+
+    /**
+     * Create a new booking with multiple services
+     *
+     * @param User $customer
+     * @param array $bookingData
+     * @return Appointment
+     * @throws InvalidArgumentException
+     */
+    public function createBooking(?User $customer, array $bookingData): Appointment
+    {
+
+        $services = $bookingData['services'];
+        $date = $bookingData['date'];
+        $paymentMethod = $bookingData['payment_method'];
+        $notes = $bookingData['notes'] ?? null;
+        $customerName = $bookingData['customer_name'] ?? ($customer->name ?? null);
+        $customerEmail = $bookingData['customer_email'] ?? $customer->email ?? null;
+        $customerPhone = $bookingData['customer_phone'] ?? $customer->phone ?? null;
+
+
+        $this->validationService->validateBasicData($services, $date);
+
+        if ($customer) {
+            $this->validationService->validateDailyBookingLimit($customer, $date);
+        }
+
+
+        $services = $this->sortServicesByStartTime($services);
+
+
+        $preparedServices = $this->validateAndPrepareServices($services, $date, $customer, $customerPhone);
+
+        // 5. Calculate totals
+        $totals = $this->calculateTotals($preparedServices);
+
+        // 6. Create booking in transaction
+        return DB::transaction(function () use ($customer, $date, $paymentMethod, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone) {
+            // Determine created_status based on payment method
+            $createdStatus = $paymentMethod === 'cash' ? 1 : 0;
+            $paymentStatus = $paymentMethod === 'cash'
+                ? PaymentStatus::PENDING
+                : PaymentStatus::PENDING;
+
+            // Get first service for main appointment data
+            $firstService = $preparedServices[0];
+
+            // Create main appointment
+            $appointment = Appointment::create([
+                'number' => $this->generateAppointmentNumber(),
+                'customer_id' => $customer->id,
+                'provider_id' => $firstService['provider_id'],
+                'appointment_date' => $date,
+                'start_time' => Carbon::parse($date . ' ' . $firstService['start_time']),
+                'end_time' => Carbon::parse($date . ' ' . $preparedServices[count($preparedServices) - 1]['end_time']),
+                'duration_minutes' => $totals['total_duration'],
+                'subtotal' => $totals['subtotal'],
+                'tax_amount' => $totals['tax_amount'],
+                'total_amount' => $totals['total_amount'],
+                'status' => AppointmentStatus::PENDING,
+                'payment_method' => $paymentMethod,
+                'payment_status' => $paymentStatus,
+                'notes' => $notes,
+                'created_status' => $createdStatus,
+                'customer_name' => $customerName,
+                'customer_email' => $customerEmail,
+                'customer_phone' => $customerPhone,
+            ]);
+
+            // Create appointment services
+            foreach ($preparedServices as $index => $serviceData) {
+                AppointmentService::create([
+                    'appointment_id' => $appointment->id,
+                    'service_id' => $serviceData['service_id'],
+                    'service_name' => $serviceData['service_name'],
+                    'duration_minutes' => $serviceData['duration_minutes'],
+                    'price' => $serviceData['price'],
+                    'sequence_order' => $index + 1,
+                ]);
+            }
+
+            return $appointment->load(['services', 'customer', 'provider', 'services_record']);
+        });
+    }
+
+    /**
+     * Sort services by start time
+     */
+    private function sortServicesByStartTime(array $services): array
+    {
+        usort($services, function ($a, $b) {
+            return strcmp($a['start_time'], $b['start_time']);
+        });
+
+        return $services;
+    }
+
+    /**
+     * Validate and prepare services data
+     */
+    private function validateAndPrepareServices(
+        array $services,
+        string $date,
+        User $customer,
+        ?string $customerPhone = null,
+    ): array {
+        $preparedServices = [];
+        $previousEndTime = null;
+
+        $serviceIds = array_column($services, 'service_id');
+        $providerIds = array_column($services, 'provider_id');
+
+        $servicesCollection = Service::whereIn('id', $serviceIds)->get()->keyBy('id');
+        $providersCollection = User::whereIn('id', $providerIds)->get()->keyBy('id');
+
+        foreach ($services as $index => $serviceData) {
+
+            $service = $servicesCollection->get($serviceData['service_id']);
+            $provider = $providersCollection->get($serviceData['provider_id']);
+
+            $this->validationService->validateProviderOffersService($provider, $service);
+
+
+            $serviceDuration = $this->getEffectiveDuration($provider, $service);
+            $servicePrice = $this->getEffectivePrice($provider, $service);
+
+            // 3. Calculate start and end time
+            $startTime = Carbon::parse($date . ' ' . $serviceData['start_time']);
+            $endTime = $startTime->copy()->addMinutes($serviceDuration);
+
+            // 4. Validate sequential timing (if not first service)
+            if ($previousEndTime !== null) {
+                $this->validationService->validateSequentialTiming(
+                    $previousEndTime,
+                    $startTime,
+                    $index + 1
+                );
+            }
+
+            // 5. Validate time slot availability
+            $this->validationService->validateTimeSlotAvailability(
+                $provider,
+                $service,
+                $startTime,
+                $endTime
+            );
+
+            // 6. Validate no duplicate booking
+            if ($customer) {
+                $this->validationService->validateNoDuplicateBooking(
+                    $customer,
+                    $startTime,
+                    array_column($services, 'service_id')
+                );
+            } else {
+                $this->validationService->validateNoDuplicateBookingByPhone(
+                    $customerPhone,
+                    $startTime,
+                    array_column($services, 'service_id')
+                );
+
+            }
+
+            // Prepare service data
+            $preparedServices[] = [
+                'service_id' => $service->id,
+                'provider_id' => $provider->id,
+                'service_name' => $service->name,
+                'duration_minutes' => $serviceDuration,
+                'price' => $servicePrice,
+                'start_time' => $startTime->format('H:i'),
+                'end_time' => $endTime->format('H:i'),
+            ];
+
+            // Update previous end time for next iteration
+            $previousEndTime = $endTime;
+        }
+
+        return $preparedServices;
+    }
+
+    /**
+     * Calculate booking totals
+     */
+    private function calculateTotals(array $preparedServices): array
+    {
+        $totalDuration = array_sum(array_column($preparedServices, 'duration_minutes'));
+
+        // High internal precision
+        $internalScale = 6;
+        bcscale($internalScale);
+
+        // tax rate (e.g., "19")
+        $taxRate = (string) get_setting('tax_rate', '0');
+
+        // factor = 1 + taxRate/100
+        $factor = '1';
+        if (bccomp($taxRate, '0', 6) === 1) {
+            $factor = bcadd('1', bcdiv($taxRate, '100', $internalScale), $internalScale);
+        }
+
+        // Totals (as strings)
+        $grossTotal = '0';
+        $netTotal = '0';
+        $taxTotal = '0';
+
+        foreach ($preparedServices as $service) {
+            // Always treat price as string to avoid float conversion
+            // Ensure it looks like "12.34"
+            $gross = isset($service['price'])
+                ? (string) $service['price']
+                : '0';
+
+            // normalize to internal scale
+            // (bc* doesn't need normalization, but it's good practice)
+            $gross = bcadd($gross, '0', $internalScale);
+
+            $grossTotal = bcadd($grossTotal, $gross, $internalScale);
+
+            if (bccomp($taxRate, '0', 6) !== 1) {
+                // taxRate <= 0
+                $net = $gross;
+                $tax = '0';
+            } else {
+                // net = gross / factor
+                $net = bcdiv($gross, $factor, $internalScale);
+
+                // tax = gross - net
+                $tax = bcsub($gross, $net, $internalScale);
+            }
+
+            // Round per line item to 2 decimals (invoice practice)
+            $net = $this->bcRound($net, 2);
+            $tax = $this->bcRound($tax, 2);
+
+            // Add rounded line amounts to totals (still as strings)
+            $netTotal = bcadd($netTotal, $net, 2);
+            $taxTotal = bcadd($taxTotal, $tax, 2);
+        }
+
+        // Final gross rounded to cents (money)
+        $grossTotal = $this->bcRound($grossTotal, 2);
+
+        // At this point: netTotal+taxTotal might differ by 0.01 due to per-line rounding.
+        // We'll reconcile using bcmath.
+        $sumNetTax = bcadd($netTotal, $taxTotal, 2);
+        $diff = bcsub($grossTotal, $sumNetTax, 2); // "-0.01", "0.00", "0.01"
+
+        if (bccomp($diff, '0.00', 2) !== 0) {
+            // Adjust taxTotal by the diff to force: gross = net + tax
+            $taxTotal = bcadd($taxTotal, $diff, 2);
+
+            // Optional safety: re-round
+            $taxTotal = $this->bcRound($taxTotal, 2);
+        }
+
+        return [
+            'subtotal' => (float) $netTotal,
+            'tax_amount' => (float) $taxTotal,
+            'total_amount' => (float) $grossTotal,
+            'total_duration' => $totalDuration,
+        ];
+    }
+
+    private function bcRound(string $number, int $precision = 2): string
+    {
+        if ($precision < 0) {
+            throw new InvalidArgumentException('Precision must be >= 0');
+        }
+
+        $sign = '';
+        if (str_starts_with($number, '-')) {
+            $sign = '-';
+            $number = substr($number, 1);
+        }
+
+        // shift = 10^precision
+        $shift = '1' . str_repeat('0', $precision);
+
+        // number * shift
+        $shifted = bcmul($number, $shift, $precision + 6);
+
+        // add 0.5 then floor via bcdiv(..., 0)
+        $shiftedPlus = bcadd($shifted, '0.5', $precision + 6);
+        $floored = bcdiv($shiftedPlus, '1', 0);
+
+        // back to original scale
+        $result = bcdiv($floored, $shift, $precision);
+
+        return $sign === '-' ? '-' . $result : $result;
+    }
+
+    private function calculateTotalsInverse(array $preparedServices): array
+    {
+        $subtotal = array_sum(array_column($preparedServices, 'price'));
+        $totalDuration = array_sum(array_column($preparedServices, 'duration_minutes'));
+
+        // Get tax rate from settings
+        $taxRate = (float) get_setting('tax_rate', 0);
+        $taxAmount = $subtotal * ($taxRate / 100);
+        $totalAmount = $subtotal + $taxAmount;
+
+        return [
+            'subtotal' => round($subtotal, 2),
+            'tax_amount' => round($taxAmount, 2),
+            'total_amount' => round($totalAmount, 2),
+            'total_duration' => $totalDuration,
+        ];
+    }
+
+
+    /**
+     * Get effective duration (custom or default)
+     */
+    private function getEffectiveDuration(User $provider, Service $service): int
+    {
+        return $service->duration_minutes;
+        $pivot = DB::table('provider_service')
+            ->where('provider_id', $provider->id)
+            ->where('service_id', $service->id)
+            ->first();
+
+        return $pivot->custom_duration ?? $service->duration_minutes;
+    }
+
+    /**
+     * Get effective price (custom or default)
+     */
+    private function getEffectivePrice(User $provider, Service $service): float
+    {
+        $pivot = DB::table('provider_service')
+            ->where('provider_id', $provider->id)
+            ->where('service_id', $service->id)
+            ->where('is_active', true)
+            ->first();
+
+        $effectivePrice = $pivot->custom_price ?? $service->price;
+
+        // Check for discount price
+        if ($service->discount_price && $service->discount_price < $effectivePrice) {
+            return (float) $service->discount_price;
+        }
+
+        return (float) $effectivePrice;
+    }
+
+    /**
+     * Generate unique appointment number
+     */
+    public function generateAppointmentNumber(): string
+    {
+        $prefix = 'APT';
+        $date = Carbon::now()->format('Ymd');
+        $random = strtoupper(substr(uniqid(), -6));
+
+        return "{$prefix}-{$date}-{$random}";
+    }
+
+    /**
+     * Cancel booking
+     */
+    public function cancelBooking(Appointment $appointment, ?string $reason = null): bool
+    {
+        if (!in_array($appointment->status, [AppointmentStatus::PENDING])) {
+            throw new InvalidArgumentException('Only pending appointments can be cancelled');
+        }
+
+        return $appointment->cancel($reason);
+    }
+
+    /**
+     * Get customer bookings
+     */
+    public function getCustomerBookings(User $customer, ?string $status = null)
+    {
+        $query = Appointment::where('customer_id', $customer->id)
+            ->with(['services', 'provider', 'services_record'])
+            ->orderBy('appointment_date', 'desc')
+            ->orderBy('start_time', 'desc');
+
+        if ($status) {
+            $query->where('status', $status);
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * Get booking details
+     */
+    public function getBookingDetails(int $appointmentId, User $customer): Appointment
+    {
+        $appointment = Appointment::with(['services', 'provider', 'customer', 'services_record'])
+            ->findOrFail($appointmentId);
+
+        // Verify customer owns this appointment
+        if ($appointment->customer_id !== $customer->id) {
+            throw new InvalidArgumentException('Unauthorized access to this appointment');
+        }
+
+        return $appointment;
+    }
+}
+
+++++++++++++++++++++
+
+BookingService2.php
+<?php
+
+namespace App\Services;
+
+use App\Models\Appointment;
+use App\Models\Service;
+use App\Models\User;
+use App\Models\AppointmentService as AppointmentServiceModel;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
+
+
+class BookingService2
+{
+    protected ServiceAvailabilityService $availabilityService;
+    protected BookingValidationService $validationService;
+
+    public function __construct(
+        ServiceAvailabilityService $availabilityService,
+        BookingValidationService $validationService
+    ) {
+        $this->availabilityService = $availabilityService;
+        $this->validationService = $validationService;
+    }
+
+    /**
+     * @param User $customer
+     * @param array $bookingData
+     * @return array
+     */
+    public function validateBooking(User $customer, array $bookingData): array
+    {
+        $services = $bookingData['services'];
+        $date = $bookingData['date'];
+
+        $this->validationService->validateBasicData($services, $date);
+
+        $validatedServices = [];
+        $previousEndTime = null;
+
+        foreach ($services as $index => $serviceData) {
+            $service = Service::findOrFail($serviceData['service_id']);
+            $provider = User::findOrFail($serviceData['provider_id']);
+            $startTime = Carbon::parse($date . ' ' . $serviceData['start_time']);
+
+            // التحقق من أن المقدم يقدم هذه الخدمة
+            $this->validationService->validateProviderOffersService($provider, $service);
+
+            // الحصول على مدة الخدمة الفعلية
+            $duration = $this->getEffectiveDuration($provider, $service);
+            $endTime = $startTime->copy()->addMinutes($duration);
+
+            // التحقق من التسلسل الزمني
+            if ($index > 0) {
+                $this->validationService->validateSequentialTiming(
+                    $previousEndTime,
+                    $startTime,
+                    $index
+                );
+            }
+
+            // التحقق من توفر الوقت
+            $this->validationService->validateTimeSlotAvailability(
+                $provider,
+                $service,
+                $startTime,
+                $endTime
+            );
+
+            $validatedServices[] = [
+                'service' => $service,
+                'provider' => $provider,
+                'start_time' => $startTime,
+                'end_time' => $endTime,
+                'duration' => $duration,
+                'price' => $this->getEffectivePrice($provider, $service),
+            ];
+
+            $previousEndTime = $endTime;
+        }
+
+        // 3. حساب الإجماليات
+        $totals = $this->calculateTotals($validatedServices);
+
+        return [
+            'success' => true,
+            'message' => 'Booking validation successful',
+            'services' => array_map(function ($item) {
+                return [
+                    'service_id' => $item['service']->id,
+                    'service_name' => $item['service']->name,
+                    'provider_id' => $item['provider']->id,
+                    'provider_name' => $item['provider']->full_name,
+                    'start_time' => $item['start_time']->format('H:i'),
+                    'end_time' => $item['end_time']->format('H:i'),
+                    'duration_minutes' => $item['duration'],
+                    'price' => $item['price'],
+                ];
+            }, $validatedServices),
+            'totals' => $totals,
+            'appointment_summary' => [
+                'date' => $date,
+                'start_time' => $validatedServices[0]['start_time']->format('H:i'),
+                'end_time' => end($validatedServices)['end_time']->format('H:i'),
+                'total_duration' => $totals['total_duration'],
+                'total_services' => count($validatedServices),
+            ],
+        ];
+    }
+
+    /**
+     *
+     * @param User $customer
+     * @param array $bookingData
+     * @return Appointment
+     */
+    public function createBooking(User $customer, array $bookingData): Appointment
+    {
+        return DB::transaction(function () use ($customer, $bookingData) {
+
+            $validation = $this->validateBooking($customer, $bookingData);
+
+            $services = $bookingData['services'];
+            $date = $bookingData['date'];
+            $notes = $bookingData['notes'] ?? null;
+            $paymentMethod = $bookingData['payment_method'] ?? null;
+
+            // 2. جمع البيانات من التحقق
+            $validatedServices = [];
+            $firstStartTime = null;
+            $lastEndTime = null;
+            $totalDuration = 0;
+            $subtotal = 0;
+
+            foreach ($services as $serviceData) {
+                $service = Service::findOrFail($serviceData['service_id']);
+                $provider = User::findOrFail($serviceData['provider_id']);
+                $startTime = Carbon::parse($date . ' ' . $serviceData['start_time']);
+
+                $duration = $this->getEffectiveDuration($provider, $service);
+                $endTime = $startTime->copy()->addMinutes($duration);
+                $price = $this->getEffectivePrice($provider, $service);
+
+                if ($firstStartTime === null) {
+                    $firstStartTime = $startTime;
+                }
+                $lastEndTime = $endTime;
+                $totalDuration += $duration;
+                $subtotal += $price;
+
+                $validatedServices[] = [
+                    'service' => $service,
+                    'provider' => $provider,
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
+                    'duration' => $duration,
+                    'price' => $price,
+                ];
+            }
+
+            // 3. حساب الضرائب والإجمالي
+            $taxRate = $this->getTaxRate();
+            $taxAmount = $subtotal * ($taxRate / 100);
+            $totalAmount = $subtotal + $taxAmount;
+
+            // 4. استخدام أول مقدم خدمة كمقدم رئيسي للحجز
+            $primaryProvider = $validatedServices[0]['provider'];
+
+            $createdStatus = ($paymentMethod === 'cash') ? 1 : 0;
+            // 5. إنشاء الحجز
+            $appointment = Appointment::create([
+                'number' => $this->generateAppointmentNumber(),
+                'customer_id' => $customer->id,
+                'provider_id' => $primaryProvider->id,
+                'appointment_date' => Carbon::parse($date),
+                'start_time' => $firstStartTime,
+                'end_time' => $lastEndTime,
+                'duration_minutes' => $totalDuration,
+                'subtotal' => $subtotal,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $totalAmount,
+                'status' => \App\Enum\AppointmentStatus::PENDING,
+                'payment_status' => \App\Enum\PaymentStatus::PENDING,
+                'payment_method' => $paymentMethod,
+                'notes' => $notes,
+                'created_status' => $createdStatus,
+
+            ]);
+
+            // 6. إضافة الخدمات للحجز
+            foreach ($validatedServices as $index => $serviceData) {
+                AppointmentServiceModel::create([
+                    'appointment_id' => $appointment->id,
+                    'service_id' => $serviceData['service']->id,
+                    'service_name' => $serviceData['service']->name,
+                    'duration_minutes' => $serviceData['duration'],
+                    'price' => $serviceData['price'],
+                    'sequence_order' => $index + 1,
+                ]);
+            }
+
+            // 7. مسح الـ cache للتوفر
+            foreach ($validatedServices as $serviceData) {
+                $this->availabilityService->clearProviderCache($serviceData['provider']->id);
+                $this->availabilityService->clearServiceCache($serviceData['service']->id);
+            }
+
+            // 8. إرجاع الحجز مع العلاقات
+            return $appointment->load(['services_record', 'provider', 'customer']);
+        });
+    }
+
+    /**
+     * الحصول على الأوقات المتاحة لحجز متعدد الخدمات
+     *
+     * @param array $servicesData
+     * @param string $date
+     * @return array
+     */
+    public function getAvailableSlotsForMultipleServices(array $servicesData, string $date): array
+    {
+        $allSlots = [];
+        $previousEndTime = null;
+
+        foreach ($servicesData as $index => $serviceData) {
+            $service = Service::findOrFail($serviceData['service_id']);
+            $provider = User::findOrFail($serviceData['provider_id']);
+
+            // الحصول على الأوقات المتاحة لهذا المقدم في هذا اليوم
+            $availability = $this->availabilityService->getProviderAvailableSlotsByDate(
+                $service->id,
+                $provider->id,
+                $date
+            );
+
+            $slots = $availability['available_slots'];
+
+            // تصفية الأوقات حسب الخدمة السابقة
+            if ($index > 0 && $previousEndTime) {
+                $slots = array_filter($slots, function ($slot) use ($previousEndTime) {
+                    $slotStart = Carbon::parse($slot['start_time']);
+                    return $slotStart->gte($previousEndTime);
+                });
+            }
+
+            if (empty($slots)) {
+                return [
+                    'success' => false,
+                    'message' => "No available slots found for service at position " . ($index + 1),
+                    'service_index' => $index,
+                    'service_name' => $service->name,
+                ];
+            }
+
+            $allSlots[] = [
+                'service_id' => $service->id,
+                'service_name' => $service->name,
+                'provider_id' => $provider->id,
+                'provider_name' => $provider->full_name,
+                'slots' => array_values($slots),
+            ];
+
+            // تحديث وقت النهاية للخدمة التالية
+            if (!empty($slots)) {
+                $firstSlot = reset($slots);
+                $slotStart = Carbon::parse($date . ' ' . $firstSlot['start_time']);
+                $duration = $this->getEffectiveDuration($provider, $service);
+                $previousEndTime = $slotStart->copy()->addMinutes($duration);
+            }
+        }
+
+        return [
+            'success' => true,
+            'date' => $date,
+            'services_slots' => $allSlots,
+        ];
+    }
+
+    /**
+     * حساب الإجماليات
+     */
+    private function calculateTotals(array $services): array
+    {
+        $subtotal = array_sum(array_column($services, 'price'));
+        $total = round($subtotal, 2);
+        $subtotal =$total / (1 + $this->getTaxRate());
+        $totalDuration = array_sum(array_column($services, 'duration'));
+        $taxRate = $this->getTaxRate();
+        $taxAmount = $total - $subtotal;
+        $totalAmount = $subtotal + $taxAmount;
+
+        return [
+            'subtotal' => round($subtotal, 2),
+            'tax_rate' => $taxRate,
+            'tax_amount' => round($taxAmount, 2),
+            'total_amount' => round($totalAmount, 2),
+            'total_duration' => $totalDuration,
+            'currency' => 'EUR',
+        ];
+    }
+
+    /**
+     * الحصول على المدة الفعلية للخدمة
+     */
+    private function getEffectiveDuration(User $provider, Service $service): int
+    {
+        $pivot = DB::table('provider_service')
+            ->where('provider_id', $provider->id)
+            ->where('service_id', $service->id)
+            ->first();
+
+        return $pivot->custom_duration ?? $service->duration_minutes;
+    }
+
+    /**
+     * الحصول على السعر الفعلي للخدمة
+     */
+    private function getEffectivePrice(User $provider, Service $service): float
+    {
+        $pivot = DB::table('provider_service')
+            ->where('provider_id', $provider->id)
+            ->where('service_id', $service->id)
+            ->first();
+
+        $price = $pivot->custom_price ?? $service->display_price;
+        return (float) $price;
+    }
+
+    /**
+     * الحصول على نسبة الضريبة
+     */
+    private function getTaxRate(): float
+    {
+        return 19;
+    }
+
+    /**
+     * توليد رقم حجز فريد
+     */
+    private function generateAppointmentNumber(): string
+    {
+        $prefix = 'APT';
+        $date = Carbon::now()->format('Ymd');
+        $random = strtoupper(substr(uniqid(), -6));
+
+        return "{$prefix}-{$date}-{$random}";
+    }
+
+    /**
+     * Confirm payment and activate booking
+     *
+     * @param int $appointmentId
+     * @param User $customer
+     * @param string|null $transactionId
+     * @param array $metadata
+     * @return Appointment
+     * @throws InvalidArgumentException
+     */
+    public function confirmPayment(
+        int $appointmentId,
+        User $customer,
+        ?string $transactionId = null,
+        array $metadata = []
+    ): Appointment {
+        try {
+            $appointment = Appointment::with(['services_record', 'provider', 'customer'])
+                ->findOrFail($appointmentId);
+
+
+                if ($appointment->customer_id !== $customer->id) {
+                throw new InvalidArgumentException(
+                    'ليس لديك صلاحية للوصول إلى هذا الحجز'
+                );
+            }
+
+
+            // if ($appointment->created_status == 1) {
+            //     throw new InvalidArgumentException(
+            //         'الحجز مفعل بالفعل'
+            //     );
+            // }
+
+
+            if (in_array($appointment->status->value, [\App\Enum\AppointmentStatus::USER_CANCELLED->value, \App\Enum\AppointmentStatus::ADMIN_CANCELLED->value])) {
+                throw new InvalidArgumentException(
+                    'لا يمكن تأكيد دفع حجز ملغي'
+                );
+            }
+
+
+            $appointment->update([
+                'created_status' => 1,
+                'payment_status' => \App\Enum\PaymentStatus::PAID_ONLINE,
+            ]);
+
+            // إنشاء سجل الدفع (اختياري)
+            if ($transactionId) {
+                \App\Models\Payment::create([
+                    'payment_number' => \App\Models\Payment::generatePaymentNumber(),
+                    'amount' => $appointment->total_amount,
+                    'subtotal' => $appointment->subtotal,
+                    'tax_amount' => $appointment->tax_amount,
+                    'status' => \App\Enum\PaymentStatus::PAID_ONLINE,
+                    'type' => \App\Models\Payment::TYPE_FULL,
+                    'paymentable_id' => $appointment->id,
+                    'paymentable_type' => Appointment::class,
+                    'payment_gateway_id' => $transactionId,
+                    'payment_metadata' => $metadata,
+                ]);
+            }
+
+            // مسح الـ cache للتوفر
+            $this->availabilityService->clearProviderCache($appointment->provider_id);
+
+            return $appointment->fresh(['services_record', 'provider', 'customer']);
+
+        } catch (InvalidArgumentException $e) {
+            throw $e;
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            throw new InvalidArgumentException('الحجز المطلوب غير موجود');
+        } catch (\Exception $e) {
+            throw new InvalidArgumentException(
+                'حدث خطأ أثناء تأكيد الدفع: ' . $e->getMessage()
+            );
+        }
+    }
+}
+
+++++++++++++++++++++
+
+BookingValidationService.php
+<?php
+
+namespace App\Services;
+
+use App\Models\Appointment;
+use App\Models\ProviderTimeOff;
+use App\Models\SalonSetting;
+use App\Models\Service;
+use App\Models\User;
+use App\Enum\AppointmentStatus;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
+
+
+class BookingValidationService
+{
+
+    public function validateBasicData(array $services, string $date): void
+    {
+        if (empty($services)) {
+            throw new InvalidArgumentException('At least one service must be selected');
+        }
+
+        $max_services_per_booking = SettingsService::get('max_services_per_booking', 10);
+
+        if (count($services) > $max_services_per_booking) {
+            throw new InvalidArgumentException("Maximum {$max_services_per_booking} services per booking");
+        }
+
+        $bookingDate = Carbon::parse($date);
+
+        if ($bookingDate->lt(Carbon::today())) {
+            throw new InvalidArgumentException('Cannot book in the past');
+        }
+
+        // $max_booking_days = get_setting('max_booking_days', 30);
+        $max_booking_days = intval(SettingsService::get('max_booking_days', 10));
+
+        if ($bookingDate->gt(Carbon::today()->addDays($max_booking_days))) {
+            throw new InvalidArgumentException('Cannot book more than ' . $max_booking_days . ' days in advance');
+        }
+
+        $serviceIds = array_column($services, 'service_id');
+        if (count($serviceIds) !== count(array_unique($serviceIds))) {
+            throw new InvalidArgumentException('Duplicate services are not allowed in the same booking');
+        }
+    }
+
+
+    public function validateProviderOffersService(User $provider, Service $service): void
+    {
+        $offers = DB::table('provider_service')
+            ->where('provider_id', $provider->id)
+            ->where('service_id', $service->id)
+            ->where('is_active', true)
+            ->exists();
+
+        if (!$offers) {
+            throw new InvalidArgumentException(
+                "Provider '{$provider->full_name}' does not offer service '{$service->name}'"
+            );
+        }
+
+        if (!$provider->is_active) {
+            throw new InvalidArgumentException("Provider '{$provider->full_name}' is not active");
+        }
+
+        if (!$service->is_active) {
+            throw new InvalidArgumentException("Service '{$service->name}' is not active");
+        }
+    }
+
+
+    public function validateSequentialTiming(?Carbon $previousEndTime, Carbon $currentStartTime, int $serviceIndex): void
+    {
+        if ($previousEndTime === null) {
+            return;
+        }
+
+        if ($currentStartTime->lt($previousEndTime)) {
+            throw new InvalidArgumentException(
+                "Service at position {$serviceIndex} start time ({$currentStartTime->format('H:i')}) " .
+                "must be after or equal to previous service end time ({$previousEndTime->format('H:i')}). " .
+                "Services must be sequential."
+            );
+        }
+
+        // Optional: Check for excessive gaps (more than 2 hours)
+        if ($currentStartTime->diffInMinutes($previousEndTime) > 120) {
+            // You can add a warning or log here
+        }
+    }
+
+
+    public function validateTimeSlotAvailability(
+        User $provider,
+        Service $service,
+        Carbon $startTime,
+        Carbon $endTime
+    ): void {
+        $date = $startTime->format('Y-m-d');
+        $dayOfWeek = $startTime->dayOfWeek;
+
+        // 1. Check provider's work schedule
+        $schedule = DB::table('provider_scheduled_works')
+            ->where('user_id', $provider->id)
+            ->where('day_of_week', $dayOfWeek)
+            ->where('is_work_day', true)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$schedule) {
+            throw new InvalidArgumentException(
+                "Provider '{$provider->full_name}' does not work on " . $startTime->format('l')
+            );
+        }
+
+        // 2. Check time is within working hours
+        $workStart = Carbon::parse($date . ' ' . $schedule->start_time);
+        $workEnd = Carbon::parse($date . ' ' . $schedule->end_time);
+
+        if ($startTime->lt($workStart) || $endTime->gt($workEnd)) {
+            throw new InvalidArgumentException(
+                "Time slot is outside provider's working hours " .
+                "({$workStart->format('H:i')} - {$workEnd->format('H:i')})"
+            );
+        }
+
+        // 3. Check for full day time off
+        $hasFullDayOff = ProviderTimeOff::where('user_id', $provider->id)
+            ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
+            ->where('start_date', '<=', $date)
+            ->where('end_date', '>=', $date)
+            ->exists();
+
+        if ($hasFullDayOff) {
+            throw new InvalidArgumentException(
+                "Provider '{$provider->full_name}' is not available on " . $startTime->format('Y-m-d')
+            );
+        }
+
+        // 4. Check for hourly time off conflicts
+        $hasHourlyTimeOff = ProviderTimeOff::where('user_id', $provider->id)
+            ->where('type', ProviderTimeOff::TYPE_HOURLY)
+            ->whereDate('start_date', $date)
+            ->where(function ($query) use ($startTime, $endTime, $date) {
+                $query->where(function ($q) use ($startTime, $endTime, $date) {
+                    $q->whereRaw("TIME(CONCAT(?, ' ', start_time)) < ?", [$date, $endTime->format('H:i:s')])
+                        ->whereRaw("TIME(CONCAT(?, ' ', end_time)) > ?", [$date, $startTime->format('H:i:s')]);
+                });
+            })
+            ->exists();
+
+        if ($hasHourlyTimeOff) {
+            throw new InvalidArgumentException(
+                "Provider has time off during the requested time slot"
+            );
+        }
+
+        // 5. Check for conflicting appointments
+        $hasConflictingAppointment = Appointment::where('provider_id', $provider->id)
+            ->whereDate('appointment_date', $date)
+            // TODO: rmov created_status check and make job for cleaning unpaid bookings
+            ->where('created_status', 1)
+            ->whereIn('status', [AppointmentStatus::PENDING->value, AppointmentStatus::COMPLETED->value])
+            ->where(function ($query) use ($startTime, $endTime) {
+                $query->where(function ($q) use ($startTime, $endTime) {
+                    $q->where('start_time', '<', $endTime)
+                        ->where('end_time', '>', $startTime);
+                });
+            })
+            ->exists();
+
+        if ($hasConflictingAppointment) {
+            throw new InvalidArgumentException(
+                "Time slot {$startTime->format('H:i')} - {$endTime->format('H:i')} " .
+                "is already booked for provider '{$provider->full_name}'"
+            );
+        }
+
+        // 6. Check time slot is not in the past
+        if ($startTime->lt(Carbon::now())) {
+            throw new InvalidArgumentException(
+                "Cannot book time slot in the past"
+            );
+        }
+
+        // 7. Check minimum advance booking time
+        $book_buffer = intval(get_setting('book_buffer', 60));
+
+        if ($startTime->lt(Carbon::now()->addMinutes($book_buffer))) {
+            throw new InvalidArgumentException(
+                "Booking must be at least {$book_buffer} minutes in advance"
+            );
+        }
+    }
+
+    /**
+     * Validate no duplicate booking
+     */
+    public function validateNoDuplicateBooking(User $customer, Carbon $startTime, array $serviceIds): void
+    {
+        $existingBooking = Appointment::where('customer_id', $customer->id)
+            ->where('start_time', $startTime)
+            ->whereIn('status', [AppointmentStatus::PENDING->value])
+            ->whereHas('services', function ($query) use ($serviceIds) {
+                $query->whereIn('services.id', $serviceIds);
+            })
+            ->exists();
+
+        if ($existingBooking) {
+            throw new InvalidArgumentException(
+                'You already have a booking for the same time and services'
+            );
+        }
+    }
+
+
+        /**
+     * Validate no duplicate booking for guest customers using phone number
+     *
+     * @param string|null $customerPhone
+     * @param Carbon $startTime
+     * @param array $serviceIds
+     * @throws InvalidArgumentException
+     */
+    public function validateNoDuplicateBookingByPhone(
+        ?string $customerPhone,
+        Carbon $startTime,
+        array $serviceIds
+    ): void {
+
+        if (empty($customerPhone)) {
+            return;
+        }
+
+        $existingBooking = Appointment::where('customer_phone', $customerPhone)
+            ->where('start_time', $startTime)
+            ->whereIn('status', [AppointmentStatus::PENDING->value])
+            ->whereHas('services', function ($query) use ($serviceIds) {
+                $query->whereIn('services.id', $serviceIds);
+            })
+            ->exists();
+
+        if ($existingBooking) {
+            throw new InvalidArgumentException(
+                'You already have a booking for the same time and services'
+            );
+        }
+    }
+
+    /**
+     * Validate daily booking limit
+     */
+    public function validateDailyBookingLimit(User $customer, string $date): void
+    {
+        $max_daily_bookings = SettingsService::get('max_daily_bookings', 10);
+
+
+
+        if ($max_daily_bookings) {
+            $todayBookingsCount = Appointment::where('customer_id', $customer->id)
+                ->whereDate('appointment_date', $date)
+                ->whereIn('status', [AppointmentStatus::PENDING->value])
+                ->count();
+
+            if ($todayBookingsCount >= $max_daily_bookings) {
+                throw new InvalidArgumentException(
+                    "Maximum {$max_daily_bookings} bookings per day reached"
+                );
+            }
+        }
+    }
+
+
+}
+
+++++++++++++++++++++
+
+CustomFileUploadController.php
+<?php
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\Validator;
+use Livewire\Features\SupportFileUploads\FileUploadConfiguration;
+use Livewire\Features\SupportFileUploads\FileUploadController;
+use Illuminate\Support\Str;
+
+class CustomFileUploadController extends FileUploadController
+{
+    public function validateAndStore($files, $disk)
+    {
+        Validator::make(['files' => $files], [
+            'files.*' => FileUploadConfiguration::rules()
+        ])->validate();
+
+        $fileHashPaths = collect($files)->map(function ($file) use ($disk) {
+            // Use a shorter filename instead of embedding the full original name
+            $filename = $this->generateShortHashName($file);
+
+            return $file->storeAs('/' . FileUploadConfiguration::path(), $filename, [
+                'disk' => $disk
+            ]);
+        });
+
+        // Strip out the temporary upload directory from the paths.
+        return $fileHashPaths->map(function ($path) {
+            return str_replace(FileUploadConfiguration::path('/'), '', $path);
+        });
+    }
+
+    /**
+     * Generate a shorter hash name for uploaded files
+     * This prevents "file path too long" errors on Windows with Arabic filenames
+     */
+    protected function generateShortHashName($file): string
+    {
+        $hash = Str::random(30);
+        // Store only a short hash of the original filename instead of base64 encoding it
+        // This keeps filenames short while still being unique
+        $nameHash = substr(md5($file->getClientOriginalName()), 0, 10);
+        $meta = '-meta' . $nameHash . '-';
+        $extension = '.' . $file->getClientOriginalExtension();
+
+        return $hash . $meta . $extension;
+    }
+}
+
+++++++++++++++++++++
+
+CustomTemporaryUploadedFile.php
+<?php
+
+namespace App\Services;
+
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
+use Illuminate\Support\Str;
+
+class CustomTemporaryUploadedFile extends TemporaryUploadedFile
+{
+    /**
+     * Override the method to generate shorter filenames
+     */
+    public static function generateHashNameWithOriginalNameEmbedded($file)
+    {
+        $hash = Str::random(30);
+        // Store only a short hash of the original filename instead of base64 encoding it
+        $nameHash = substr(md5($file->getClientOriginalName()), 0, 10);
+        $meta = '-meta' . $nameHash . '-';
+        $extension = '.' . $file->getClientOriginalExtension();
+
+        return $hash . $meta . $extension;
+    }
+
+    /**
+     * Since we changed how we encode the filename, we need to update extraction
+     * For our short hash format, we can't extract the original name
+     * So we return a placeholder
+     */
+    public function extractOriginalNameFromFilePath($path)
+    {
+        // Try the new format first (short hash)
+        if (preg_match('/-meta([a-f0-9]{10})-/', $path, $matches)) {
+            // We can't recover the original name from the hash
+            // Return a generic name with the correct extension
+            $extension = pathinfo($path, PATHINFO_EXTENSION);
+            return 'file.' . $extension;
+        }
+
+        // Fall back to the original method for old files
+        try {
+            return base64_decode(head(explode('-', last(explode('-meta', str($path)->replace('_', '/'))))));
+        } catch (\Exception $e) {
+            $extension = pathinfo($path, PATHINFO_EXTENSION);
+            return 'file.' . $extension;
+        }
+    }
+}
+
+++++++++++++++++++++
+
+DocumentNumberGenerator.php
+<?php
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\DB;
+
+class DocumentNumberGenerator
+{
+    public static function generate(
+        string $table,
+        string $column,
+        string $prefix
+    ): string {
+        return DB::transaction(function () use ($table, $column, $prefix) {
+
+            $year  = now()->format('Y');
+
+            $lastRecord = DB::table($table)
+                ->whereYear('created_at', $year)
+                ->orderByDesc('id')
+                ->lockForUpdate()
+                ->first();
+
+            $lastNumber = 0;
+
+            if ($lastRecord) {
+                preg_match('/(\d+)$/', $lastRecord->$column, $matches);
+                $lastNumber = (int) ($matches[1] ?? 0);
+            }
+
+            $nextNumber = $lastNumber + 1;
+
+            return sprintf(
+                '%s-%s-%06d',
+                $prefix,
+                $year,
+                $nextNumber
+            );
+        });
+    }
+}
+
+++++++++++++++++++++
+
+InvoiceService.php
+<?php
+
+namespace App\Services;
+
+use App\Enum\InvoiceStatus;
+use App\Enum\PaymentStatus;
+use App\Models\Appointment;
+use App\Models\Invoice;
+use App\Models\InvoiceItem;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+
+/**
+ * InvoiceService - خدمة احترافية لإدارة الفواتير
+ *
+ * هذه الخدمة مصممة لتكون قابلة للتوسع مستقبلاً لدعم:
+ * - TSE (Technical Security Environment) للتوقيع الرقمي
+ * - الربط مع نظام الضرائب الألماني (ELSTER/DATEV)
+ * - معايير الفوترة الإلكترونية الأوروبية
+ */
+class InvoiceService
+{
+    /**
+     * إنشاء فاتورة من حجز مع جميع البنود والضرائب
+     *
+     * @param Appointment $appointment الحجز المراد إنشاء فاتورة له
+     * @param string $paymentType نوع الدفع (PAID_ONSTIE_CASH, PAID_ONSTIE_CARD, PAID_ONLINE)
+     * @param float $amountPaid المبلغ المدفوع (قد يكون أقل من الإجمالي في حالة الخصم)
+     * @param string|null $notes ملاحظات إضافية
+     * @param int|null $adjustedDuration المدة المعدلة بالدقائق (اختياري)
+     * @param bool $amountIncludesTax هل المبلغ يتضمن الضريبة (افتراضياً true)
+     * @return Invoice الفاتورة المنشأة
+     * @throws \Exception في حالة حدوث خطأ أثناء الإنشاء
+     */
+    public function createInvoiceFromAppointment(
+        Appointment $appointment,
+        string $paymentType,
+        float $amountPaid,
+        ?string $notes = null,
+        ?int $adjustedDuration = null,
+        bool $amountIncludesTax = true
+    ): Invoice {
+        try {
+            DB::beginTransaction();
+
+            // الحصول على معدل الضريبة من الإعدادات
+            $taxRate = SettingsService::get('tax_rate', 19);
+
+            // حساب الضريبة العكسية إذا كان المبلغ يتضمن الضريبة
+            if ($amountIncludesTax) {
+                $taxCalculation = $this->calculateReverseTax($amountPaid, $taxRate);
+                $subtotal = $taxCalculation['subtotal'];
+                $taxAmount = $taxCalculation['tax_amount'];
+                $total = $taxCalculation['total'];
+            } else {
+                // حساب عادي (المبلغ لا يتضمن الضريبة)
+                $subtotal = $amountPaid;
+                $taxAmount = $amountPaid * ($taxRate / 100);
+                $total = $amountPaid + $taxAmount;
+            }
+
+            // تحديث مدة الحجز إذا تم تعديلها
+            if ($adjustedDuration !== null && $adjustedDuration !== $appointment->duration_minutes) {
+                $this->updateAppointmentDuration($appointment, $adjustedDuration);
+            }
+
+            // إنشاء الفاتورة الرئيسية
+            $invoice = $this->createInvoice(
+                $appointment,
+                $taxRate,
+                $paymentType,
+                $total,
+                $notes,
+                $subtotal,
+                $taxAmount
+            );
+
+            // إنشاء بنود الفاتورة من الخدمات
+            $this->createInvoiceItems($invoice, $appointment, $taxRate);
+
+            // تحديث حالة الدفع للحجز
+            $this->updateAppointmentPaymentStatus($appointment, $paymentType);
+
+            // TODO: في المستقبل - إضافة التوقيع الرقمي TSE هنا
+            // $this->signInvoiceWithTSE($invoice);
+
+            // TODO: في المستقبل - إرسال الفاتورة لنظام الضرائب الألماني
+            // $this->submitToGermanTaxAuthority($invoice);
+
+            DB::commit();
+
+            // تسجيل العملية الناجحة
+            Log::info('Invoice created successfully', [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'appointment_id' => $appointment->id,
+                'amount_paid' => $amountPaid,
+                'payment_type' => $paymentType,
+            ]);
+
+            return $invoice;
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            // تسجيل الخطأ
+            Log::error('Failed to create invoice', [
+                'appointment_id' => $appointment->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * إنشاء الفاتورة الرئيسية
+     */
+    private function createInvoice(
+        Appointment $appointment,
+        float $taxRate,
+        string $paymentType,
+        float $totalAmount,
+        ?string $notes,
+        float $subtotal,
+        float $taxAmount
+    ): Invoice {
+        $invoiceData = [
+            'payment_method' => PaymentStatus::from($paymentType)->label(),
+            'amount_paid' => $totalAmount,
+            'paid_at' => now()->toDateTimeString(),
+            'paid_by' => Auth::user()?->full_name ?? 'System',
+            'payment_type' => $paymentType,
+        ];
+
+        // إضافة معلومات الخصم إذا كان المبلغ المدفوع أقل من الإجمالي الأصلي
+        if ($totalAmount < $appointment->total_amount) {
+            $discount = $appointment->total_amount - $totalAmount;
+            $discountPercentage = ($discount / $appointment->total_amount) * 100;
+
+            $invoiceData['discount_amount'] = round($discount, 2);
+            $invoiceData['discount_percentage'] = round($discountPercentage, 2);
+            $invoiceData['original_amount'] = $appointment->total_amount;
+        }
+
+        return Invoice::create([
+            'appointment_id' => $appointment->id,
+            'customer_id' => $appointment->customer_id,
+            'invoice_number' => Invoice::generateInvoiceNumber(),
+            'subtotal' => $subtotal,
+            'tax_amount' => $taxAmount,
+            'tax_rate' => $taxRate,
+            'total_amount' => $totalAmount,
+            'status' => InvoiceStatus::PAID,
+            'notes' => $notes,
+            'invoice_data' => $invoiceData,
+        ]);
+    }
+
+    /**
+     * إنشاء بنود الفاتورة من خدمات الحجز
+     */
+    private function createInvoiceItems(Invoice $invoice, Appointment $appointment, float $taxRate): void
+    {
+        $TaxCalculatorService = app(TaxCalculatorService::class);
+        $taxRate = get_setting('tax_rate', '0');
+        foreach ($appointment->services as $service) {
+            // TODO::fix price culculation
+            $tax_result = $TaxCalculatorService->extractTax($unitPrice, $taxRate);
+            $unitPrice = $tax_result['net'];
+            $taxAmount = $tax_result['tax'];
+            $totalAmount = $tax_result['gross'];
+
+            InvoiceItem::create([
+                'invoice_id' => $invoice->id,
+                'description' => $service->pivot->service_name,
+                'quantity' => 1,
+                'unit_price' => $unitPrice,
+                'tax_rate' => $taxRate,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $totalAmount,
+                'itemable_id' => $service->id,
+                'itemable_type' => get_class($service),
+            ]);
+        }
+    }
+
+    /**
+     * تحديث مدة الحجز
+     *
+     * @param Appointment $appointment
+     * @param int $newDurationMinutes المدة الجديدة بالدقائق
+     * @return void
+     */
+    private function updateAppointmentDuration(Appointment $appointment, int $newDurationMinutes): void
+    {
+        // حساب وقت النهاية الجديد بناءً على المدة المعدلة
+        $newEndTime = $appointment->start_time->copy()->addMinutes($newDurationMinutes);
+
+        $appointment->update([
+            'duration_minutes' => $newDurationMinutes,
+            'end_time' => $newEndTime,
+        ]);
+
+        Log::info('Appointment duration updated', [
+            'appointment_id' => $appointment->id,
+            'old_duration' => $appointment->getOriginal('duration_minutes'),
+            'new_duration' => $newDurationMinutes,
+            'new_end_time' => $newEndTime->toDateTimeString(),
+        ]);
+    }
+
+    /**
+     * تحديث حالة الدفع للحجز
+     */
+    private function updateAppointmentPaymentStatus(Appointment $appointment, string $paymentType): void
+    {
+        $appointment->update([
+            'payment_status' => PaymentStatus::from($paymentType),
+            'payment_method' => PaymentStatus::from($paymentType)->label(),
+        ]);
+    }
+
+    /**
+     * حساب الضريبة العكسية (المبلغ يتضمن الضريبة)
+     *
+     * @param float $totalWithTax المبلغ الإجمالي الذي يتضمن الضريبة
+     * @param float $taxRate معدل الضريبة (مثلاً 19 للضريبة 19%)
+     * @return array ['subtotal' => المبلغ قبل الضريبة, 'tax_amount' => قيمة الضريبة, 'total' => المبلغ الإجمالي]
+     */
+    public function calculateReverseTax(float $totalWithTax, float $taxRate): array
+    {
+        // الصيغة: المبلغ قبل الضريبة = المبلغ الإجمالي / (1 + معدل الضريبة/100)
+        $subtotal = $totalWithTax / (1 + ($taxRate / 100));
+        $taxAmount = $totalWithTax - $subtotal;
+
+        return [
+            'subtotal' => round($subtotal, 2),
+            'tax_amount' => round($taxAmount, 2),
+            'total' => round($totalWithTax, 2),
+        ];
+    }
+
+    /**
+     * التوقيع الرقمي للفاتورة باستخدام TSE
+     *
+     * سيتم تنفيذ هذه الوظيفة مستقبلاً للامتثال للمعايير الألمانية
+     *
+     * @param Invoice $invoice
+     * @return void
+     */
+    private function signInvoiceWithTSE(Invoice $invoice): void
+    {
+        // TODO: تنفيذ التوقيع الرقمي TSE
+        // سيتم إضافة:
+        // - الاتصال بخادم TSE Cloud
+        // - الحصول على التوقيع الرقمي
+        // - حفظ معلومات التوقيع في invoice_data
+        // - رقم المعاملة الفريد (Transaction Number)
+        // - الطابع الزمني المعتمد (Certified Timestamp)
+        // - البيانات المشفرة (Signature Data)
+    }
+
+    /**
+     * إرسال الفاتورة إلى نظام الضرائب الألماني
+     *
+     * سيتم تنفيذ هذه الوظيفة مستقبلاً للامتثال الضريبي
+     *
+     * @param Invoice $invoice
+     * @return void
+     */
+    private function submitToGermanTaxAuthority(Invoice $invoice): void
+    {
+        // TODO: تنفيذ الربط مع نظام الضرائب الألماني
+        // سيتم إضافة:
+        // - الاتصال بـ ELSTER API أو DATEV
+        // - تحويل الفاتورة إلى تنسيق XRechnung أو ZUGFeRD
+        // - إرسال البيانات الضريبية
+        // - حفظ رقم التأكيد من السلطات الضريبية
+    }
+
+    /**
+     * التحقق من صحة الفاتورة قبل الإنشاء
+     *
+     * @param Appointment $appointment
+     * @return bool
+     * @throws \Exception
+     */
+    public function validateInvoiceCreation(Appointment $appointment): bool
+    {
+        // التحقق من عدم وجود فاتورة سابقة
+        if ($appointment->invoice()->where('status', InvoiceStatus::PAID)->exists()) {
+            throw new \Exception('هذا الحجز لديه فاتورة مدفوعة مسبقاً');
+        }
+
+        // التحقق من وجود خدمات
+        if ($appointment->services->isEmpty()) {
+            throw new \Exception('لا يمكن إنشاء فاتورة لحجز بدون خدمات');
+        }
+
+        // التحقق من حالة الحجز
+        if ($appointment->status->value === 'admin_cancelled' || $appointment->status->value === 'user_cancelled') {
+            throw new \Exception('لا يمكن إنشاء فاتورة لحجز ملغي');
+        }
+
+        return true;
+    }
+
+    /**
+     * الحصول على معلومات الفاتورة بتنسيق مناسب للعرض
+     *
+     * @param Invoice $invoice
+     * @return array
+     */
+    public function getInvoiceDetails(Invoice $invoice): array
+    {
+        return [
+            'invoice_number' => $invoice->invoice_number,
+            'customer' => $invoice->customer->full_name,
+            'appointment' => $invoice->appointment->number,
+            'subtotal' => $invoice->subtotal,
+            'tax_rate' => $invoice->tax_rate,
+            'tax_amount' => $invoice->tax_amount,
+            'total_amount' => $invoice->total_amount,
+            'status' => $invoice->status->label(),
+            'items' => $invoice->items->map(fn($item) => [
+                'description' => $item->description,
+                'quantity' => $item->quantity,
+                'unit_price' => $item->unit_price,
+                'tax_amount' => $item->tax_amount,
+                'total_amount' => $item->total_amount,
+            ]),
+            'payment_info' => $invoice->invoice_data,
+            'created_at' => $invoice->created_at,
+        ];
+    }
+
+    /**
+     * إنشاء فاتورة مسودة بدون رقم
+     */
+    private function createDraftInvoice(Appointment $appointment): Invoice
+    {
+        $taxRate = (float) get_setting('tax_rate', 19);
+
+        return Invoice::create([
+            'appointment_id' => $appointment->id,
+            'customer_id' => $appointment->customer_id,
+            'invoice_number' => null,
+            'subtotal' => $appointment->subtotal,
+            'tax_amount' => $appointment->tax_amount,
+            'tax_rate' => $taxRate,
+            'total_amount' => $appointment->total_amount,
+            'status' => InvoiceStatus::DRAFT,
+            'notes' => 'Invoice draft - awaiting payment',
+        ]);
+    }
+
+        public function createDtaftInvoiceFromAppointment(
+        Appointment $appointment,
+        string $paymentType,
+        float $amountPaid,
+        ?string $notes = null,
+        ?int $adjustedDuration = null,
+        bool $amountIncludesTax = true
+    ): Invoice {
+        try {
+            DB::beginTransaction();
+
+            $taxRate = SettingsService::get('tax_rate', 19);
+
+
+            // تحديث مدة الحجز إذا تم تعديلها
+            if ($adjustedDuration !== null && $adjustedDuration !== $appointment->duration_minutes) {
+                $this->updateAppointmentDuration($appointment, $adjustedDuration);
+            }
+
+            // إنشاء الفاتورة الرئيسية
+            $invoice = $this->createDraftInvoice(
+                $appointment
+            );
+
+            // إنشاء بنود الفاتورة من الخدمات
+            $this->createInvoiceItems($invoice, $appointment, $taxRate);
+
+
+            DB::commit();
+
+            // تسجيل العملية الناجحة
+            Log::info('Invoice created successfully', [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'appointment_id' => $appointment->id,
+                'amount_paid' => $amountPaid,
+                'payment_type' => $paymentType,
+            ]);
+
+            return $invoice;
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Failed to create invoice', [
+                'appointment_id' => $appointment->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            throw $e;
+        }
+    }
+}
+
+++++++++++++++++++++
+
+NotificationService.php
+<?php
+namespace App\Services;
+
+use App\Models\User;
+use App\Models\UserDevice;
+use App\Notifications\PhoneNotification;
+use App\Notifications\ToAdminNotification;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
+
+class NotificationService
+{
+
+    public function __construct(
+        protected OneSignalService $oneSignal
+    ) {
+    }
+
+    public function sendNotificationToUser(
+        Collection|array|User $users,
+        string $titleKey,
+        string $messageKey,
+        array $params = [],
+        array $data = []
+    ) {
+
+        if (empty($users)) {
+            return;
+        }
+
+        if ($users instanceof Collection) {
+            $deviceIds = $this->resolveDeviceIdsForUsers($users);
+        } elseif (is_array($users)) {
+            $usersCollection = User::whereIn('id', $users)->get();
+            $deviceIds = $this->resolveDeviceIdsForUsers($usersCollection);
+        } elseif ($users instanceof User) {
+            $deviceIds = $this->resolveDeviceIdsForUsers(collect([$users]));
+        }
+
+        Log::info('Sending notification', [
+            'title_key' => $titleKey,
+            'message_key' => $messageKey,
+            'params' => $params,
+            'data' => $data,
+            'device_ids_count' => count($deviceIds),
+        ]);
+
+
+        $translatedTitle = $this->translateKey($titleKey, $params);
+        $translatedMessage = $this->translateKey($messageKey, $params);
+
+        if (!empty($deviceIds)) {
+            $this->sendToDeviceIds($deviceIds, $translatedTitle, $translatedMessage, $data);
+        }
+        $this->sendToPhoneUsersDatabase($users, $titleKey, $messageKey, $data, $params);
+
+
+    }
+
+    public function resolveDeviceIdsForUsers(Collection $users): array
+    {
+        return UserDevice::query()
+            ->whereIn('user_id', $users->pluck('id'))
+            ->where('is_active', true)
+            ->pluck('device_id')
+            ->unique()
+            ->values()
+            ->toArray();
+    }
+
+    public function sendToDeviceIds(
+        array $deviceIds,
+        string $title,
+        string $message,
+        array $data = [],
+        array $params = []
+    ): void {
+        if (empty($deviceIds)) {
+            return;
+        }
+
+        try {
+
+            $this->oneSignal->sendToMany($deviceIds, $title, $message, $data);
+        } catch (\Throwable $e) {
+            Log::error('Failed to send push notification', [
+                'error' => $e->getMessage(),
+                'device_ids_count' => count($deviceIds),
+            ]);
+        }
+    }
+
+    public function notificationTranslationResolve(string $key, array $data = [], ?string $locale = null)
+    {
+        $paramsKey = $key . '_param';
+
+        $params = $data[$paramsKey] ?? [];
+
+        return __($key, $params, $locale);
+    }
+    // protected function translateKey(string $key, array $params = [], ?string $locale = null): string
+    // {
+    //     if (is_null($locale)) {
+    //         $locale = app()->getLocale();
+    //     }
+    //     return __($key, $params, $locale);
+    // }
+
+    public function translateKey(string $key, array $params = [], ?string $locale = null): string
+    {
+        $locale ??= app()->getLocale();
+
+        $resolvedParams = [];
+
+        foreach ($params as $paramKey => $paramConfig) {
+            // إذا لم تكن بنية جديدة → قيمة مباشرة
+            if (!is_array($paramConfig) || !isset($paramConfig['type'])) {
+                $resolvedParams[$paramKey] = $paramConfig;
+                continue;
+            }
+
+            $resolvedParams[$paramKey] = $this->resolveParam(
+                $paramConfig['type'],
+                $paramConfig ?? null,
+                $locale,
+                $paramConfig
+            );
+        }
+
+        return __($key, $resolvedParams, $locale);
+    }
+
+    public function sendToPhoneUsersDatabase($users, $title, $message, $data = [], $params = [])
+    {
+        Notification::send(
+            $users,
+            new PhoneNotification(
+                $title,
+                $message,
+                $data,
+                $params ?? [],
+            )
+        );
+    }
+
+
+    public function resolveParam(
+        string $type,
+        mixed $value,
+        string $locale,
+        array $config = []
+    ): mixed {
+        $resolverClass = '\\App\\Notifications\\Params\\' . ucfirst($type) . 'ParamResolver';
+        if (!class_exists($resolverClass)) {
+            throw new \RuntimeException("Notification param resolver [$type] not found.");
+        }
+
+        return app($resolverClass)->resolve($value, $locale, $config);
+    }
+
+
+    public function sendToAdminNotification(
+        Collection|array|User $users,
+        string $titleKey,
+        string $messageKey,
+        array $params = [],
+        array $data = []
+    ) {
+
+        Notification::send(
+            $users,
+            new ToAdminNotification(
+                $titleKey,
+                $messageKey,
+                $data,
+                $params ?? [],
+            )
+        );
+    }
+
+}
+
+++++++++++++++++++++
+
+NotificationTranslator.php
+<?php
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\App;
+
+class NotificationTranslator
+{
+    public function translate(string $key, array $params = []): string
+    {
+        $locale = App::getLocale();
+
+        $resolved = [];
+
+        foreach ($params as $param => $config) {
+            if ($config['type'] === 'translate') {
+                $resolved[$param] = __($config['value'], [], $locale);
+            } else {
+                $resolved[$param] = $config['value'];
+            }
+        }
+
+        return __($key, $resolved, $locale);
+    }
+}
+
+++++++++++++++++++++
+
+OneSignalService.php
+<?php
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Throwable;
+
+class OneSignalService
+{
+    protected string $appId;
+    protected string $restApiKey;
+    protected string $baseUrl;
+
+    protected string $appName;
+
+
+    public function __construct()
+    {
+        $this->appId = config('services.onesignal.app_id');
+        $this->restApiKey = config('services.onesignal.rest_api_key');
+        $this->baseUrl = rtrim(config('services.onesignal.base_url', 'https://onesignal.com'), '/');
+        $this->appName = config('app.name', 'Laravel');
+
+    }
+
+    /**
+     * إعداد الـ Client مع الهيدرز المطلوبة
+     */
+    protected function client()
+    {
+        return Http::withHeaders([
+            'Authorization' => 'Basic ' . $this->restApiKey, // مفتاح REST
+            'accept' => 'application/json',
+            'content-type' => 'application/json',
+            'OneSignal-Usage' => env('APP_NAME') . '| Laravel Backend',
+        ]);
+    }
+
+    /**
+     * دالة عامة لإرسال الطلب للـ OneSignal
+     */
+    protected function postNotification(array $payload): array
+    {
+        try {
+            $url = $this->baseUrl . '/api/v1/notifications';
+
+            $response = $this->client()->post($url, $payload);
+
+            if (!$response->successful()) {
+                Log::error('OneSignal API error', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return [
+                    'success' => false,
+                    'status' => $response->status(),
+                    'error' => $response->body(),
+                ];
+            }
+
+            return $response->json();
+        } catch (Throwable $e) {
+            Log::error('OneSignal exception', ['exception' => $e]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * إرسال إشعار لكل الأجهزة (كل المشتركين)
+     */
+    public function sendToAll(string $title, string $body, array $data = []): array
+    {
+        $payload = [
+            'app_id' => $this->appId,
+            'included_segments' => ['All'],
+            'headings' => [
+                'en' => $title,   // عنوان الإشعار
+            ],
+            'contents' => [
+                'en' => $body,    // نص الإشعار
+            ],
+        ];
+        if (!empty($data)) {
+            $payload['data'] = $data;
+        }
+        return $this->postNotification($payload);
+    }
+
+    /**
+     * إرسال إشعار لجهاز واحد عن طريق player_id
+     */
+    public function sendToDevice(string $playerId, string $title, string $body, array $data = []): array
+    {
+        $payload = [
+            'app_id' => $this->appId,
+            'include_player_ids' => [$playerId],
+            'headings' => [
+                'en' => $title,
+            ],
+            'contents' => [
+                'en' => $body,
+            ],
+        ];
+        if (!empty($data)) {
+            $payload['data'] = $data;
+        }
+        return $this->postNotification($payload);
+    }
+
+    /**
+     * إرسال إشعار لمجموعة أجهزة (أكثر من player_id)
+     */
+    public function sendToMany(array $playerIds, string $title, string $body, array $data = []): array
+    {
+        $playerIds = array_filter($playerIds, fn($id) => !empty($id));
+
+        $payload = [
+            'app_id' => $this->appId,
+            'include_player_ids' => $playerIds,
+            'headings' => [
+                'en' => $title,
+            ],
+            'contents' => [
+                'en' => $body,
+            ],
+            'data' => $data,
+        ];
+
+        return $this->postNotification($payload);
+    }
+}
+
+++++++++++++++++++++
+
+OtpService.php
+<?php
+
+namespace App\Services;
+
+use App\Enum\OtpType;
+use App\Models\Otp;
+use Illuminate\Support\Str;
+use App\Models\User;
+use App\Models\PasswordReset;
+use Illuminate\Support\Facades\Mail;
+use Carbon\Carbon;
+
+class OtpService
+{
+    public function generate(User $user, $lenth = 6, OtpType $type = OtpType::EMAIL_OTP): string
+    {
+        $otp = str_pad(random_int(0, 999999), $lenth, '0', STR_PAD_LEFT);
+
+        Otp::where('email', $user->email)
+            ->where('used', false)
+            ->update(['used' => true]);
+
+        Otp::create([
+            'email' => $user->email,
+            'otp' => $otp,
+            'type' => $type->value,
+            'expires_at' => Carbon::now()->addMinutes(10),
+        ]);
+
+        if ($type->value == OtpType::EMAIL_OTP->value) {
+
+            // Mail::to($user->email)->send(new \App\Mail\SendOtpMail($otp));
+
+        }
+
+        if ($type->value == OtpType::SMS_OTP->value) {
+
+        }
+
+
+
+        return $otp;
+    }
+
+    public function validate(string $target, string $otp, OtpType $type = OtpType::EMAIL_OTP): bool
+    {
+        if ($type->value == OtpType::EMAIL_OTP->value) {
+            $record = Otp::where('email', $target)
+                ->where('otp', $otp)
+                ->where('used', false)
+                ->where('expires_at', '>', now())
+                ->first();
+        } else if ($type->value == OtpType::SMS_OTP->value) {
+            $record = Otp::where('phone', $target)
+                ->where('otp', $otp)
+                ->where('used', false)
+                ->where('expires_at', '>', now())
+                ->first( );
+        }
+
+
+        if (!$record) {
+            return false;
+        }
+
+        $record->update(['used' => true]);
+        return true;
+    }
+}
+++++++++++++++++++++
+
+PageRenderService.php
+<?php
+
+namespace App\Services;
+
+use App\Exceptions\PageNotFoundException;
+use App\Exceptions\PageTranslationMissingException;
+use App\Models\SamplePage;
+use Illuminate\Contracts\View\View;
+
+class PageRenderService
+{
+
+    public function render(string $pageKey, ?string $lang = null): View
+    {
+        $lang ??= app()->getLocale();
+        $fallback = (string) config('app.fallback_locale');
+
+        // 1) جلب الصفحة + تحميل الترجمات eager loading
+        $page = SamplePage::query()
+            ->byKey($pageKey)
+            ->with('translations')
+            ->first();
+
+        if (! $page) {
+                throw new \Exception('Page not found: ' . $pageKey);
+        }
+
+
+        $previousLocale = app()->getLocale();
+        app()->setLocale($lang);
+
+        try {
+            $title = $page->title;
+            $content = $page->content;
+            $meta = $page->meta;
+
+
+            if ($title === null && $content === null && $meta === null) {
+                throw new \Exception('Page translation missing: ' . $pageKey);
+
+            }
+
+            $metaPayload = [
+                'title' => is_array($meta) ? ($meta['title'] ?? null) : null,
+                'description' => is_array($meta) ? ($meta['description'] ?? null) : null,
+            ];
+
+            return view($page->template, [
+                'page' => $page,
+                'title' => $title,
+                'content' => $content,
+                'meta' => $metaPayload,
+            ]);
+        } finally {
+            app()->setLocale($previousLocale);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+ProviderService.php
+<?php
+
+namespace App\Services;
+
+use App\Models\User;
+use App\Models\Service;
+use App\Models\Appointment;
+use App\Models\Language;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+
+class ProviderService
+{
+    /**
+
+     * @param array $filters
+     * @param int $perPage
+     * @return LengthAwarePaginator
+     */
+    public function getProvidersWithServices(array $filters = [], int $perPage = 15)
+    {
+        $query = User::with(['services.translations', 'services', 'branch'])
+            ->whereHas('services')
+            ->where('is_active', true);
+
+        if (!empty($filters['search'])) {
+            $search = $filters['search'];
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', '%' . $search . '%')
+                    ->orWhere('last_name', 'like', '%' . $search . '%')
+                    ->orWhere('email', 'like', '%' . $search . '%');
+            });
+        }
+
+        if (!empty($filters['branch_id'])) {
+            $query->where('branch_id', $filters['branch_id']);
+        }
+
+        if (!empty($filters['service_id'])) {
+            $query->whereHas('services', function ($q) use ($filters) {
+                $q->where('services.id', $filters['service_id']);
+            });
+        }
+
+        $sortBy = $filters['sort_by'] ?? 'first_name';
+        $sortDirection = $filters['sort_direction'] ?? 'asc';
+        $query->orderBy($sortBy, $sortDirection);
+
+        return $query->paginate($perPage);
+    }
+
+    /**
+     * @param int $providerId
+     * @param string|null $locale
+     * @return array
+     */
+    public function getProviderDetailsWithServices(int $providerId, ?string $locale = null): array
+    {
+        $language = $locale ?
+            Language::where('code', $locale)->first() :
+            Language::where('is_default', true)->first();
+
+        if (!$language) {
+            $language = Language::first();
+        }
+
+        $provider = User::with([
+                'services.translations',
+                'services.category.translations',
+                'services.reviews',
+                'branch'
+            ])
+            ->where('is_active', true)
+            ->findOrFail($providerId);
+
+        $enhancedServices = $provider->services->map(function ($service) use ($providerId, $language) {
+            $bookingCount = Appointment::where('provider_id', $providerId)
+                ->whereHas('services', function ($query) use ($service) {
+                    $query->where('services.id', $service->id);
+                })
+                ->count();
+
+            $averageRating = $service->reviews->avg('rating') ?? 0;
+
+            $service->booking_count = $bookingCount;
+            $service->average_rating = round($averageRating, 1);
+            $service->review_count = $service->reviews->count();
+
+            $service->translated_name = $this->getTranslatedValue(
+                $service->translations,
+                $language->id,
+                'name',
+                $service->name
+            );
+
+            $service->translated_description = $this->getTranslatedValue(
+                $service->translations,
+                $language->id,
+                'description',
+                $service->description
+            );
+
+            // Handle category translations
+            if ($service->category) {
+                $service->category->translated_name = $this->getTranslatedValue(
+                    $service->category->translations,
+                    $language->id,
+                    'name',
+                    $service->category->name
+                );
+
+                $service->category->translated_description = $this->getTranslatedValue(
+                    $service->category->translations,
+                    $language->id,
+                    'description',
+                    $service->category->description
+                );
+            }
+
+            return $service;
+        });
+
+        return [
+            'provider' => $provider,
+            'services' => $enhancedServices,
+            'total_booking_count' => $this->getProviderTotalBookings($providerId),
+        ];
+    }
+
+    /**
+     * @param mixed $translations
+     * @param int $languageId
+     * @param string $field
+     * @param string $defaultValue
+     * @return string
+     */
+    private function getTranslatedValue($translations, int $languageId, string $field, string $defaultValue): string
+    {
+        if (!$translations) {
+            return $defaultValue;
+        }
+
+        $translation = $translations->firstWhere('language_id', $languageId);
+        return $translation ? $translation->$field : $defaultValue;
+    }
+
+    /**
+     * @param int $providerId
+     * @return int
+     */
+    private function getProviderTotalBookings(int $providerId): int
+    {
+        return Appointment::where('provider_id', $providerId)->count();
+    }
+}
+
+++++++++++++++++++++
+
+ServiceAvailabilityService.php
+<?php
+
+namespace App\Services;
+
+use App\Enum\AppointmentStatus;
+use App\Models\Service;
+use App\Models\User;
+use App\Models\Appointment;
+use App\Models\ProviderScheduledWork;
+use App\Models\ProviderTimeOff;
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use InvalidArgumentException;
+
+class ServiceAvailabilityService
+{
+
+    private const SLOT_BUFFER = 0;
+
+
+    private const CACHE_DURATION = 1;
+
+    /**
+     * @param int $serviceId
+     * @param string $date
+     * @param int|null $branchId
+     * @return array
+     */
+    public function getAvailableSlotsByDate(int $serviceId, string $date, ?int $branchId = null): array
+    {
+        $cacheKey = "availability_service_{$serviceId}_date_{$date}_branch_" . ($branchId ?? 'all');
+
+        return Cache::remember($cacheKey, self::CACHE_DURATION, function () use ($serviceId, $date, $branchId) {
+            $service = Service::findOrFail($serviceId);
+            $carbonDate = Carbon::parse($date);
+
+            if ($carbonDate->lt(Carbon::today())) {
+                throw new InvalidArgumentException('Cannot get availability for past dates');
+            }
+
+            //   get active provider foth this service
+            $providers = $this->getServiceProviders($service, $branchId);
+
+            // get free times for each providers
+            $providersWithSlots = $providers->map(function ($provider) use ($service, $carbonDate) {
+                return [
+                    'provider_id' => $provider->id,
+                    'provider_name' => $provider->full_name,
+                    'provider_avatar' => $provider->avatar,
+                    'branch' => $this->formatBranchData($provider->branch),
+                    'service_pricing' => $this->getProviderServicePricing($provider, $service),
+                    'available_slots' => $this->getProviderAvailableSlots($provider, $service, $carbonDate),
+                ];
+            })->filter(function ($provider) {
+
+                return count($provider['available_slots']) > 0;
+            })->values();
+
+            return [
+                'date' => $carbonDate->format('Y-m-d'),
+                'day_name' => $carbonDate->format('l'),
+                'formatted_date' => $carbonDate->format('l, F d, Y'),
+                'is_today' => $carbonDate->isToday(),
+                'is_tomorrow' => $carbonDate->isTomorrow(),
+                'total_providers' => $providersWithSlots->count(),
+                'providers' => $providersWithSlots,
+            ];
+        });
+    }
+
+    /**
+     *
+     * @param int $serviceId
+     * @param int $providerId
+     * @param string $date
+     * @return array
+     */
+    public function getProviderAvailableSlotsByDate(int $serviceId, int $providerId, string $date): array
+    {
+        $cacheKey = "availability_service_{$serviceId}_provider_{$providerId}_date_{$date}";
+
+        return Cache::remember($cacheKey, self::CACHE_DURATION, function () use ($serviceId, $providerId, $date) {
+            $service = Service::findOrFail($serviceId);
+            $provider = User::findOrFail($providerId);
+            $carbonDate = Carbon::parse($date);
+
+            // Validate date
+            if ($carbonDate->lt(Carbon::today())) {
+                throw new \InvalidArgumentException('Cannot get availability for past dates');
+            }
+
+            // Validate provider offers this service
+            if (!$this->providerOffersService($provider, $service)) {
+                throw new \InvalidArgumentException('Provider does not offer this service');
+            }
+
+            $slots = $this->getProviderAvailableSlots($provider, $service, $carbonDate);
+
+            return [
+                'provider' => [
+                    'id' => $provider->id,
+                    'name' => $provider->full_name,
+                    'avatar' => $provider->avatar,
+                    'phone' => $provider->phone,
+                    'branch' => $this->formatBranchData($provider->branch),
+                ],
+                'service' => [
+                    'id' => $service->id,
+                    'name' => $service->name,
+                    'duration_minutes' => $this->getEffectiveDuration($provider, $service),
+                    'formatted_duration' => $this->formatDuration($this->getEffectiveDuration($provider, $service)),
+                ],
+                'pricing' => $this->getProviderServicePricing($provider, $service),
+                'date' => $carbonDate->format('Y-m-d'),
+                'day_name' => $carbonDate->format('l'),
+                'formatted_date' => $carbonDate->format('l, F d, Y'),
+                'total_slots' => count($slots),
+                'available_slots' => $slots,
+            ];
+        });
+    }
+
+    /**
+     * Get available slots for multiple dates (for calendar view)
+     *
+     * @param int $serviceId
+     * @param int|null $providerId
+     * @param string $startDate
+     * @param string $endDate
+     * @param int|null $branchId
+     * @return array
+     */
+    public function getAvailabilityCalendar(
+        int $serviceId,
+        ?int $providerId = null,
+        string $startDate,
+        string $endDate,
+        ?int $branchId = null
+    ): array {
+        $service = Service::findOrFail($serviceId);
+        $start = Carbon::parse($startDate);
+        $end = Carbon::parse($endDate);
+
+        // Limit to 31 days max
+        if ($start->diffInDays($end) > 31) {
+            throw new \InvalidArgumentException('Date range cannot exceed 31 days');
+        }
+
+        $calendar = [];
+        $current = $start->copy();
+
+        while ($current->lte($end)) {
+            if ($current->gte(Carbon::today())) {
+                $dateStr = $current->format('Y-m-d');
+
+                if ($providerId) {
+                    $dayData = $this->getProviderAvailableSlotsByDate($serviceId, $providerId, $dateStr);
+                    $availableSlots = $dayData['total_slots'];
+                } else {
+                    $dayData = $this->getAvailableSlotsByDate($serviceId, $dateStr, $branchId);
+                    $availableSlots = $dayData['providers']->sum(function ($provider) {
+                        return count($provider['available_slots']);
+                    });
+                }
+
+                $calendar[] = [
+                    'date' => $dateStr,
+                    'day_name' => $current->format('D'),
+                    'day_number' => $current->day,
+                    'is_today' => $current->isToday(),
+                    'is_available' => $availableSlots > 0,
+                    'available_slots_count' => $availableSlots,
+                ];
+            }
+
+            $current->addDay();
+        }
+
+        return [
+            'service_id' => $serviceId,
+            'provider_id' => $providerId,
+            'period' => [
+                'start_date' => $start->format('Y-m-d'),
+                'end_date' => $end->format('Y-m-d'),
+                'month_name' => $start->format('F Y'),
+            ],
+            'calendar' => $calendar,
+        ];
+    }
+
+    /**
+     * @param User $provider
+     * @param Service $service
+     * @param Carbon $date
+     * @return array
+     */
+    private function getProviderAvailableSlots(User $provider, Service $service, Carbon $date): array
+    {
+        $dayOfWeek = $date->dayOfWeek;
+        $dateStr = $date->format('Y-m-d');
+
+
+        $workSchedule = ProviderScheduledWork::where('user_id', $provider->id)
+            ->where('day_of_week', $dayOfWeek)
+            ->where('is_work_day', true)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$workSchedule) {
+            return [];
+        }
+
+        if ($this->hasFullDayTimeOff($provider, $date)) {
+            return [];
+        }
+
+        // Get service duration
+        $serviceDuration = $this->getEffectiveDuration($provider, $service);
+
+        // Generate time slots
+        return $this->generateTimeSlots(
+            $provider,
+            $date,
+            $workSchedule,
+            $serviceDuration
+        );
+    }
+
+    /**
+     * Generate available time slots
+     *
+     * @param User $provider
+     * @param Carbon $date
+     * @param ProviderScheduledWork $workSchedule
+     * @param int $serviceDuration
+     * @return array
+     */
+    private function generateTimeSlots(
+        User $provider,
+        Carbon $date,
+        ProviderScheduledWork $workSchedule,
+        int $serviceDuration
+    ): array {
+        $slots = [];
+        $dateStr = $date->format('Y-m-d');
+
+        $startTime = Carbon::parse($dateStr . ' ' . $workSchedule->start_time);
+        $endTime = Carbon::parse($dateStr . ' ' . $workSchedule->end_time);
+
+        // $breakStart = $this->calculateBreakStart($startTime, $endTime, $workSchedule->break_minutes);
+        // $breakEnd = $breakStart->copy()->addMinutes($workSchedule->break_minutes);
+
+        // Don't show past time slots for today
+         $now = Carbon::now();
+        if ($date->isToday()) {
+
+            $minutesSinceStartOfDay = $now->diffInMinutes($now->copy()->startOfDay());
+            $nextSlotMinutes = ceil($minutesSinceStartOfDay / $serviceDuration) * $serviceDuration;
+            $nextAvailableTime = $now->copy()->startOfDay()->addMinutes($nextSlotMinutes);
+
+            if ($startTime->lt($nextAvailableTime)) {
+                $startTime = $nextAvailableTime;
+            }
+        }
+        $currentTime = $startTime->copy();
+
+        // Get existing appointments
+        $existingAppointments = $this->getProviderAppointments($provider, $date);
+
+        // Get hourly time offs
+        $hourlyTimeOffs = $this->getProviderHourlyTimeOffs($provider, $date);
+
+        while ($currentTime->copy()->addMinutes($serviceDuration)->lte($endTime)) {
+            $slotEnd = $currentTime->copy()->addMinutes($serviceDuration);
+
+            // if ($this->overlapsWithPeriod($currentTime, $slotEnd, $breakStart, $breakEnd)) {
+            //     $currentTime = $breakEnd->copy();
+            //     continue;
+            // }
+
+            // Check if slot is available
+            $isAvailable = !$this->hasConflict(
+                $currentTime,
+                $slotEnd,
+                $existingAppointments,
+                $hourlyTimeOffs
+            );
+
+            if ($isAvailable) {
+                $slots[] = [
+                    'start_time' => $currentTime->format('H:i'),
+                    'end_time' => $slotEnd->format('H:i'),
+                    'start_time_formatted' => $currentTime->format('h:i A'),
+                    'end_time_formatted' => $slotEnd->format('h:i A'),
+                    'display_time' => $currentTime->format('h:i A'),
+                    'duration_minutes' => $serviceDuration,
+                ];
+            }
+
+            $currentTime->addMinutes($serviceDuration + self::SLOT_BUFFER);
+        }
+
+        return $slots;
+    }
+
+    /**
+     * Check if provider has full day time off
+     */
+    private function hasFullDayTimeOff(User $provider, Carbon $date): bool
+    {
+        return ProviderTimeOff::where('user_id', $provider->id)
+            ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
+            ->where('start_date', '<=', $date->format('Y-m-d'))
+            ->where('end_date', '>=', $date->format('Y-m-d'))
+            ->exists();
+    }
+
+    /**
+     * Get provider's appointments for a specific date
+     */
+    private function getProviderAppointments(User $provider, Carbon $date): Collection
+    {
+        return Appointment::where('provider_id', $provider->id)
+            ->whereDate('appointment_date', $date)
+            ->whereIn('status', [
+                AppointmentStatus::PENDING,
+            ])
+            ->select('start_time', 'end_time')
+            ->get();
+    }
+
+    /**
+     * Get provider's hourly time offs for a specific date
+     */
+    private function getProviderHourlyTimeOffs(User $provider, Carbon $date): Collection
+    {
+        return ProviderTimeOff::where('user_id', $provider->id)
+            ->where('type', ProviderTimeOff::TYPE_HOURLY)
+            ->whereDate('start_date', $date)
+            ->select('start_time', 'end_time')
+            ->get();
+    }
+
+    /**
+     * Check if time slot has conflict with appointments or time offs
+     */
+    private function hasConflict(
+        Carbon $slotStart,
+        Carbon $slotEnd,
+        Collection $appointments,
+        Collection $timeOffs
+    ): bool {
+        // Check appointments
+        foreach ($appointments as $appointment) {
+            $appointmentStart = Carbon::parse($appointment->start_time);
+            $appointmentEnd = Carbon::parse($appointment->end_time);
+
+            if ($this->overlapsWithPeriod($slotStart, $slotEnd, $appointmentStart, $appointmentEnd)) {
+                return true;
+            }
+        }
+
+        // Check hourly time offs
+        foreach ($timeOffs as $timeOff) {
+            $timeOffStart = Carbon::parse($slotStart->format('Y-m-d') . ' ' . $timeOff->start_time);
+            $timeOffEnd = Carbon::parse($slotStart->format('Y-m-d') . ' ' . $timeOff->end_time);
+
+            if ($this->overlapsWithPeriod($slotStart, $slotEnd, $timeOffStart, $timeOffEnd)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if two time periods overlap
+     */
+    private function overlapsWithPeriod(Carbon $start1, Carbon $end1, Carbon $start2, Carbon $end2): bool
+    {
+        return $start1->lt($end2) && $end1->gt($start2);
+    }
+
+    /**
+     * Calculate break start time (middle of work day)
+     */
+    private function calculateBreakStart(Carbon $start, Carbon $end, int $breakMinutes): Carbon
+    {
+        if ($breakMinutes == 0) {
+            return $end->copy(); // No break
+        }
+
+        $totalMinutes = $start->diffInMinutes($end);
+        $halfPoint = $totalMinutes / 2;
+
+        return $start->copy()->addMinutes($halfPoint);
+    }
+
+
+    private function getServiceProviders(Service $service, ?int $branchId = null): Collection
+    {
+        $query = $service->activeProviders()
+            ->with('branch')
+            ->where('is_active', true);
+
+        if ($branchId) {
+            $query->where('branch_id', $branchId);
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * Check if provider offers service
+     */
+    private function providerOffersService(User $provider, Service $service): bool
+    {
+        return DB::table('provider_service')
+            ->where('provider_id', $provider->id)
+            ->where('service_id', $service->id)
+            ->where('is_active', true)
+            ->exists();
+    }
+
+    /**
+     * Get effective duration (custom or default)
+     */
+    private function getEffectiveDuration(User $provider, Service $service): int
+    {
+        return $service->duration_minutes;
+        $pivot = DB::table('provider_service')
+            ->where('provider_id', $provider->id)
+            ->where('service_id', $service->id)
+            ->first();
+
+        return $pivot->custom_duration ?? $service->duration_minutes;
+    }
+
+
+    private function getProviderServicePricing(User $provider, Service $service): array
+    {
+        $pivot = DB::table('provider_service')
+            ->where('provider_id', $provider->id)
+            ->where('service_id', $service->id)
+            ->first();
+
+        $effectivePrice = $pivot->custom_price ?? $service->effective_price;
+        $originalPrice = $service->price;
+        $hasDiscount = $effectivePrice < $originalPrice;
+
+        return [
+            'original_price' => (float) $originalPrice,
+            'effective_price' => (float) $effectivePrice,
+            'has_discount' => $hasDiscount,
+            'discount_amount' => $hasDiscount ? ($originalPrice - $effectivePrice) : 0,
+            'discount_percentage' => $hasDiscount ? round((($originalPrice - $effectivePrice) / $originalPrice) * 100, 2) : 0,
+            'currency' => 'AED',
+            'formatted_price' => number_format($effectivePrice, 2) . ' AED',
+        ];
+    }
+
+    /**
+     * Format branch data
+     */
+    private function formatBranchData($branch): ?array
+    {
+        if (!$branch) {
+            return null;
+        }
+
+        return [
+            'id' => $branch->id,
+            'name' => $branch->name,
+            'address' => $branch->adress,
+            'phone' => $branch->phone,
+            'coordinates' => [
+                'latitude' => $branch->latitude,
+                'longitude' => $branch->longitude,
+            ],
+        ];
+    }
+
+    /**
+     * Format duration
+     */
+    private function formatDuration(int $minutes): string
+    {
+        $hours = floor($minutes / 60);
+        $mins = $minutes % 60;
+
+        if ($hours > 0 && $mins > 0) {
+            return "{$hours}h {$mins}m";
+        } elseif ($hours > 0) {
+            return "{$hours}h";
+        } else {
+            return "{$mins}m";
+        }
+    }
+
+    /**
+     * Clear availability cache for a service
+     */
+    public function clearServiceCache(int $serviceId): void
+    {
+        Cache::tags(["service_{$serviceId}"])->flush();
+    }
+
+    /**
+     * Clear availability cache for a provider
+     */
+    public function clearProviderCache(int $providerId): void
+    {
+        Cache::tags(["provider_{$providerId}"])->flush();
+    }
+}
+
+++++++++++++++++++++
+
+SettingsService.php
+<?php
+namespace App\Services;
+
+
+class SettingsService
+{
+
+
+
+    public static function get($key, $default = null)
+    {
+
+        return get_setting($key, $default);
+
+    }
+}
+
+++++++++++++++++++++
+
+TaxCalculatorService.php
+<?php
+
+namespace App\Services;
+
+use InvalidArgumentException;
+
+/**
+ * خدمة حساب الضرائب بدقة عالية
+ *
+ * تستخدم bcmath لتجنب مشاكل Float
+ * المبالغ المدخلة والمخرجة تكون مع الضريبة (gross)
+ */
+class TaxCalculatorService
+{
+    private int $scale = 2; // الدقة الداخلية
+
+    /**
+     * فصل الضريبة من المبلغ الإجمالي
+     *
+     * @param string|float $grossAmount المبلغ الإجمالي (مع الضريبة)
+     * @param string|float $taxRate نسبة الضريبة (مثال: 19 للدلالة على 19%)
+     * @param int $precision عدد الخانات العشرية للنتيجة (افتراضي: 2)
+     * @return array ['net' => string, 'tax' => string, 'gross' => string]
+     * @throws InvalidArgumentException
+     */
+    public function extractTax($grossAmount, $taxRate, int $precision = 2): array
+    {
+        // التحقق من المدخلات
+        $this->validateInputs($grossAmount, $taxRate, $precision);
+
+        // تحويل إلى strings
+        $gross = $this->normalizeAmount($grossAmount);
+        $rate = $this->normalizeAmount($taxRate);
+
+        bcscale($this->scale);
+
+        // إذا كانت الضريبة = 0
+        if (bccomp($rate, '0', $this->scale) === 0) {
+            $net = $this->bcRound($gross, $precision);
+            return [
+                'net' => $net,
+                'tax' => $this->formatZero($precision),
+                'gross' => $net,
+            ];
+        }
+
+        // حساب معامل الضريبة: factor = 1 + (rate / 100)
+        $factor = bcadd('1', bcdiv($rate, '100', $this->scale), $this->scale);
+
+        // صافي المبلغ: net = gross / factor
+        $netHigh = bcdiv($gross, $factor, $this->scale);
+
+        // قيمة الضريبة: tax = gross - net
+        $taxHigh = bcsub($gross, $netHigh, $this->scale);
+
+        // التدوير للدقة المطلوبة
+        $net = $this->bcRound($netHigh, $precision);
+        $tax = $this->bcRound($taxHigh, $precision);
+        $grossRounded = $this->bcRound($gross, $precision);
+
+        // التحقق من المطابقة: net + tax = gross
+        bcscale($precision);
+        $sum = bcadd($net, $tax, $precision);
+        $diff = bcsub($grossRounded, $sum, $precision);
+
+        // إذا كان هناك فرق بسيط، نعدله
+        if (bccomp($diff, '0', $precision) !== 0) {
+            // نضيف الفرق للقيمة الأكبر
+            if (bccomp($net, $tax, $precision) >= 0) {
+                $net = bcadd($net, $diff, $precision);
+            } else {
+                $tax = bcadd($tax, $diff, $precision);
+            }
+        }
+
+        return [
+            'net' => $net,
+            'tax' => $tax,
+            'gross' => $grossRounded,
+        ];
+    }
+
+    /**
+     * حساب الضريبة وإضافتها للمبلغ (العملية العكسية)
+     *
+     * @param string|float $netAmount المبلغ الصافي (قبل الضريبة)
+     * @param string|float $taxRate نسبة الضريبة
+     * @param int $precision عدد الخانات العشرية
+     * @return array ['net' => string, 'tax' => string, 'gross' => string]
+     */
+    public function addTax($netAmount, $taxRate, int $precision = 2): array
+    {
+        $this->validateInputs($netAmount, $taxRate, $precision);
+
+        $net = $this->normalizeAmount($netAmount);
+        $rate = $this->normalizeAmount($taxRate);
+
+        bcscale($this->scale);
+
+        if (bccomp($rate, '0', $this->scale) === 0) {
+            $netRounded = $this->bcRound($net, $precision);
+            return [
+                'net' => $netRounded,
+                'tax' => $this->formatZero($precision),
+                'gross' => $netRounded,
+            ];
+        }
+
+        // tax = net * (rate / 100)
+        $taxHigh = bcmul($net, bcdiv($rate, '100', $this->scale), $this->scale);
+
+        // gross = net + tax
+        $grossHigh = bcadd($net, $taxHigh, $this->scale);
+
+        $netRounded = $this->bcRound($net, $precision);
+        $tax = $this->bcRound($taxHigh, $precision);
+        $gross = $this->bcRound($grossHigh, $precision);
+
+        // التحقق من المطابقة
+        bcscale($precision);
+        $sum = bcadd($netRounded, $tax, $precision);
+        $diff = bcsub($gross, $sum, $precision);
+
+        if (bccomp($diff, '0', $precision) !== 0) {
+            $tax = bcadd($tax, $diff, $precision);
+        }
+
+        return [
+            'net' => $netRounded,
+            'tax' => $tax,
+            'gross' => $gross,
+        ];
+    }
+
+    /**
+     * حساب إجماليات مجموعة من العناصر
+     *
+     * @param array $items مصفوفة من العناصر، كل عنصر يحتوي على 'price' و 'tax_rate'
+     * @param int $precision
+     * @return array
+     */
+    public function calculateBulk(array $items, int $precision = 2): array
+    {
+        bcscale($this->scale);
+
+        $totalNet = '0';
+        $totalTax = '0';
+        $totalGross = '0';
+
+        foreach ($items as $item) {
+            if (!isset($item['price'])) {
+                continue;
+            }
+
+            $taxRate = $item['tax_rate'] ?? '0';
+            $result = $this->extractTax($item['price'], $taxRate, $this->scale);
+
+            $totalNet = bcadd($totalNet, $result['net'], $this->scale);
+            $totalTax = bcadd($totalTax, $result['tax'], $this->scale);
+            $totalGross = bcadd($totalGross, $result['gross'], $this->scale);
+        }
+
+        // التدوير النهائي
+        $net = $this->bcRound($totalNet, $precision);
+        $tax = $this->bcRound($totalTax, $precision);
+        $gross = $this->bcRound($totalGross, $precision);
+
+        // مطابقة نهائية
+        bcscale($precision);
+        $sum = bcadd($net, $tax, $precision);
+        $diff = bcsub($gross, $sum, $precision);
+
+        if (bccomp($diff, '0', $precision) !== 0) {
+            if (bccomp($net, $tax, $precision) >= 0) {
+                $net = bcadd($net, $diff, $precision);
+            } else {
+                $tax = bcadd($tax, $diff, $precision);
+            }
+        }
+
+        return [
+            'net' => $net,
+            'tax' => $tax,
+            'gross' => $gross,
+        ];
+    }
+
+    /**
+     * تدوير رقم bcmath بشكل صحيح
+     */
+    private function bcRound(string $number, int $precision): string
+    {
+        if ($precision < 0) {
+            throw new InvalidArgumentException('Precision must be >= 0');
+        }
+
+        $sign = '';
+        if (str_starts_with($number, '-')) {
+            $sign = '-';
+            $number = substr($number, 1);
+        }
+
+        $shift = bcpow('10', (string) $precision, 0);
+        $shifted = bcmul($number, $shift, $precision + 6);
+        $rounded = bcadd($shifted, '0.5', 0);
+        $floored = bcdiv($rounded, '1', 0);
+        $result = bcdiv($floored, $shift, $precision);
+
+        return $sign . $result;
+    }
+
+    /**
+     * تطبيع المبلغ إلى string صالح لـ bcmath
+     */
+    private function normalizeAmount($amount): string
+    {
+        if (is_string($amount)) {
+            $amount = trim($amount);
+        } elseif (is_numeric($amount)) {
+            $amount = (string) $amount;
+        } else {
+            throw new InvalidArgumentException('Amount must be numeric');
+        }
+
+        // إزالة الفواصل والمسافات
+        $amount = str_replace([',', ' '], '', $amount);
+
+        // التحقق من صحة الرقم
+        if (!is_numeric($amount)) {
+            throw new InvalidArgumentException('Invalid numeric value: ' . $amount);
+        }
+
+        return bcadd($amount, '0', $this->scale);
+    }
+
+    /**
+     * التحقق من صحة المدخلات
+     */
+    private function validateInputs($amount, $taxRate, int $precision): void
+    {
+        if ($precision < 0 || $precision > 10) {
+            throw new InvalidArgumentException('Precision must be between 0 and 10');
+        }
+
+        $normalizedRate = $this->normalizeAmount($taxRate);
+        if (bccomp($normalizedRate, '0', $this->scale) === -1) {
+            throw new InvalidArgumentException('Tax rate cannot be negative');
+        }
+
+        if (bccomp($normalizedRate, '100', $this->scale) === 1) {
+            throw new InvalidArgumentException('Tax rate cannot exceed 100%');
+        }
+    }
+
+    /**
+     * تنسيق صفر بالدقة المطلوبة
+     */
+    private function formatZero(int $precision): string
+    {
+        return $precision > 0
+            ? '0.' . str_repeat('0', $precision)
+            : '0';
+    }
+}
+
+
+++++++++++++++++++++
+

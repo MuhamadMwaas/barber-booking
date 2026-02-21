@@ -7,6 +7,7 @@ use App\Enum\PaymentStatus;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -76,7 +77,7 @@ class InvoiceService
             );
 
             // إنشاء بنود الفاتورة من الخدمات
-            $this->createInvoiceItems($invoice, $appointment, $taxRate);
+            $this->createInvoiceItems($invoice, $appointment);
 
             // تحديث حالة الدفع للحجز
             $this->updateAppointmentPaymentStatus($appointment, $paymentType);
@@ -130,7 +131,7 @@ class InvoiceService
             'payment_method' => PaymentStatus::from($paymentType)->label(),
             'amount_paid' => $totalAmount,
             'paid_at' => now()->toDateTimeString(),
-            'paid_by' => auth()->user()?->full_name ?? 'System',
+            'paid_by' => Auth::user()?->full_name ?? 'System',
             'payment_type' => $paymentType,
         ];
 
@@ -161,25 +162,42 @@ class InvoiceService
     /**
      * إنشاء بنود الفاتورة من خدمات الحجز
      */
-    private function createInvoiceItems(Invoice $invoice, Appointment $appointment, float $taxRate): void
+    private function createInvoiceItems(Invoice $invoice, Appointment $appointment): void
     {
-        foreach ($appointment->services as $service) {
-            $unitPrice = $service->pivot->price;
-            $taxAmount = $unitPrice * ($taxRate / 100);
-            $totalAmount = $unitPrice + $taxAmount;
+        $TaxCalculatorService = app(TaxCalculatorService::class);
 
-            InvoiceItem::create([
-                'invoice_id' => $invoice->id,
-                'description' => $service->pivot->service_name,
-                'quantity' => 1,
-                'unit_price' => $unitPrice,
-                'tax_rate' => $taxRate,
-                'tax_amount' => $taxAmount,
-                'total_amount' => $totalAmount,
-                'itemable_id' => $service->id,
-                'itemable_type' => get_class($service),
-            ]);
-        }
+        // استخدم tax_rate من الفاتورة لضمان التطابق
+        $invoiceTaxRate = $invoice->tax_rate;
+
+        // تعطيل Observers مؤقتاً لتجنب إعادة الحساب التلقائي
+        InvoiceItem::withoutEvents(function () use ($invoice, $appointment, $invoiceTaxRate, $TaxCalculatorService) {
+            foreach ($appointment->services as $service) {
+                $unitPrice = $service->pivot->price;
+                $tax_result = $TaxCalculatorService->extractTax($unitPrice, $invoiceTaxRate);
+                $unitPrice = $tax_result['net'];
+                $taxAmount = $tax_result['tax'];
+                $totalAmount = $tax_result['gross'];
+
+                InvoiceItem::create([
+                    'invoice_id' => $invoice->id,
+                    'description' => $service->pivot->service_name,
+                    'quantity' => 1,
+                    'unit_price' => $unitPrice,
+                    'tax_rate' => $invoiceTaxRate,
+                    'tax_amount' => $taxAmount,
+                    'total_amount' => $totalAmount,
+                    'itemable_id' => $service->id,
+                    'itemable_type' => get_class($service),
+                ]);
+            }
+        });
+
+        Log::info('✓ Invoice items created successfully with guaranteed match', [
+            'invoice_id' => $invoice->id,
+            'appointment_id' => $invoice->appointment_id,
+            'items_count' => $appointment->services->count(),
+            'total_amount' => $invoice->total_amount,
+        ]);
     }
 
     /**
@@ -330,5 +348,139 @@ class InvoiceService
             'payment_info' => $invoice->invoice_data,
             'created_at' => $invoice->created_at,
         ];
+    }
+
+    /**
+     * إنشاء فاتورة مسودة بدون رقم
+     */
+    private function createDraftInvoice(Appointment $appointment): Invoice
+    {
+        $taxRate = (float) get_setting('tax_rate', 19);
+
+        return Invoice::create([
+            'appointment_id' => $appointment->id,
+            'customer_id' => $appointment->customer_id,
+            'invoice_number' => null,
+            'subtotal' => $appointment->subtotal,
+            'tax_amount' => $appointment->tax_amount,
+            'tax_rate' => $taxRate,  // ← إصلاح الخطأ الفادح!
+            'total_amount' => $appointment->total_amount,
+            'status' => InvoiceStatus::DRAFT,
+            'notes' => 'Invoice draft - awaiting payment',
+        ]);
+    }
+
+    public function createDtaftInvoiceFromAppointment(
+        Appointment $appointment,
+        string $paymentType,
+        float $amountPaid,
+        ?string $notes = null,
+        ?int $adjustedDuration = null,
+        bool $amountIncludesTax = true
+    ): Invoice {
+        try {
+            DB::beginTransaction();
+
+            // تحديث مدة الحجز إذا تم تعديلها
+            if ($adjustedDuration !== null && $adjustedDuration !== $appointment->duration_minutes) {
+                $this->updateAppointmentDuration($appointment, $adjustedDuration);
+            }
+
+            // إنشاء الفاتورة الرئيسية
+            $invoice = $this->createDraftInvoice(
+                $appointment
+            );
+
+            // إنشاء بنود الفاتورة من الخدمات
+            $this->createInvoiceItems($invoice, $appointment);
+
+
+            DB::commit();
+
+            // تسجيل العملية الناجحة
+            Log::info('Invoice created successfully', [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'appointment_id' => $appointment->id,
+                'amount_paid' => $amountPaid,
+                'payment_type' => $paymentType,
+            ]);
+
+            return $invoice;
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Failed to create invoice', [
+                'appointment_id' => $appointment->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * تحويل فاتورة Draft إلى Paid مع TSE
+     */
+    public function finalizeDraftInvoice(
+        Invoice $draftInvoice,
+        string $paymentType,
+        float $amountPaid,
+        ?string $notes = null
+    ): Invoice {
+
+        if ($draftInvoice->status !== InvoiceStatus::DRAFT) {
+            throw new \Exception('يمكن فقط تحويل الفواتير Draft');
+        }
+
+        DB::beginTransaction();
+
+        try {
+            // 1. تطبيق TSE Signature
+            // $tseData = $this->applyTSESignature($draftInvoice);
+
+            // 2. توليد رقم الفاتورة
+            $invoiceNumber = Invoice::generateInvoiceNumber();
+
+            // 3. تحديث الفاتورة
+            $draftInvoice->update([
+                'invoice_number' => $invoiceNumber,
+                'status' => InvoiceStatus::PAID,
+                'invoice_data' => array_merge(
+                    [
+                        // 'tse_data' => $tseData,
+                        'finalized_at' => now()->toISOString(),
+                        'payment_type' => $paymentType,
+                        'amount_paid' => $amountPaid,
+                        'finalized_by' => Auth::user()?->full_name,
+                    ]
+                ),
+                'notes' => $notes,
+            ]);
+
+            // 4. تحديث Appointment
+            $draftInvoice->appointment->update([
+                'payment_status' => PaymentStatus::from($paymentType),
+                'payment_method' => PaymentStatus::from($paymentType)->label(),
+            ]);
+
+            // 5. إنشاء سجل Payment
+            // $this->createPaymentRecord($draftInvoice, $paymentType, $amountPaid);
+
+            DB::commit();
+
+            Log::info('Draft invoice finalized', [
+                'invoice_id' => $draftInvoice->id,
+                'invoice_number' => $invoiceNumber,
+            ]);
+
+            return $draftInvoice->fresh();
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
     }
 }

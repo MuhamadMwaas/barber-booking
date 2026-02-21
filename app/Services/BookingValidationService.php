@@ -22,7 +22,7 @@ class BookingValidationService
             throw new InvalidArgumentException('At least one service must be selected');
         }
 
-        $max_services_per_booking =  SettingsService::get('max_services_per_booking', 10);
+        $max_services_per_booking = SettingsService::get('max_services_per_booking', 10);
 
         if (count($services) > $max_services_per_booking) {
             throw new InvalidArgumentException("Maximum {$max_services_per_booking} services per booking");
@@ -35,7 +35,7 @@ class BookingValidationService
         }
 
         // $max_booking_days = get_setting('max_booking_days', 30);
-        $max_booking_days=intval(SettingsService::get('max_booking_days', 10));
+        $max_booking_days = intval(SettingsService::get('max_booking_days', 10));
 
         if ($bookingDate->gt(Carbon::today()->addDays($max_booking_days))) {
             throw new InvalidArgumentException('Cannot book more than ' . $max_booking_days . ' days in advance');
@@ -216,13 +216,46 @@ class BookingValidationService
         }
     }
 
+
+        /**
+     * Validate no duplicate booking for guest customers using phone number
+     *
+     * @param string|null $customerPhone
+     * @param Carbon $startTime
+     * @param array $serviceIds
+     * @throws InvalidArgumentException
+     */
+    public function validateNoDuplicateBookingByPhone(
+        ?string $customerPhone,
+        Carbon $startTime,
+        array $serviceIds
+    ): void {
+
+        if (empty($customerPhone)) {
+            return;
+        }
+
+        $existingBooking = Appointment::where('customer_phone', $customerPhone)
+            ->where('start_time', $startTime)
+            ->whereIn('status', [AppointmentStatus::PENDING->value])
+            ->whereHas('services', function ($query) use ($serviceIds) {
+                $query->whereIn('services.id', $serviceIds);
+            })
+            ->exists();
+
+        if ($existingBooking) {
+            throw new InvalidArgumentException(
+                'You already have a booking for the same time and services'
+            );
+        }
+    }
+
     /**
      * Validate daily booking limit
      */
     public function validateDailyBookingLimit(User $customer, string $date): void
     {
-        // $max_daily_bookings = get_setting('max_daily_bookings', null);
-        $max_daily_bookings=SettingsService::get('max_daily_bookings', 10);
+        $max_daily_bookings = SettingsService::get('max_daily_bookings', 10);
 
 
 
@@ -239,4 +272,6 @@ class BookingValidationService
             }
         }
     }
+
+
 }

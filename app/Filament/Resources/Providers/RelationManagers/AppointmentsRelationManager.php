@@ -115,13 +115,13 @@ class AppointmentsRelationManager extends RelationManager
                 // السعر الإجمالي
                 TextColumn::make('total_amount')
                     ->label(__('resources.provider_resource.total_price'))
-                    ->money('SAR')
+                    ->money('EUR')
                     ->sortable()
                     ->weight(FontWeight::Bold)
                     ->color('success')
                     ->description(function ($record) {
                         if ($record->tax_amount > 0) {
-                            return __('resources.provider_resource.includes_tax') . ': SAR ' . number_format($record->tax_amount, 2);
+                            return __('resources.provider_resource.includes_tax') . ': EUR ' . number_format($record->tax_amount, 2);
                         }
                         return null;
                     }),
@@ -332,7 +332,7 @@ class AppointmentsRelationManager extends RelationManager
                         TextInput::make('amount_paid')
                             ->label(__('resources.provider_resource.amount_paid'))
                             ->numeric()
-                            ->prefix('SAR')
+                            ->prefix('EUR')
                             ->suffix(__('resources.provider_resource.includes_tax_suffix'))
                             ->default(fn($record) => $record->total_amount)
                             ->required()
@@ -351,8 +351,8 @@ class AppointmentsRelationManager extends RelationManager
                                 fn($get) =>
                                 $get('calculated_subtotal')
                                 ? __('resources.provider_resource.breakdown') . ': ' .
-                                __('resources.provider_resource.subtotal') . ' SAR ' . number_format($get('calculated_subtotal'), 2) . ' + ' .
-                                __('resources.provider_resource.tax') . ' (19%) SAR ' . number_format($get('calculated_tax'), 2)
+                                __('resources.provider_resource.subtotal') . ' EUR ' . number_format($get('calculated_subtotal'), 2) . ' + ' .
+                                __('resources.provider_resource.tax') . ' (19%) EUR ' . number_format($get('calculated_tax'), 2)
                                 : __('resources.provider_resource.amount_paid_helper')
                             ),
 

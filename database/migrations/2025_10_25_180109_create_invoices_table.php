@@ -16,18 +16,22 @@ return new class extends Migration
             $table->unsignedBigInteger('appointment_id')->nullable();
             $table->foreign('appointment_id')->references('id')->on('appointments');
 
-            $table->unsignedBigInteger('customer_id');
+            $table->unsignedBigInteger('customer_id')->nullable()->default(null);
             $table->foreign('customer_id')->references('id')->on('users');
 
-            $table->string('invoice_number');
+            $table->string('invoice_number')->nullable()->default(null);
             $table->decimal('subtotal');
             $table->decimal('tax_amount')->nullable();
             $table->decimal('tax_rate')->nullable();
             $table->decimal('total_amount');
-            $table->string('status');
+            $table->tinyInteger('status');
             $table->string('notes')->nullable();
-            $table->text('invoice_data');
-
+            $table->json('invoice_data')->nullable();
+            $table->string('segnture')->nullable();
+            $table->string('signature_missing_reason')->nullable();
+            $table->integer('print_count')->default(0);
+            $table->timestamp('first_printed_at')->nullable();
+            $table->timestamp('last_printed_at')->nullable();
             $table->timestamps();
         });
     }

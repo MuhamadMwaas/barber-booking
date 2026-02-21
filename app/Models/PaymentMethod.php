@@ -71,7 +71,7 @@ class PaymentMethod extends Model
             self::TYPE_DEBIT_CARD => 'Debit Card',
             self::TYPE_PAYPAL => 'PayPal',
             self::TYPE_STRIPE => 'Stripe',
-            self::TYPE_CASH => 'Cash',
+            self::TYPE_CASH => 'CASH',
             self::TYPE_BANK_TRANSFER => 'Bank Transfer',
             default => 'Unknown',
         };
@@ -104,8 +104,10 @@ class PaymentMethod extends Model
             self::TYPE_DEBIT_CARD => 'Debit Card',
             self::TYPE_PAYPAL => 'PayPal',
             self::TYPE_STRIPE => 'Stripe',
-            self::TYPE_CASH => 'Cash',
+            self::TYPE_CASH => 'CASH',
             self::TYPE_BANK_TRANSFER => 'Bank Transfer',
         ];
     }
+
+
 }

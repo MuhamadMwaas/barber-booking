@@ -249,6 +249,7 @@ return [
         'payment_success' => 'تم تسجيل الدفع بنجاح',
         'payment_error' => 'خطأ في تسجيل الدفع',
         'invoice_created' => 'تم إنشاء الفاتورة',
+        'payment_done_fiskaly_failed' => 'تم الدفع بنجاح لكن فشل توقيع Fiskaly. تم حفظ الفاتورة في وضع عدم الاتصال.',
         'cancel_by_admin' => 'إلغاء الحجز',
         'cancel_confirmation' => 'تأكيد الإلغاء',
         'cancel_description' => 'هل أنت متأكد من إلغاء هذا الحجز؟ لا يمكن التراجع عن هذا الإجراء.',

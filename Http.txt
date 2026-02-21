@@ -1,0 +1,3116 @@
+D:\Coding\BarberBooking\app\Http\Controllers\Api\AppointmentController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\AppointmentResource;
+use App\Services\AppointmentService;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use InvalidArgumentException;
+
+class AppointmentController extends Controller
+{
+    protected $appointmentService;
+
+    public function __construct(AppointmentService $appointmentService)
+    {
+        $this->appointmentService = $appointmentService;
+    }
+
+
+
+
+    /**
+
+     *
+     *  quyer list
+     * - status: PENDING, COMPLETED, USER_CANCELLED, ADMIN_CANCELLED, ALL (default: ALL)
+     * - payment_status: PENDING, PAID_ONLINE, PAID_ONSTIE_CASH, PAID_ONSTIE_CARD, FAILED, REFUNDED, PARTIALLY_REFUNDED
+     * - date_from: Y-m-d
+     * - date_to: Y-m-d
+     * - type: upcoming, past
+     * - sort_by: appointment_date, created_at, total_amount (default: appointment_date)
+     * - sort_direction: asc, desc
+     * - per_page: 1-100
+     */
+    public function index(Request $request): JsonResponse
+    {
+        try {
+
+            $validated = $request->validate([
+                'status'            => 'nullable|string|in:PENDING,COMPLETED,USER_CANCELLED,ADMIN_CANCELLED,ALL',
+                'payment_status'    => 'nullable|string|in:PENDING,PAID_ONLINE,PAID_ONSTIE_CASH,PAID_ONSTIE_CARD,FAILED,REFUNDED,PARTIALLY_REFUNDED',
+                'date_from'         => 'nullable|date_format:Y-m-d',
+                'date_to'           => 'nullable|date_format:Y-m-d',
+                'type'              => 'nullable|string|in:upcoming,past',
+                'sort_by'           => 'nullable|string|in:appointment_date,created_at,total_amount',
+                'sort_direction'    => 'nullable|string|in:asc,desc',
+                'per_page'          => 'nullable|integer|min:1|max:100',
+            ]);
+
+
+            $appointments = $this->appointmentService->getCustomerAppointments(
+                request()->user(),
+                $validated
+            );
+            return response()->json([
+                'success' => true,
+                'message' => 'تم جلب قائمة الحجوزات بنجاح',
+                'data' => AppointmentResource::collection($appointments)->response()->getData(true),
+                'meta' => [
+                    'current_page' => $appointments->currentPage(),
+                    'per_page' => $appointments->perPage(),
+                    'total' => $appointments->total(),
+                    'last_page' => $appointments->lastPage(),
+                ],
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب الحجوزات',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+
+    public function show(int $id): JsonResponse
+    {
+        try {
+
+            $appointment = $this->appointmentService->getAppointmentDetails(
+                $id,
+                request()->user()
+            );
+
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم جلب بيانات الحجز بنجاح',
+                'data' => new AppointmentResource($appointment),
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'access_error',
+            ], 403);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'الحجز المطلوب غير موجود',
+                'error_type' => 'not_found',
+            ], 404);
+
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب بيانات الحجز',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+
+    public function upcoming(Request $request): JsonResponse
+    {
+        try {
+
+            $validated = $request->validate([
+                'days' => 'nullable|integer|min:1|max:90',
+            ]);
+
+            $days = $validated['days'] ?? 7;
+
+
+            $appointments = $this->appointmentService->getUpcomingAppointments(
+                request()->user(),
+                $days
+            );
+
+
+            return response()->json([
+                'success' => true,
+                'message' => "تم جلب الحجوزات المقبلة خلال {$days} أيام",
+                'data' => AppointmentResource::collection($appointments),
+                'count' => $appointments->count(),
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب الحجوزات المقبلة',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+
+    public function past(Request $request): JsonResponse
+    {
+        try {
+
+            $validated = $request->validate([
+                'limit' => 'nullable|integer|min:1|max:50',
+            ]);
+
+            $limit = $validated['limit'] ?? 10;
+
+
+            $appointments = $this->appointmentService->getPastAppointments(
+                request()->user(),
+                $limit
+            );
+
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم جلب الحجوزات السابقة',
+                'data' => AppointmentResource::collection($appointments),
+                'count' => $appointments->count(),
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب الحجوزات السابقة',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+
+    public function statistics(): JsonResponse
+    {
+        try {
+
+            $stats = $this->appointmentService->getAppointmentStatistics(
+                request()->user()
+            );
+
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم جلب إحصائيات الحجوزات',
+                'data' => $stats,
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب الإحصائيات',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+
+    public function search(Request $request): JsonResponse
+    {
+        try {
+
+            $validated = $request->validate([
+                'query' => 'required|string|min:2',
+            ]);
+
+
+            $appointments = $this->appointmentService->searchAppointments(
+                request()->user(),
+                $validated['query']
+            );
+
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم البحث بنجاح',
+                'data' => AppointmentResource::collection($appointments),
+                'count' => $appointments->count(),
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء البحث',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+
+    public function cancel(int $id, Request $request): JsonResponse
+    {
+        try {
+
+            $validated = $request->validate([
+                'reason' => 'nullable|string|max:500',
+            ]);
+
+
+            $appointment = $this->appointmentService->cancelAppointment(
+                $id,
+                request()->user(),
+                $validated['reason'] ?? ''
+            );
+
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم إلغاء الحجز بنجاح',
+                'data' => new AppointmentResource($appointment),
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'business_error',
+            ], 422);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'الحجز المطلوب غير موجود',
+                'error_type' => 'not_found',
+            ], 404);
+
+        } catch (\Exception $e) {
+
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء إلغاء الحجز',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\AppointmentReminderController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Enum\AppointmentStatus;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\AppointmentReminderStoreRequest;
+use App\Models\Appointment;
+use App\Services\AppointmentReminderService;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use InvalidArgumentException;
+
+class AppointmentReminderController extends Controller
+{
+    public function __construct(
+        protected AppointmentReminderService $reminderService
+    ) {
+    }
+
+    public function store(AppointmentReminderStoreRequest $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $remindAt = Carbon::parse($request->validated('remind_at'));
+
+            // ========== validate appointment ownership ==========
+
+            $remindAtInput = $remindAt;
+
+            $appointment = Appointment::where('id', $request->validated('appointment_id'))
+            ->where('customer_id', $user->id)
+            ->firstOrFail();
+
+            $statusValue = $appointment->status?->value ?? $appointment->status;
+
+            if ($appointment->cancelled_at || in_array($statusValue, AppointmentStatus::getCancelledStatuses(), true)) {
+                throw new InvalidArgumentException(__('main.appointment.errors.cancelled'));
+
+            }
+
+            if ($appointment->start_time <= now()) {
+                throw new InvalidArgumentException(__('main.appointment.errors.past'));
+
+            }
+            // ====================================================
+
+            $params = [
+                'date' => [
+                    'type' => 'value',
+                    'value' => $appointment->start_time->format('Y-m-d'),
+                ],
+                'time' => [
+                    'type' => 'value',
+                    'value' => $appointment->start_time->format('H:i'),
+                ],
+                'number' => [
+                    'type' => 'value',
+                    'value' => $appointment->number,
+                ],
+            ];
+
+            $data = [
+                'type' => 'appointment_reminder',
+                'appointment_id' => $appointment->id,
+            ];
+            
+
+            $reminder = $this->reminderService->rescheduleReminder(
+                $appointment,
+                $remindAt,
+                $params,
+                $data
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' =>__('main.appointment.success.reminder_created'),
+                'data' => [
+                    'reminder_id' => $reminder->id,
+                    'appointment_id' => $appointment->id,
+                    'remind_at' => $reminder->remind_at->toIso8601String(),
+                    'status' => $reminder->status,
+                ],
+            ], 201);
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'business_error',
+            ], 422);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => __('main.appointment.errors.not_found'),
+                'error_type' => 'not_found',
+            ], 404);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => __('main.appointment.server_error'),
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\AuthController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\RegisterRequest;
+use App\Http\Requests\LoginRequest;
+use App\Http\Resources\UserResource;
+use App\Services\AuthTokenService;
+use App\Models\User;
+use App\Services\OtpService;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Http\Request;
+
+class AuthController
+{
+    public function __construct(private AuthTokenService $tokenService,private OtpService $otpService)
+    {
+    }
+
+    public function register(RegisterRequest $request)
+    {
+        $data = $request->validated();
+        $user = User::create([
+            'first_name' => $data['first_name'],
+            'last_name'=> $data['last_name'],
+            'email' => $data['email'],
+            'phone' => $data['phone'],
+            'password' => bcrypt($data['password']),
+
+        ]);
+
+        // $user->sendEmailVerificationNotification();
+        $otp = $this->otpService->generate($user, env('OTP_LENGTH', 6), \App\Enum\OtpType::EMAIL_OTP);
+    // return response()->json([
+    //     'message' => 'Registration successful. Please verify your email using the OTP sent to your email.',
+    //     'user' => $user->only(['id', 'first_name', 'last_name', 'email', 'phone']),
+    //     'email_verified' => false,
+    //     'requires_otp_verification' => true,
+    //     'otp' => $otp
+    // ], 201);
+        // اصدار tokens
+        $access = $this->tokenService->createAccessToken($user, $request->header('User-Agent'));
+        $refresh = $this->tokenService->createRefreshToken($user, $request->header('User-Agent'), $request->ip());
+
+        return response()->json([
+            'user' => new UserResource($user),
+            'access_token' => $access['access_token'],
+            'access_expires_at' => $access['expires_at'],
+            'refresh_token' => $refresh['refresh_token'],
+            'refresh_expires_at' => $refresh['expires_at'],
+            'token_type' => 'bearer',
+            'otp' => $otp
+        ], 201);
+    }
+
+    public function login(LoginRequest $request)
+    {
+        $data = $request->validated();
+        $user = User::where('email', $data['email'])->first();
+
+        if (!$user || !Hash::check($data['password'], $user->password)) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
+        }
+
+        // (اختياري) تحقق من email verified إذا أردت
+        $access = $this->tokenService->createAccessToken($user, $request->header('User-Agent'));
+        $refresh = $this->tokenService->createRefreshToken($user, $request->header('User-Agent'), $request->ip());
+
+        return response()->json([
+            'user' => new UserResource($user),
+            'access_token' => $access['access_token'],
+            'access_expires_at' => $access['expires_at'],
+            'refresh_token' => $refresh['refresh_token'],
+            'refresh_expires_at' => $refresh['expires_at'],
+            'token_type' => 'bearer',
+        ]);
+    }
+
+    public function refresh(Request $request)
+    {
+        $request->validate(['refresh_token' => 'required|string']);
+        $plain = $request->input('refresh_token');
+        $token = $this->tokenService->findValidRefreshToken($plain);
+
+
+        // أفضل: request يرسل user_id
+        // $user = User::find($request->input('user_id'));
+        // if (!$user)
+        //     return response()->json(['message' => 'Invalid user'], 401);
+
+        $token = $this->tokenService->findValidRefreshToken($plain);
+
+        if (!$token) {
+            return response()->json(['message' => 'Invalid or expired refresh token'], 401);
+        }
+
+        $user = $token->user;
+
+
+        $access = $this->tokenService->createAccessToken($user, $request->header('User-Agent'));
+        // optional: rotate refresh token
+        // $newRefresh = $this->tokenService->createRefreshToken(...);
+
+        return response()->json([
+            'access_token' => $access['access_token'],
+            'access_expires_at' => $access['expires_at'],
+            // 'refresh_token' => $newRefresh['refresh_token'],
+        ]);
+    }
+
+    public function logout(Request $request)
+    {
+        $user = $request->user();
+
+        $user->tokens()->delete();
+
+        $user->refreshTokens()->update(['revoked' => true]);
+
+        return response()->json(['message' => 'Logged out']);
+    }
+
+    // forgot password
+    public function forgotPassword(Request $request, OtpService $otpService)
+    {
+        $request->validate(['email' => 'required|email']);
+        $user = User::where('email', $request->email)->firstOrFail();
+        $otp=$otpService->generate($user);
+        return response()->json(['message' => 'OTP sent to email','otp'=>$otp]);
+
+
+        // $status = Password::sendResetLink($request->only('email'));
+
+        // return $status == Password::RESET_LINK_SENT
+        //     ? response()->json(['message' => 'Reset link sent'])
+        //     : response()->json(['message' => 'Unable to send reset link'], 500);
+    }
+
+    // reset password
+    public function resetPassword(Request $request, OtpService $otpService)
+    {
+        // $request->validate([
+        //     'email' => 'required|email',
+        //     'otp' => 'required|string|size:6',
+        //     'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
+        // ]);
+
+        // $status = Password::reset(
+        //     $request->only('email', 'password', 'password_confirmation', 'token'),
+        //     function ($user, $password) {
+        //         $user->forceFill(['password' => bcrypt($password)])->save();
+        //         // Revoke tokens after password change:
+        //         $user->tokens()->delete();
+        //         $user->refreshTokens()->update(['revoked' => true]);
+        //     }
+        // );
+
+        // return $status == Password::PASSWORD_RESET
+        //     ? response()->json(['message' => 'Password reset'])
+        //     : response()->json(['message' => 'Failed to reset password'], 400);
+
+
+        $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required|string|size:6',
+            'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
+        ]);
+
+        if (!$otpService->validate($request->email, $request->otp)) {
+            return response()->json(['error' => 'Invalid or expired OTP'], 422);
+        }
+
+        $user = User::where('email', $request->email)->firstOrFail();
+        $user->update(['password' => Hash::make($request->password)]);
+
+        return response()->json(['message' => 'Password reset successful']);
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\AvailabilityController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Services\ServiceAvailabilityService;
+use Illuminate\Http\JsonResponse;
+class AvailabilityController extends Controller
+{
+
+    protected $availabilityService;
+
+    public function __construct(ServiceAvailabilityService $availabilityService)
+    {
+        $this->availabilityService = $availabilityService;
+    }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getProviderAvailability(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'service_id' => 'required|integer|exists:services,id',
+                'provider_id' => 'required|integer|exists:users,id',
+                'date' => 'required|date_format:Y-m-d|after_or_equal:today',
+                'branch_id'   => 'nullable|integer'
+            ]);
+
+            $serviceId = $request->get('service_id');
+            $providerId = $request->get('provider_id');
+            $date = $request->get('date');
+
+            $availability = $this->availabilityService->getProviderAvailableSlotsByDate(
+                $serviceId,
+                $providerId,
+                $date
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $availability,
+                'message' => 'Provider availability retrieved successfully'
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve provider availability',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getAvailabilityCalendar(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'service_id' => 'required|integer|exists:services,id',
+                'provider_id'=> 'nullable|integer|exists:users,id',
+                'start_date' => 'required|date_format:Y-m-d|after_or_equal:today',
+                'end_date'   => 'required|date_format:Y-m-d|after_or_equal:start_date',
+                'branch_id'  => 'nullable|integer|exists:branchs,id',
+            ]);
+
+            $serviceId = $request->get('service_id');
+            $providerId = $request->get('provider_id');
+            $startDate = $request->get('start_date');
+            $endDate = $request->get('end_date');
+            $branchId = $request->get('branch_id');
+
+            $start = \Carbon\Carbon::parse($startDate);
+            $end = \Carbon\Carbon::parse($endDate);
+
+            if ($start->diffInDays($end) > 31) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Date range cannot exceed 31 days'
+                ], 400);
+            }
+
+            $calendar = $this->availabilityService->getAvailabilityCalendar(
+                $serviceId,
+                $providerId,
+                $startDate,
+                $endDate,
+                $branchId
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $calendar,
+                'message' => 'Availability calendar retrieved successfully'
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve availability calendar',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\BookingController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\BookingCreateRequest;
+use App\Http\Resources\AppointmentResource;
+use App\Models\Appointment;
+use App\Services\BookingService;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use InvalidArgumentException;
+
+class BookingController extends Controller
+{
+    protected BookingService $bookingService;
+
+    public function __construct(BookingService $bookingService)
+    {
+        $this->bookingService = $bookingService;
+    }
+
+    /**
+     * Create a new booking
+     *
+     * @param BookingCreateRequest $request
+     * @return JsonResponse
+     */
+    public function store(BookingCreateRequest $request): JsonResponse
+    {
+        try {
+            $customer = request()->user();
+
+            $appointment = $this->bookingService->createBooking($customer, $request->validated());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Booking created successfully',
+                'data' => new AppointmentResource($appointment),
+            ], 201);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while creating the booking',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get customer bookings
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function index(Request $request): JsonResponse
+    {
+        try {
+            $customer = auth()->user();
+            $status = $request->query('status');
+
+            $bookings = $this->bookingService->getCustomerBookings($customer, $status);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Bookings retrieved successfully',
+                'data' => AppointmentResource::collection($bookings),
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving bookings',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get booking details
+     *
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function show(int $id): JsonResponse
+    {
+        try {
+            $customer = auth()->user();
+            $appointment = $this->bookingService->getBookingDetails($id, $customer);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Booking details retrieved successfully',
+                'data' => new AppointmentResource($appointment),
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'authorization_error',
+            ], 403);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while retrieving booking details',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Cancel a booking
+     *
+     * @param int $id
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function cancel(int $id, Request $request): JsonResponse
+    {
+        try {
+            $customer = auth()->user();
+            $appointment = $this->bookingService->getBookingDetails($id, $customer);
+
+            $reason = $request->input('cancellation_reason');
+            $this->bookingService->cancelBooking($appointment, $reason);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Booking cancelled successfully',
+                'data' => new AppointmentResource($appointment->fresh()),
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while cancelling the booking',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\DevicesController.php
+<?php
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\UserDevice;
+use Illuminate\Http\Request;
+class DevicesController extends Controller{
+
+
+
+    public function registerDevice(Request $request)
+    {
+        $request->validate([
+            'device_id' => 'required|string',
+            'device_token' => 'nullable|string',
+            'platform' => 'nullable|in:android,ios',
+            'os_version' => 'nullable|string',
+            'app_version' => 'nullable|string',
+            'meta' => 'nullable|array',
+        ]);
+
+        $user = $request->user();
+
+        $device = UserDevice::updateOrCreate(
+            [
+                'user_id' => $user->id,
+                'device_id' => $request->input('device_id'),
+            ],
+            [
+                'device_token' => $request->input('device_token'),
+                'platform' => $request->input('platform'),
+                'os_version' => $request->input('os_version'),
+                'app_version' => $request->input('app_version'),
+                'is_active' => true,
+                'last_active_at' => now(),
+                'meta' => $request->input('meta', []),
+            ]
+        );
+
+        return response()->json([
+            'message' => 'Device registered successfully',
+            'data' => $device,
+        ], 201);
+    }
+
+    public function unregisterDevice(Request $request)
+    {
+        $request->validate([
+            'device_id' => 'required|string',
+        ]);
+
+        $user = $request->user();
+
+        $device = UserDevice::where('user_id', $user->id)
+            ->where('device_id', $request->input('device_id'))
+            ->first();
+
+        if ($device) {
+            $device->is_active = false;
+            $device->save();
+
+            return response()->json([
+                'message' => 'Device unregistered successfully',
+            ], 200);
+        }
+
+        return response()->json([
+            'message' => 'Device not found',
+        ], 404);
+    }
+
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\NotificationController.php
+<?php
+namespace App\Http\Controllers\Api;
+
+use App\Http\Resources\NotificationResource;
+use App\Models\User;
+use App\Services\NotificationService;
+use App\Services\OneSignalService;
+
+use function PHPSTORM_META\type;
+
+class NotificationController
+{
+    public function __construct(
+        protected OneSignalService $oneSignal,
+        protected NotificationService $notificationService,
+    ) {
+    }
+
+    public function testSendToAll()
+    {
+        // $response = $this->oneSignal->sendToAll(
+        //     'Test from Laravel',
+        //     'هذه رسالة تجريبية من Backend Laravel.'
+        // );
+        $user = request()->user();
+
+              $notifications = $user
+            ->notifications()
+            ->latest()
+            ->paginate(15);
+
+
+        return NotificationResource::collection($notifications);
+
+        $this->notificationService->sendNotificationToUser(
+            $user,
+            "notification.new_apointment",
+            'notification.new_apointment_message',
+            [
+                'service' => [
+                    'type' => 'value',
+                    'value' => 'العناية بالبشرة'
+                ],
+                'date' => [
+                    'type' => 'value',
+                    'value' => '2023-04-15'
+                ],
+                'time' => [
+                    'type' => 'value',
+                    'value' => '15:30'
+                ],
+                'payment_type' => [
+                    'type' => 'translate',
+                    'value' => 'payment_type.cash'
+                ],
+            ],
+            [
+                'tamplate' => 'new_apointment',
+                'appointment_id' => 1,
+                'user_id' => $user->id,
+                'service_id' => 1,
+
+            ]
+
+        );
+
+    }
+
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\OtpController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Enum\OtpType;
+use App\Models\User;
+use App\Services\OtpService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+
+class OtpController
+{
+    public function requestOtp(Request $request, OtpService $otpService)
+    {
+        if ($request->type == OtpType::EMAIL_OTP->value) {
+            $request->validate(['email' => 'required|email']);
+            $user = User::where('email', $request->email)->firstOrFail();
+            $message = $user->email;
+
+
+        } elseif ($request->type == OtpType::SMS_OTP->value) {
+            $request->validate(['phone' => 'required|string']);
+            $user = User::where('phone', $request->phone)->firstOrFail();
+            $message = $user->phone;
+
+        }
+        $otpService->generate($user, env('OTP_LENGTH', 6), OtpType::EMAIL_OTP);
+
+        return response()->json(['message' => 'OTP sent to ' . $message]);
+    }
+
+    public function verifyOtp(Request $request, OtpService $otpService)
+    {
+        if ($request->type == OtpType::EMAIL_OTP->value) {
+            $request->validate([
+                'email' => 'required|email',
+                'otp' => 'required|string',
+            ]);
+            if (!$otpService->validate($request->email, $request->otp)) {
+                return response()->json(['error' => 'Invalid or expired OTP'], 422);
+            }
+
+
+        } elseif ($request->type == OtpType::SMS_OTP->value) {
+            $request->validate([
+                'phone' => 'required',
+                'otp' => 'required|string',
+            ]);
+            if (!$otpService->validate($request->phone, $request->otp, OtpType::SMS_OTP)) {
+                return response()->json(['error' => 'Invalid or expired OTP'], 422);
+            }
+
+        }
+
+        if (!$otpService->validate($request->email, $request->otp)) {
+            return response()->json(['error' => 'Invalid or expired OTP'], 422);
+        }
+
+        return response()->json(['message' => 'OTP verified']);
+    }
+
+    public function resetPassword(Request $request, OtpService $otpService)
+    {
+        $rules = [
+            'otp' => 'required|string',
+            'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
+        ];
+
+        if ($request->type == OtpType::EMAIL_OTP->value) {
+            $rules['email'] = 'required|email';
+        } elseif ($request->type == OtpType::SMS_OTP->value) {
+            $rules['phone'] = 'required|string';
+        }
+
+        $validated = $request->validate($rules);
+
+        $identifier = $request->type == OtpType::EMAIL_OTP->value
+            ? $validated['email']
+            : $validated['phone'];
+
+        if (!$otpService->validate($identifier, $validated['otp'], OtpType::tryFrom($request->type))) {
+            return response()->json(['error' => 'Invalid or expired OTP'], 422);
+        }
+
+        $user = $request->type == OtpType::EMAIL_OTP->value
+            ? User::where('email', $validated['email'])->firstOrFail()
+            : User::where('phone', $validated['phone'])->firstOrFail();
+
+        $user->update(['password' => Hash::make($validated['password'])]);
+
+        return response()->json(['message' => 'Password reset successful']);
+    }
+
+
+
+    public function verifyEmailViaOtp(Request $request, OtpService $otpService)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required|string|size:6',
+        ]);
+
+        if (!$otpService->validate($request->email, $request->otp, OtpType::EMAIL_OTP)) {
+            return response()->json(['error' => 'Invalid or expired OTP'], 422);
+        }
+
+        $user = User::where('email', $request->email)->firstOrFail();
+        $user->update([
+            'email_verified_at' => now(),
+            'email_verified_via_otp_at' => now()
+        ]);
+
+        return response()->json([
+            'message' => 'Email verified successfully',
+            'email_verified' => true
+        ]);
+    }
+
+    public function resendOtpForEmailVerification(Request $request, OtpService $otpService)
+    {
+        $request->validate([
+            'email' => 'required|email|exists:users,email'
+        ]);
+
+        $user = User::where('email', $request->email)->firstOrFail();
+
+        if ($user->email_verified_via_otp_at) {
+            return response()->json([
+                'message' => 'Email already verified'
+            ], 400);
+        }
+
+        $otp = $otpService->generate($user, env('OTP_LENGTH', 6), \App\Enum\OtpType::EMAIL_OTP);
+
+        return response()->json([
+            'message' => 'OTP sent to your email',
+            'otp' => $otp
+        ]);
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\ProfileController.php
+<?php
+namespace App\Http\Controllers\Api;
+
+use App\Http\Resources\UserResource;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
+
+class ProfileController
+{
+  public function show(Request $request)
+{
+    return response()->json([
+        'success' => true,
+        'message' => 'Profile retrieved successfully',
+        'data' => new UserResource($request->user()),
+    ], 200);
+}
+
+    public function update(Request $request)
+    {
+
+        $data = $request->validate([
+            'first_name' => 'sometimes|string|max:255',
+            'last_name' => 'sometimes|string|max:255',
+            'phone' => 'sometimes|string|max:20',
+            'address' => 'sometimes|string|max:500',
+            'city' => 'sometimes|string|max:255',
+            'image' => 'sometimes|image|max:2048',
+        ]);
+
+        $user = $request->user();
+
+        if ($request->hasFile('image')) {
+            $user->updateProfileImage($request->file('image'));
+        }
+
+        if (isset($data['first_name']))
+            $user->first_name = $data['first_name'];
+
+        if (isset($data['last_name']))
+            $user->last_name = $data['last_name'];
+
+        if (isset($data['phone']))
+            $user->phone = $data['phone'];
+
+        if (isset($data['address']))
+            $user->address = $data['address'];
+
+        if (isset($data['city']))
+            $user->city = $data['city'];
+
+        $user->save();
+        $user=User::find($user->id);
+        return response()->json([
+            'success' => true,
+            'message' => 'Profile updated successfully',
+            'data' => new UserResource($user),
+        ], 200);
+    }
+
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+                'current_password' => 'required',
+                'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()]
+        ]);
+        $user = $request->user();
+        if (!Hash::check($request->current_password??"", $user->password)) {
+            return response()->json(['message' => 'Current password incorrect'], 422);
+        }
+        $user->password = bcrypt($request->password??"");
+        $user->save();
+        $user->tokens()->delete();
+        $user->refreshTokens()->update(['revoked' => true]);
+        return response()->json(['message' => 'Password updated']);
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\ProvidersController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\ProviderResource;
+use App\Services\ProviderService;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+
+class ProvidersController extends Controller
+{
+    protected $providerService;
+
+    public function __construct(ProviderService $providerService)
+    {
+        $this->providerService = $providerService;
+    }
+
+    /**
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function index(Request $request): JsonResponse
+    {
+        try {
+            $filters = [
+                'search' => $request->get('search'),
+                'branch_id' => $request->get('branch_id'),
+                'service_id' => $request->get('service_id'),
+                'sort_by' => $request->get('sort_by', 'first_name'),
+                'sort_direction' => $request->get('sort_direction', 'asc'),
+            ];
+
+            $perPage = $request->get('per_page', 15);
+
+            $providers = $this->providerService->getProvidersWithServices($filters, $perPage);
+
+            return response()->json([
+                'success' => true,
+                'data' => ProviderResource::collection($providers),
+                'pagination' => [
+                    'current_page' => $providers->currentPage(),
+                    'last_page' => $providers->lastPage(),
+                    'per_page' => $providers->perPage(),
+                    'total' => $providers->total(),
+                ],
+                'message' => 'Providers retrieved successfully'
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve providers',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * @param int $id
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function show(int $id, Request $request): JsonResponse
+    {
+        try {
+            $locale = $request->get('locale');
+            $providerData = $this->providerService->getProviderDetailsWithServices($id, $locale);
+
+            // Create a temporary resource with the enhanced data
+            $provider = $providerData['provider'];
+            $provider->services = $providerData['services'];
+            $provider->total_booking_count = $providerData['total_booking_count'];
+            return response()->json([
+                'success' => true,
+                'data' => new ProviderResource($provider),
+                'message' => 'Provider retrieved successfully'
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Provider not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve provider',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\SalonScheduleController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Filament\Schemas\SalonScheduleForm;
+use App\Http\Controllers\Controller;
+use App\Models\SalonSchedule;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class SalonScheduleController extends Controller
+{
+    /**
+     * Get salon schedule for a specific branch
+     */
+    public function show(int $branchId): JsonResponse
+    {
+        try {
+            $data = SalonScheduleForm::loadScheduleData($branchId);
+            return response()->json($data);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Failed to load schedule',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Save salon schedule for a specific branch
+     */
+    public function store(Request $request, int $branchId): JsonResponse
+    {
+        try {
+            $data = $request->all();
+
+            // Validate data
+            $errors = SalonScheduleForm::validateSchedule($data);
+
+            if (!empty($errors)) {
+                return response()->json([
+                    'error' => 'Validation failed',
+                    'errors' => $errors
+                ], 422);
+            }
+
+            // Save schedule
+            SalonScheduleForm::saveScheduleData($branchId, $data);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Schedule saved successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Failed to save schedule',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get all schedules grouped by branch
+     */
+    public function index(): JsonResponse
+    {
+        try {
+            $schedules = SalonSchedule::with('branch')
+                ->orderBy('branch_id')
+                ->orderBy('day_of_week')
+                ->get()
+                ->groupBy('branch_id');
+
+            return response()->json($schedules);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Failed to load schedules',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\ServicesController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\ServiceResource;
+use App\Http\Resources\SingleServiceResource;
+use App\Models\Service;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+
+class ServicesController extends Controller
+{
+    /**
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function index(Request $request): JsonResponse
+    {
+        try {
+            $query = Service::with(['category:id,name','image',
+            'providers' => function ($query) {
+                $query->select('users.id', 'users.first_name', 'users.last_name')
+                    ->with('profile_image');
+                }
+            ])
+                // ->withCount('reviews')
+                // ->withAvg('reviews as average_rating', 'rating')
+                ->active();
+
+
+            if ($request->has('category_id')) {
+                $query->where('category_id', $request->category_id);
+            }
+
+            if ($request->has('featured')) {
+                $query->featured();
+            }
+
+            if ($request->has('search')) {
+                $query->where('name', 'like', '%' . $request->search . '%')
+                    ->orWhere('description', 'like', '%' . $request->search . '%');
+            }
+
+            $sortBy = $request->get('sort_by', 'sort_order');
+            $sortDirection = $request->get('sort_direction', 'asc');
+
+            $query->orderBy($sortBy, $sortDirection);
+
+
+            $perPage = $request->get('per_page', 15);
+            $services = $query->paginate($perPage);
+
+            return response()->json([
+                'success' => true,
+                'data' => ServiceResource::collection($services),
+                'pagination' => [
+                    'current_page' => $services->currentPage(),
+                    'last_page' => $services->lastPage(),
+                    'per_page' => $services->perPage(),
+                    'total' => $services->total(),
+                ],
+                'message' => 'Services retrieved successfully'
+            ], 200);
+
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve services',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Display the specified service with complete information.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function show($id): JsonResponse
+    {
+        try {
+            $service = Service::with(['category', 'providers', 'reviews.user'])
+                ->active()
+                ->findOrFail($id);
+
+            return response()->json([
+                'success' => true,
+                'data' => new SingleServiceResource($service),
+                'message' => 'Service retrieved successfully'
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Service not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve service',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\SocialApiAuthController.php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
+use App\Models\User;
+use App\Services\AuthTokenService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Laravel\Socialite\Facades\Socialite;
+use Google\Client as GoogleClient;
+use Illuminate\Support\Facades\Log;
+
+class SocialApiAuthController extends Controller
+{
+    public function __construct(private AuthTokenService $tokenService)
+    {
+    }
+
+    public function redirectToGoogle()
+    {
+        return Socialite::driver('google')->redirect();
+    }
+
+    public function googleMobile(Request $request)
+    {
+        $request->validate([
+            'id_token' => 'required|string',
+            'platform' => 'required|in:android,ios'
+        ]);
+
+        $idToken = $request->input('id_token');
+        $platform = $request->input('platform');
+
+        try {
+
+            $googleUser = $this->verifyGoogleIdToken($idToken, $platform);
+
+            if (!$googleUser) {
+                return response()->json([
+                    'message' => 'Invalid Google ID token'
+                ], 401);
+            }
+
+
+            $user = $this->findOrCreateUser($googleUser);
+
+
+            $device = $request->header('User-Agent') ?? $platform . '-app';
+            $access = $this->tokenService->createAccessToken($user, $device);
+            $refresh = $this->tokenService->createRefreshToken($user, $device, $request->ip());
+
+            return response()->json([
+                'message' => 'Login successful',
+                'user' => [
+                    'id' => $user->id,
+                    'first_name' => $user->first_name,
+                    'last_name' => $user->last_name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'avatar_url' => $user->avatar_url,
+                    'email_verified_at' => $user->email_verified_at,
+                ],
+                'access_token' => $access['access_token'],
+                'access_expires_at' => $access['expires_at'],
+                'refresh_token' => $refresh['refresh_token'],
+                'refresh_expires_at' => $refresh['expires_at'],
+                'token_type' => 'bearer',
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Google Auth Error: ' . $e->getMessage());
+
+            return response()->json([
+                'message' => 'Authentication failed',
+                'error' => $e->getMessage()
+            ], 422);
+        }
+    }
+
+
+    private function verifyGoogleIdToken(string $idToken, string $platform): ?array
+    {
+        $client = new GoogleClient([
+            'client_id' => config('services.google.client_id')
+        ]);
+
+        $clientIds = [config('services.google.client_id')];
+
+        if ($platform === 'android') {
+            $clientIds[] = config('services.google_mobile.android_client_id');
+        } elseif ($platform === 'ios') {
+            $clientIds[] = config('services.google_mobile.ios_client_id');
+        }
+
+        try {
+
+            $payload = $client->verifyIdToken($idToken);
+
+            if (!$payload) {
+                return null;
+            }
+
+
+            if (!in_array($payload['aud'], $clientIds)) {
+                Log::error('Invalid audience in ID token', [
+                    'expected' => $clientIds,
+                    'received' => $payload['aud']
+                ]);
+                return null;
+            }
+
+            return [
+                'google_id' => $payload['sub'],
+                'email' => $payload['email'],
+                'email_verified' => $payload['email_verified'] ?? false,
+                'name' => $payload['name'] ?? '',
+                'given_name' => $payload['given_name'] ?? '',
+                'family_name' => $payload['family_name'] ?? '',
+                'picture' => $payload['picture'] ?? null,
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Google ID Token Verification Failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+
+    private function findOrCreateUser(array $googleUser): User
+    {
+        $user = User::where('google_id', $googleUser['google_id'])->first();
+
+        if ($user) {
+            if ($googleUser['picture'] && $user->avatar_url !== $googleUser['picture']) {
+                $user->update(['avatar_url' => $googleUser['picture']]);
+            }
+            return $user;
+        }
+
+        $user = User::where('email', $googleUser['email'])->first();
+
+        if ($user) {
+            $user->update([
+                'google_id' => $googleUser['google_id'],
+                'avatar_url' => $googleUser['picture'] ?? $user->avatar_url,
+                'email_verified_at' => $googleUser['email_verified'] ? now() : $user->email_verified_at,
+                // 'email_verified_via_otp_at' => $googleUser['email_verified'] ? now() : $user->email_verified_via_otp_at,
+            ]);
+            return $user;
+        }
+
+        return User::create([
+            'google_id' => $googleUser['google_id'],
+            'email' => $googleUser['email'],
+            'first_name' => $googleUser['given_name'] ?: 'User',
+            'last_name' => $googleUser['family_name'] ?: '',
+            'avatar_url' => $googleUser['picture'],
+            'password' => bcrypt(Str::random(32)), // كلمة مرور عشوائية
+            'email_verified_at' => $googleUser['email_verified'] ? now() : now(),
+            'email_verified_via_otp_at' => $googleUser['email_verified'] ? now() : now(),
+        ]);
+    }
+
+
+    public function googleWebRedirect()
+    {
+        return Socialite::driver('google')
+            ->scopes(['email', 'profile'])
+            ->redirect();
+    }
+
+
+    public function googleWebCallback(Request $request)
+    {
+        try {
+            $googleUser = Socialite::driver('google')->user();
+
+            $user = $this->findOrCreateUser([
+                'google_id' => $googleUser->getId(),
+                'email' => $googleUser->getEmail(),
+                'email_verified' => true,
+                'name' => $googleUser->getName(),
+                'given_name' => $googleUser->getName(),
+                'family_name' => $googleUser->getNickname(),
+                'picture' => $googleUser->getAvatar(),
+            ]);
+
+        $access = $this->tokenService->createAccessToken($user, $request->header('User-Agent'));
+        $refresh = $this->tokenService->createRefreshToken($user, $request->header('User-Agent'), $request->ip());
+
+            return response()->json([
+            'message' => 'Login successful',
+            'user' => new UserResource($user),
+            'access_token' => $access['access_token'],
+            'access_expires_at' => $access['expires_at'],
+            'refresh_token' => $refresh['refresh_token'],
+            'refresh_expires_at' => $refresh['expires_at'],
+            'token_type' => 'bearer',
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Authentication failed',
+                'error' => $e->getMessage()
+            ], 422);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Api\SocialAuthController.php
+<?php
+namespace App\Http\Controllers\Api;
+
+use App\Models\User;
+use App\Services\AuthTokenService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Laravel\Socialite\Facades\Socialite;
+
+class SocialAuthController
+{
+    public function google(Request $request, AuthTokenService $tokenService)
+    {
+        $request->validate(['token' => 'required|string']);
+        $idToken = $request->input('token');
+
+        try {
+            $googleUser = Socialite::driver('google')->userFromToken($idToken);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Invalid Google token'], 422);
+        }
+
+        $email = $googleUser->getEmail();
+        $user = User::firstWhere('email', $email);
+        if (!$user) {
+            $user = User::create([
+                'name' => $googleUser->getName() ?? $googleUser->getNickname() ?? 'GoogleUser',
+                'email' => $email,
+                'email_verified_at' => now(),
+                'google_id' => $googleUser->getId(),
+                'password' => bcrypt(Str::random(16)),
+                'avatar_url' => $googleUser->getAvatar(),
+            ]);
+        }
+        $device = $request->header('User-Agent');
+        if (is_array($device)) {
+            $device = $device[0];
+        }
+        $access = $tokenService->createAccessToken($user, $device);
+        $refresh = $tokenService->createRefreshToken($user, $device, $request->ip());
+
+        return response()->json([
+            'user' => $user->only(['id', 'name', 'email', 'avatar_url']),
+            'access_token' => $access['access_token'],
+            'refresh_token' => $refresh['refresh_token'],
+        ]);
+    }
+}
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\BookingController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\BookingValidateRequest;
+use App\Http\Requests\Api\BookingCreateRequest;
+use App\Http\Resources\AppointmentResource;
+use App\Services\BookingService;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use InvalidArgumentException;
+
+class BookingController extends Controller
+{
+    protected BookingService $bookingService;
+
+    public function __construct(BookingService $bookingService)
+    {
+        $this->bookingService = $bookingService;
+    }
+
+    /**
+     * Validate booking data before creating
+     *
+     * POST /api/bookings/validate
+     *
+     * @param BookingValidateRequest $request
+     * @return JsonResponse
+     */
+    public function validate(BookingValidateRequest $request): JsonResponse
+    {
+        try {
+            $customer = $request->user();
+
+            $bookingData = [
+                'services' => $request->input('services'),
+                'date' => $request->input('date'),
+            ];
+
+            $validation = $this->bookingService->validateBooking($customer, $bookingData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم التحقق من صحة بيانات الحجز بنجاح',
+                'data' => $validation,
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء التحقق من الحجز',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Create new booking
+     *
+     * POST /api/bookings/create
+     *
+     * @param BookingCreateRequest $request
+     * @return JsonResponse
+     */
+    public function create(BookingCreateRequest $request): JsonResponse
+    {
+        try {
+            $customer = $request->user();
+
+            $bookingData = [
+                'services' => $request->input('services'),
+                'date' => $request->input('date'),
+                'notes' => $request->input('notes'),
+                'payment_method' => $request->input('payment_method'),
+            ];
+
+            $appointment = $this->bookingService->createBooking($customer, $bookingData);
+
+            $responseMessage = $appointment->created_status
+                ? 'تم إنشاء الحجز بنجاح'
+                : 'تم إنشاء الحجز بنجاح. يرجى إكمال عملية الدفع لتأكيد الحجز';
+
+            return response()->json([
+                'success' => true,
+                'message' => $responseMessage,
+                'data' => new AppointmentResource($appointment),
+                'requires_payment' => !$appointment->created_status,
+                'payment_info' => !$appointment->created_status ? [
+                    'appointment_id' => $appointment->id,
+                    'amount' => $appointment->total_amount,
+                    'currency' => 'EUR',
+                ] : null,
+            ], 201);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء إنشاء الحجز',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Confirm payment and activate booking
+     *
+     * POST /api/bookings/{id}/confirm-payment
+     *
+     * @param int $id
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function confirmPayment(int $id, Request $request): JsonResponse
+    {
+        try {
+            $customer = $request->user();
+
+            $validated = $request->validate([
+                'payment_transaction_id' => 'nullable|string|max:255',
+                'payment_metadata' => 'nullable|array',
+            ]);
+
+            $appointment = $this->bookingService->confirmPayment(
+                $id,
+                $customer,
+                $validated['payment_transaction_id'] ?? null,
+                $validated['payment_metadata'] ?? []
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تأكيد الدفع وتفعيل الحجز بنجاح',
+                'data' => new AppointmentResource($appointment),
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'business_error',
+            ], 422);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'الحجز المطلوب غير موجود',
+                'error_type' => 'not_found',
+            ], 404);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء تأكيد الدفع',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get available time slots for multiple services
+     *
+     * GET /api/bookings/available-slots
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getAvailableSlots(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'services' => 'required|array|min:1',
+                'services.*.service_id' => 'required|integer|exists:services,id',
+                'services.*.provider_id' => 'required|integer|exists:users,id',
+                'date' => 'required|date_format:Y-m-d',
+            ]);
+
+            $slots = $this->bookingService->getAvailableSlotsForMultipleServices(
+                $validated['services'],
+                $validated['date']
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم جلب الأوقات المتاحة بنجاح',
+                'data' => $slots,
+            ], 200);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'error_type' => 'validation_error',
+            ], 422);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب الأوقات المتاحة',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'error_type' => 'server_error',
+            ], 500);
+        }
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\Controller.php
+<?php
+
+namespace App\Http\Controllers;
+
+abstract class Controller
+{
+    //
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Controllers\PageController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Exceptions\PageNotFoundException;
+use App\Exceptions\PageTranslationMissingException;
+use App\Services\PageRenderService;
+use Illuminate\Http\Request;
+
+class PageController extends Controller
+{
+    public function show(Request $request, string $pageKey, PageRenderService $service)
+    {
+        $lang = $request->query('lang');
+        try {
+
+            return $service->render($pageKey, $lang);
+
+
+        } catch (\Throwable $e) {
+            report($e);
+            abort(500);
+        }
+    }
+
+    public function privacy(Request $request, PageRenderService $service)
+    {
+        $lang = $request->query('lang');
+
+        try {
+
+            return $service->render('terms', $lang);
+        } catch (\Throwable $e) {
+            logger()->error('Error rendering privacy page: ' . $e->getMessage());
+            throw $e;
+        }
+
+    }
+
+    public function terms(Request $request, PageRenderService $service)
+    {
+        $lang = $request->query('lang');
+
+        try {
+
+            return $service->render('privacy', $lang);
+        } catch (\Throwable $e) {
+            report($e);
+            abort(500);
+        }
+
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Middleware\EnforceJsonAcceptHeader.php
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+class EnforceJsonAcceptHeader
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     */
+    public function handle(Request $request, Closure $next): Response
+    {
+        $request->headers->set('Accept', 'application/json');
+
+        return $next($request);
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Middleware\EnsureEmailIsVerifiedViaOtp.php
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
+
+class EnsureEmailIsVerifiedViaOtp
+{
+    /**
+     * Handle an incoming request.
+     *
+     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     */
+    public function handle(Request $request, Closure $next): Response
+    {
+        $user = $request->user();
+
+        if ($user) {
+
+
+            if (!$user->email_verified_via_otp_at) {
+                return response()->json([
+                    'message' => 'Your email address is not verified. Please verify your email using OTP.',
+                    'email_verified' => false,
+                    'requires_otp_verification' => true
+                ], 403);
+            }
+        }
+
+        return $next($request);
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Requests\Api\AppointmentReminderStoreRequest.php
+<?php
+
+namespace App\Http\Requests\Api;
+
+use App\Enum\AppointmentStatus;
+use App\Models\Appointment;
+use Carbon\Carbon;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\Rule;
+
+class AppointmentReminderStoreRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return (bool) $this->user();
+    }
+
+    public function rules(): array
+    {
+        return [
+            'appointment_id' => [
+                'required',
+                'integer',
+                Rule::exists('appointments', 'id')->where(function ($query) {
+                    $query->where('customer_id', $this->user()?->id);
+                }),
+            ],
+            'remind_at' => ['required', 'date', 'after:now'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'appointment_id.required' => __('main.appointment.validation.appointment_id.required'),
+            'appointment_id.integer' => __('main.appointment.validation.appointment_id.integer'),
+            'appointment_id.exists' => __('main.appointment.validation.appointment_id.exists'),
+            'remind_at.required' => __('main.appointment.validation.remind_at.required'),
+            'remind_at.date' => __('main.appointment.validation.remind_at.date'),
+            'remind_at.after' => __('main.appointment.validation.remind_at.after'),
+        ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $appointmentId = $this->input('appointment_id');
+            $remindAtInput = $this->input('remind_at');
+
+            if (!$appointmentId || !$remindAtInput || !$this->user()) {
+                return;
+            }
+
+            $appointment = Appointment::where('id', $appointmentId)
+                ->where('customer_id', $this->user()->id)
+                ->first();
+
+            if (!$appointment) {
+                return;
+            }
+
+            $statusValue = $appointment->status?->value ?? $appointment->status;
+            if ($appointment->cancelled_at || in_array($statusValue, AppointmentStatus::getCancelledStatuses(), true)) {
+                $validator->errors()->add(
+                    'appointment_id',
+                    __('main.appointment.validation.appointment_cancelled')
+                );
+                return;
+            }
+
+            if ($appointment->start_time <= now()) {
+                $validator->errors()->add(
+                    'appointment_id',
+                    __('main.appointment.validation.appointment_past')
+                );
+            }
+
+            try {
+                $remindAt = Carbon::parse($remindAtInput);
+                if ($remindAt->gte($appointment->start_time)) {
+                    $validator->errors()->add(
+                        'remind_at',
+                        __('main.appointment.validation.remind_at.before_appointment')
+                    );
+                }
+            } catch (\Throwable $e) {
+                // Invalid date already handled by base validation.
+            }
+        });
+    }
+
+    protected function failedValidation(Validator $validator): void
+    {
+        throw new HttpResponseException(
+            response()->json([
+                'success' => false,
+                'message' => __('main.validation.failed'),
+                'errors' => $validator->errors(),
+                'error_type' => 'validation_error',
+            ], 422)
+        );
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Requests\Api\BookingCreateRequest.php
+<?php
+
+namespace App\Http\Requests\Api;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Http\Exceptions\HttpResponseException;
+
+class BookingCreateRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     */
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     */
+    public function rules(): array
+    {
+        return [
+            'services' => 'required|array|min:1|max:10',
+            'services.*.service_id' => 'required|integer|exists:services,id',
+            'services.*.provider_id' => 'required|integer|exists:users,id',
+            'services.*.start_time' => 'required|date_format:H:i',
+            'date' => 'required|date_format:Y-m-d|after_or_equal:today',
+            'notes' => 'nullable|string|max:1000',
+            'payment_method' => 'required|string|in:cash,online',
+        ];
+    }
+
+    /**
+     * Get custom messages for validator errors.
+     */
+    public function messages(): array
+    {
+        return [
+            'services.required' => 'يجب تحديد خدمة واحدة على الأقل',
+            'services.array' => 'يجب أن تكون الخدمات عبارة عن مصفوفة',
+            'services.min' => 'يجب تحديد خدمة واحدة على الأقل',
+            'services.max' => 'لا يمكن تحديد أكثر من 10 خدمات',
+            'services.*.service_id.required' => 'معرف الخدمة مطلوب',
+            'services.*.service_id.integer' => 'معرف الخدمة يجب أن يكون رقماً صحيحاً',
+            'services.*.service_id.exists' => 'الخدمة المحددة غير موجودة',
+            'services.*.provider_id.required' => 'معرف مقدم الخدمة مطلوب',
+            'services.*.provider_id.integer' => 'معرف مقدم الخدمة يجب أن يكون رقماً صحيحاً',
+            'services.*.provider_id.exists' => 'مقدم الخدمة المحدد غير موجود',
+            'services.*.start_time.required' => 'وقت البدء مطلوب',
+            'services.*.start_time.date_format' => 'وقت البدء يجب أن يكون بصيغة HH:MM',
+            'date.required' => 'تاريخ الحجز مطلوب',
+            'date.date_format' => 'تاريخ الحجز يجب أن يكون بصيغة Y-m-d',
+            'date.after_or_equal' => 'لا يمكن الحجز في تاريخ سابق',
+            'notes.string' => 'الملاحظات يجب أن تكون نصاً',
+            'notes.max' => 'الملاحظات يجب ألا تتجاوز 1000 حرف',
+            'payment_method.required' => 'طريقة الدفع مطلوبة',
+            'payment_method.string' => 'طريقة الدفع يجب أن تكون نصاً',
+            'payment_method.in' => 'طريقة الدفع يجب أن تكون cash أو online',
+        ];
+    }
+
+    /**
+     * Handle a failed validation attempt.
+     */
+    protected function failedValidation(Validator $validator)
+    {
+        throw new HttpResponseException(
+            response()->json([
+                'success' => false,
+                'message' => 'بيانات غير صحيحة',
+                'errors' => $validator->errors(),
+                'error_type' => 'validation_error',
+            ], 422)
+        );
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Requests\Api\BookingValidateRequest.php
+<?php
+
+namespace App\Http\Requests\Api;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Http\Exceptions\HttpResponseException;
+
+class BookingValidateRequest extends FormRequest
+{
+
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+
+    public function rules(): array
+    {
+        return [
+            'services'              => 'required|array|min:1|max:10',
+            'services.*.service_id' => 'required|integer|exists:services,id',
+            'services.*.provider_id'=> 'required|integer|exists:users,id',
+            'services.*.start_time' => 'required|date_format:H:i',
+            'date'                  => 'required|date_format:Y-m-d|after_or_equal:today',
+        ];
+    }
+
+    /**
+     * Get custom messages for validator errors.
+     */
+    public function messages(): array
+    {
+        return [
+            'services.required' => 'يجب تحديد خدمة واحدة على الأقل',
+            'services.array' => 'يجب أن تكون الخدمات عبارة عن مصفوفة',
+            'services.min' => 'يجب تحديد خدمة واحدة على الأقل',
+            'services.max' => 'لا يمكن تحديد أكثر من 10 خدمات',
+            'services.*.service_id.required' => 'معرف الخدمة مطلوب',
+            'services.*.service_id.integer' => 'معرف الخدمة يجب أن يكون رقماً صحيحاً',
+            'services.*.service_id.exists' => 'الخدمة المحددة غير موجودة',
+            'services.*.provider_id.required' => 'معرف مقدم الخدمة مطلوب',
+            'services.*.provider_id.integer' => 'معرف مقدم الخدمة يجب أن يكون رقماً صحيحاً',
+            'services.*.provider_id.exists' => 'مقدم الخدمة المحدد غير موجود',
+            'services.*.start_time.required' => 'وقت البدء مطلوب',
+            'services.*.start_time.date_format' => 'وقت البدء يجب أن يكون بصيغة HH:MM',
+            'date.required' => 'تاريخ الحجز مطلوب',
+            'date.date_format' => 'تاريخ الحجز يجب أن يكون بصيغة Y-m-d',
+            'date.after_or_equal' => 'لا يمكن الحجز في تاريخ سابق',
+        ];
+    }
+
+    /**
+     * Handle a failed validation attempt.
+     */
+    protected function failedValidation(Validator $validator)
+    {
+        throw new HttpResponseException(
+            response()->json([
+                'success' => false,
+                'message' => 'بيانات غير صحيحة',
+                'errors' => $validator->errors(),
+                'error_type' => 'validation_error',
+            ], 422)
+        );
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Requests\LoginRequest.php
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class LoginRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     */
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            'email' => 'required|email',
+            'password' => 'required|string',
+            ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Requests\RegisterRequest.php
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rules\Password;
+
+class RegisterRequest extends FormRequest
+{
+    /**
+     * Determine if the user is authorized to make this request.
+     */
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
+     */
+    public function rules(): array
+    {
+        return [
+            'first_name' => 'required|string|max:255',
+            'last_name'=> 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'phone' => 'nullable|string|max:255|unique:users,phone',
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                Password::min(8)
+                    ->mixedCase()->letters()->numbers()->symbols()
+            ],
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\AppointmentResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class AppointmentResource extends JsonResource
+{
+    /**
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'number' => $this->number,
+
+            'appointment_date' => $this->appointment_date->format('Y-m-d'),
+            'formatted_date' => $this->formatted_date,
+            'start_time' => $this->start_time->format('H:i'),
+            'end_time' => $this->end_time->format('H:i'),
+            'time_range' => $this->time_range,
+            'duration_minutes' => $this->duration_minutes,
+            'formatted_duration' => $this->formatted_duration,
+
+            'subtotal' => (float)$this->subtotal,
+            'tax_amount' => (float)$this->tax_amount,
+            'total_amount' => (float)$this->total_amount,
+
+            'status' => $this->status->name,
+            'status_value' => $this->status->value,
+            'status_label' => $this->status_label,
+            'payment_status' => $this->payment_status->name,
+            'payment_status_value' => $this->payment_status->value,
+            'payment_status_label' => $this->payment_status_label,
+            'payment_method' => $this->payment_method,
+
+
+            'cancellation_reason' => $this->cancellation_reason,
+            'cancelled_at' => $this->cancelled_at?->format('Y-m-d H:i:s'),
+
+
+            'provider' => [
+                'id' => $this->provider->id,
+                'full_name' => $this->provider->full_name,
+                'email' => $this->provider->email,
+                'phone' => $this->provider->phone,
+                'avatar_url' => $this->provider->avatar_url,
+
+            ],
+
+            // 'customer' => $this->when($this->relationLoaded('customer'), [
+            //     'id' => $this->customer->id,
+            //     'first_name' => $this->customer->first_name,
+            //     'last_name' => $this->customer->last_name,
+            //     'full_name' => $this->customer->full_name,
+            //     'email' => $this->customer->email,
+            //     'phone' => $this->customer->phone,
+            //     'avatar_url' => $this->customer->avatar_url,
+            // ]),
+
+
+            // 'services' => ServiceResource::collection($this->whenLoaded('services')),
+
+            'services_details' => $this->when(
+                $this->relationLoaded('services_record'),
+                AppointmentServiceResource::collection($this->services_record)
+            ),
+
+            'notes' => $this->notes,
+            'created_at' => $this->created_at->format('Y-m-d H:i:s'),
+            'updated_at' => $this->updated_at->format('Y-m-d H:i:s'),
+
+            'is_upcoming' => $this->start_time > now(),
+            'is_past' => $this->start_time < now(),
+            'is_cancelled' => in_array($this->status->value, [-1, -2]),
+            'is_completed' => $this->status->value === 1,
+            'can_cancel' => $this->status->value === 0 && $this->start_time > now(),
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\AppointmentServiceResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+
+class AppointmentServiceResource extends JsonResource
+{
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'service_id' => $this->service_id,
+            'service_name' => $this->service_name,
+            'duration_minutes' => $this->duration_minutes,
+            'formatted_duration' => $this->formatted_duration,
+            'price' => (float)$this->price,
+            'formatted_price' => $this->formatted_price,
+            'sequence_order' => $this->sequence_order,
+
+            'service' => $this->whenLoaded('service', fn() => [
+                'id' => $this->service->id,
+                'name' => $this->service->name,
+                'image_url' => $this->service->image_url,
+                'color_code' => $this->service->color_code,
+
+            ]),
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\BranchResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class BranchResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'address' => $this->adress,
+            'phone' => $this->phone,
+            'email' => $this->email,
+            'latitude' => $this->latitude,
+            'longitude' => $this->longitude,
+            'is_active' => $this->is_active,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+        ];
+    }
+}
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\MinCategoryResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class MinCategoryResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     * Returns minimal category data (id and name only).
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+        ];
+    }
+}
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\MinProviderResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class MinProviderResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     * Returns minimal provider data (id, name, and avatar only).
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'full_name' => $this->full_name,
+            'profile_image_url' => $this->profile_image_url,
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\MinServiceReviewResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class MinServiceReviewResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     * Returns minimal review data (rating only).
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'rating' => $this->rating,
+            'comment' => $this->comment,
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\NotificationResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use App\Services\NotificationService;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class NotificationResource extends JsonResource
+{
+    public function toArray($request): array
+    {
+        /** @var NotificationService $notificationService */
+        $notificationService = app(NotificationService::class);
+
+        $locale = app()->getLocale();
+
+        $params = $this->data['params'] ?? [];
+
+        return [
+            'id' => $this->id,
+
+            'title' => $notificationService->translateKey(
+                $this->data['title_key'],
+                $params,
+                $locale
+            ),
+
+            'message' => $notificationService->translateKey(
+                $this->data['message_key'],
+                $params,
+                $locale
+            ),
+
+            'data' => $this->data['data'] ?? [],
+            'read_at' => $this->read_at,
+            'created_at' => $this->created_at,
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\ProviderResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class ProviderResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+
+        return [
+            'id' => $this->id,
+            'first_name' => $this->first_name,
+            'last_name' => $this->last_name,
+            'full_name' => $this->full_name,
+            'email' => $this->email,
+            'phone' => $this->phone,
+            'branch_id' => $this->branch_id,
+            'avatar_url' => $this->avatar_url,
+            'is_active' => $this->is_active,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+
+            'total_booking_count' => $this->appointmentsFinshedAsProvider()->count() ?? 0,
+
+            'services' => $this->when(isset($this->services), function () {
+                return $this->services->map(function ($service) {
+                    return [
+                        'id' => $service->id,
+                        'name' => $service->name,
+                        'translated_name' => $service->translated_name ?? $service->name,
+                        'display_price' => $service->display_price,
+                        'is_active' => $service->is_active,
+                        'image_url' => $service->image_url,
+                        'is_featured'=> $this->is_featured,
+
+                        'booking_count' => $service->booking_count ?? 0,
+                        'average_rating' => $service->average_rating ?? 0,
+                        'review_count' => $service->review_count ?? 0,
+
+
+                    ];
+                });
+            }),
+
+            'pivot' => $this->whenPivotLoaded('provider_service', function () {
+                return [
+                    'is_active' => $this->pivot->is_active,
+                    'custom_price' => $this->pivot->custom_price,
+                    'custom_duration' => $this->pivot->custom_duration,
+                    'notes' => $this->pivot->notes,
+                ];
+            }),
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\ProviderServiceResource.php
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\ServiceCategoryResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class ServiceCategoryResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+            'is_active' => $this->is_active,
+            'sort_order' => $this->sort_order,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+        ];
+    }
+}
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\ServiceResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class ServiceResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+            'price' => $this->price,
+            'discount_price' => $this->discount_price,
+            'display_price' => $this->display_price,
+            'duration_minutes' => $this->duration_minutes,
+            'formatted_duration' => $this->formatted_duration,
+            'is_active' => $this->is_active,
+            'sort_order' => $this->sort_order,
+            'image_url' => $this->image_url,
+            'color_code' => $this->color_code,
+            'icon_url' => $this->icon_url,
+            'is_featured' => $this->is_featured,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+            'average_rating' => $this->average_rating ? round((float)$this->average_rating, 1) : 0,
+
+            // relationships
+            'category' => new MinCategoryResource($this->whenLoaded('category')),
+            // 'branch' => new BranchResource($this->whenLoaded('branch')),
+            'providers' => MinProviderResource::collection($this->providers),
+            // 'reviews' => MinServiceReviewResource::collection($this->whenLoaded('reviews')),
+
+            'has_discount' => $this->discount_price !== null,
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\ServiceReviewResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class ServiceReviewResource extends JsonResource
+{
+    /**
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'rating' => $this->rating,
+            'comment' => $this->comment,
+            'is_approved' => $this->is_approved,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+
+            // relationships
+            'user' => new UserResource($this->whenLoaded('user')),
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\SingleServiceResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class SingleServiceResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     * Returns complete service details with all relationships.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'description' => $this->description,
+            'price' => $this->price,
+            'discount_price' => $this->discount_price,
+            'display_price' => $this->display_price,
+            'duration_minutes' => $this->duration_minutes,
+            'formatted_duration' => $this->formatted_duration,
+            'is_active' => $this->is_active,
+            'sort_order' => $this->sort_order,
+            'image_url' => $this->image_url,
+            'color_code' => $this->color_code,
+            'icon_url' => $this->icon_url,
+            'is_featured' => $this->is_featured,
+            'has_discount' => $this->discount_price !== null,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+
+            // Statistics
+            'statistics' => [
+                'average_rating' => $this->when(
+                    $this->relationLoaded('reviews'),
+                    fn() => round($this->reviews->avg('rating') ?? 0, 1)
+                ),
+                'review_count' => $this->when(
+                    $this->relationLoaded('reviews'),
+                    fn() => $this->reviews->count()
+                ),
+                'provider_count' => $this->when(
+                    $this->relationLoaded('providers'),
+                    fn() => $this->providers->count()
+                ),
+            ],
+
+
+            'category' => new ServiceCategoryResource($this->whenLoaded('category')),
+            'providers' => ProviderResource::collection($this->whenLoaded('providers')),
+            'reviews' => ServiceReviewResource::collection($this->whenLoaded('reviews')),
+        ];
+    }
+}
+
+++++++++++++++++++++
+
+D:\Coding\BarberBooking\app\Http\Resources\UserResource.php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class UserResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return array
+     */
+    public function toArray($request)
+    {
+        return [
+            'id' => $this->id,
+            'first_name' => $this->first_name,
+            'last_name' => $this->last_name,
+            'full_name' => $this->full_name,
+            'email' => $this->email,
+            'phone' => $this->phone,
+            'avatar_url' => $this->avatar_url,
+            'profile_image_url' => $this->profile_image_url,
+            'is_active' => $this->is_active,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+        ];
+    }
+}
+
+++++++++++++++++++++
+

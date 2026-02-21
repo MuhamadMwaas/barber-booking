@@ -41,14 +41,14 @@ class ServiceInfolist
                             ->schema([
                                 TextEntry::make('price')
                                     ->label(__('resources.service.price'))
-                                    ->money('SAR')
+                                    ->money('EUR')
                                     ->size('lg')
                                     ->weight(FontWeight::Bold)
                                     ->color('success'),
 
                                 TextEntry::make('discount_price')
                                     ->label(__('resources.service.discount'))
-                                    ->money('SAR')
+                                    ->money('EUR')
                                     ->size('lg')
                                     ->weight(FontWeight::Bold)
                                     ->color('danger')
@@ -291,7 +291,7 @@ class ServiceInfolist
                             ->schema([
                                 TextEntry::make('service_total_revenue')
                                     ->label(__('resources.service.total_revenue'))
-                                    ->state(fn ($record) => 'SAR ' . number_format(
+                                    ->state(fn ($record) => 'EUR ' . number_format(
                                         $record->appointmentServices->sum('price'), 2
                                     ))
                                     ->badge()
@@ -302,7 +302,7 @@ class ServiceInfolist
 
                                 TextEntry::make('service_completed_revenue')
                                     ->label(__('resources.service.completed_revenue'))
-                                    ->state(fn ($record) => 'SAR ' . number_format(
+                                    ->state(fn ($record) => 'EUR ' . number_format(
                                         $record->appointmentServices
                                             ->filter(fn ($as) => $as->appointment?->status === \App\Enum\AppointmentStatus::COMPLETED)
                                             ->sum('price'), 2
@@ -316,7 +316,7 @@ class ServiceInfolist
 
                                 TextEntry::make('service_average_price')
                                     ->label(__('resources.service.average_price'))
-                                    ->state(fn ($record) => 'SAR ' . number_format(
+                                    ->state(fn ($record) => 'EUR ' . number_format(
                                         $record->appointmentServices
                                             ->filter(fn ($as) => $as->appointment?->status === \App\Enum\AppointmentStatus::COMPLETED)
                                             ->avg('price') ?? 0, 2

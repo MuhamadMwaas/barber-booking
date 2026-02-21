@@ -74,7 +74,7 @@ class ServicesTable
                 // Price with Discount
                 TextColumn::make('price')
                     ->label(__('resources.service.price'))
-                    ->money('SAR')
+                    ->money('EUR')
                     ->weight(FontWeight::Bold)
                     ->description(function ($record) {
                         if ($record->discount_price) {

@@ -25,4 +25,55 @@ enum PaymentStatus: int
             self::PARTIALLY_REFUNDED => 'Partially Refunded',
         };
     }
+
+    /**
+     * Check if payment status is successful (paid)
+     */
+    public function isSuccessful(): bool
+    {
+        return in_array($this, [
+            self::PAID_ONLINE,
+            self::PAID_ONSTIE_CASH,
+            self::PAID_ONSTIE_CARD,
+        ]);
+    }
+
+    /**
+     * Check if payment status is pending
+     */
+    public function isPending(): bool
+    {
+        return $this === self::PENDING;
+    }
+
+    /**
+     * Check if payment status is failed
+     */
+    public function isFailed(): bool
+    {
+        return $this === self::FAILED;
+    }
+
+    /**
+     * Check if payment status is refunded (full or partial)
+     */
+    public function isRefunded(): bool
+    {
+        return in_array($this, [
+            self::REFUNDED,
+            self::PARTIALLY_REFUNDED,
+        ]);
+    }
+
+    /**
+     * Get all successful payment statuses
+     */
+    public static function getSuccessfulStatuses(): array
+    {
+        return [
+            self::PAID_ONLINE,
+            self::PAID_ONSTIE_CASH,
+            self::PAID_ONSTIE_CARD,
+        ];
+    }
 }

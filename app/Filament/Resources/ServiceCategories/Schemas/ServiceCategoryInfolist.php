@@ -255,7 +255,7 @@ class ServiceCategoryInfolist
 
                                 TextEntry::make('average_price')
                                     ->label(__('resources.service.average_price'))
-                                    ->state(fn ($record) => 'SAR ' . number_format(
+                                    ->state(fn ($record) => 'EUR ' . number_format(
                                         $record->services()->avg('price') ?? 0, 2
                                     ))
                                     ->badge()

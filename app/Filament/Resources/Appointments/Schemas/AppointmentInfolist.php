@@ -151,18 +151,18 @@ class AppointmentInfolist
                                     ->schema([
                                         TextEntry::make('subtotal')
                                             ->label(__('resources.appointment.subtotal'))
-                                            ->money('SAR')
+                                            ->money('EUR')
                                             ->icon('heroicon-o-calculator'),
 
                                         TextEntry::make('tax_amount')
                                             ->label(__('resources.appointment.tax'))
-                                            ->money('SAR')
+                                            ->money('EUR')
                                             ->icon('heroicon-o-receipt-percent'),
                                     ]),
 
                                 TextEntry::make('total_amount')
                                     ->label(__('resources.appointment.total'))
-                                    ->money('SAR')
+                                    ->money('EUR')
                                     ->size('lg')
                                     ->weight(FontWeight::Bold)
                                     ->color('success')
@@ -190,7 +190,7 @@ class AppointmentInfolist
                                             ])
                                             ->sum('amount');
 
-                                        return $record->payments->count() . ' payment(s) • SAR ' . number_format($totalPaid, 2) . ' paid';
+                                        return $record->payments->count() . ' payment(s) • EUR ' . number_format($totalPaid, 2) . ' paid';
                                     })
                                     ->icon('heroicon-o-credit-card'),
                             ])
@@ -241,7 +241,7 @@ class AppointmentInfolist
                                                 </div>
                                             </div>
                                             <div style='font-weight: 700; color: #22c55e; font-size: 1rem;'>
-                                                SAR {$price}
+                                                EUR {$price}
                                             </div>
                                         </div>
                                     ";
@@ -279,7 +279,7 @@ class AppointmentInfolist
 
                                 TextEntry::make('invoice.total_amount')
                                     ->label(__('resources.invoice.total'))
-                                    ->money('SAR')
+                                    ->money('EUR')
                                     ->weight(FontWeight::Bold)
                                     ->color('success'),
                             ]),

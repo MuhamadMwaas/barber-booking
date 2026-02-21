@@ -1,0 +1,1526 @@
+0001_00_001_000000_create_languages_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('languages', function (Blueprint $table) {
+            $table->id();
+            $table->string('name', 100);
+            $table->string('native_name', 100)->nullable();
+            $table->string('code', 10)->unique();
+            $table->tinyInteger('order')->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->boolean('is_default')->default(false);
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->index(['is_active', 'is_default']);
+            $table->index('order');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('languages');
+    }
+};
+
+++++++++++++++++++++
+
+0001_01_001_000000_create_branchs_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+          Schema::create('branchs', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('adress')->nullable();
+            $table->string('phone')->nullable();
+            $table->string('email')->nullable();
+            $table->decimal('latitude', 10, 7)->nullable();
+            $table->decimal('longitude', 10, 7)->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+        });
+
+
+            Schema::create('salon_schedules', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('branch_id')->nullable();
+                $table->foreign('branch_id')->references('id')->on('branchs')->onDelete('cascade');
+                $table->bigInteger('day_of_week');
+                $table->time('open_time');
+                $table->time('close_time');
+                $table->boolean('is_open');
+                $table->timestamps();
+            });
+
+
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('salon_schedules');
+        Schema::dropIfExists('branchs');
+    }
+};
+
+++++++++++++++++++++
+
+0001_01_01_000000_create_users_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->string('first_name');
+            $table->string('last_name');
+            $table->string('address')->nullable();
+            $table->string('city',60)->nullable();
+            $table->tinyInteger('user_type')->default(0);
+            $table->string('email')->unique();
+            $table->string('phone')->nullable();
+            $table->string('locale',10)->default('en');
+            $table->string('avatar_url')->nullable();
+            $table->string('google_id')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->timestamp('email_verified_via_otp_at')->nullable();
+
+            $table->string('password');
+            $table->string('notes')->nullable();
+            $table->boolean('is_active')->default(true);
+
+            $table->unsignedBigInteger('branch_id')->nullable();
+            $table->foreign('branch_id')->references('id')->on('branchs')->onDelete('cascade');
+
+            $table->rememberToken();
+            $table->timestamps();
+        });
+
+        Schema::create('password_reset_tokens', function (Blueprint $table) {
+            $table->string('email')->primary();
+            $table->string('token');
+            $table->timestamp('created_at')->nullable();
+        });
+
+        Schema::create('sessions', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->foreignId('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('users');
+        Schema::dropIfExists('password_reset_tokens');
+        Schema::dropIfExists('sessions');
+    }
+};
+
+++++++++++++++++++++
+
+0001_01_01_000001_create_cache_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('cache', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->mediumText('value');
+            $table->integer('expiration');
+        });
+
+        Schema::create('cache_locks', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->string('owner');
+            $table->integer('expiration');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('cache');
+        Schema::dropIfExists('cache_locks');
+    }
+};
+
+++++++++++++++++++++
+
+0001_01_01_000002_create_jobs_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('queue')->index();
+            $table->longText('payload');
+            $table->unsignedTinyInteger('attempts');
+            $table->unsignedInteger('reserved_at')->nullable();
+            $table->unsignedInteger('available_at');
+            $table->unsignedInteger('created_at');
+        });
+
+        Schema::create('job_batches', function (Blueprint $table) {
+            $table->string('id')->primary();
+            $table->string('name');
+            $table->integer('total_jobs');
+            $table->integer('pending_jobs');
+            $table->integer('failed_jobs');
+            $table->longText('failed_job_ids');
+            $table->mediumText('options')->nullable();
+            $table->integer('cancelled_at')->nullable();
+            $table->integer('created_at');
+            $table->integer('finished_at')->nullable();
+        });
+
+        Schema::create('failed_jobs', function (Blueprint $table) {
+            $table->id();
+            $table->string('uuid')->unique();
+            $table->text('connection');
+            $table->text('queue');
+            $table->longText('payload');
+            $table->longText('exception');
+            $table->timestamp('failed_at')->useCurrent();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('jobs');
+        Schema::dropIfExists('job_batches');
+        Schema::dropIfExists('failed_jobs');
+    }
+};
+
+++++++++++++++++++++
+
+0001_01_01_000002_create_permission_tables.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        $teams = config('permission.teams');
+        $tableNames = config('permission.table_names');
+        $columnNames = config('permission.column_names');
+        $pivotRole = $columnNames['role_pivot_key'] ?? 'role_id';
+        $pivotPermission = $columnNames['permission_pivot_key'] ?? 'permission_id';
+
+        throw_if(empty($tableNames), new Exception('Error: config/permission.php not loaded. Run [php artisan config:clear] and try again.'));
+        throw_if($teams && empty($columnNames['team_foreign_key'] ?? null), new Exception('Error: team_foreign_key on config/permission.php not loaded. Run [php artisan config:clear] and try again.'));
+
+        Schema::create($tableNames['permissions'], static function (Blueprint $table) {
+            // $table->engine('InnoDB');
+            $table->bigIncrements('id'); // permission id
+            $table->string('name');       // For MyISAM use string('name', 225); // (or 166 for InnoDB with Redundant/Compact row format)
+            $table->string('guard_name'); // For MyISAM use string('guard_name', 25);
+            $table->timestamps();
+
+            $table->unique(['name', 'guard_name']);
+        });
+
+        Schema::create($tableNames['roles'], static function (Blueprint $table) use ($teams, $columnNames) {
+            // $table->engine('InnoDB');
+            $table->bigIncrements('id'); // role id
+            if ($teams || config('permission.testing')) { // permission.testing is a fix for sqlite testing
+                $table->unsignedBigInteger($columnNames['team_foreign_key'])->nullable();
+                $table->index($columnNames['team_foreign_key'], 'roles_team_foreign_key_index');
+            }
+            $table->string('name');       // For MyISAM use string('name', 225); // (or 166 for InnoDB with Redundant/Compact row format)
+            $table->string('guard_name'); // For MyISAM use string('guard_name', 25);
+            $table->timestamps();
+            if ($teams || config('permission.testing')) {
+                $table->unique([$columnNames['team_foreign_key'], 'name', 'guard_name']);
+            } else {
+                $table->unique(['name', 'guard_name']);
+            }
+        });
+
+        Schema::create($tableNames['model_has_permissions'], static function (Blueprint $table) use ($tableNames, $columnNames, $pivotPermission, $teams) {
+            $table->unsignedBigInteger($pivotPermission);
+
+            $table->string('model_type');
+            $table->unsignedBigInteger($columnNames['model_morph_key']);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_permissions_model_id_model_type_index');
+
+            $table->foreign($pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_permissions_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], $pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            } else {
+                $table->primary([$pivotPermission, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_permissions_permission_model_type_primary');
+            }
+
+        });
+
+        Schema::create($tableNames['model_has_roles'], static function (Blueprint $table) use ($tableNames, $columnNames, $pivotRole, $teams) {
+            $table->unsignedBigInteger($pivotRole);
+
+            $table->string('model_type');
+            $table->unsignedBigInteger($columnNames['model_morph_key']);
+            $table->index([$columnNames['model_morph_key'], 'model_type'], 'model_has_roles_model_id_model_type_index');
+
+            $table->foreign($pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+            if ($teams) {
+                $table->unsignedBigInteger($columnNames['team_foreign_key']);
+                $table->index($columnNames['team_foreign_key'], 'model_has_roles_team_foreign_key_index');
+
+                $table->primary([$columnNames['team_foreign_key'], $pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            } else {
+                $table->primary([$pivotRole, $columnNames['model_morph_key'], 'model_type'],
+                    'model_has_roles_role_model_type_primary');
+            }
+        });
+
+        Schema::create($tableNames['role_has_permissions'], static function (Blueprint $table) use ($tableNames, $pivotRole, $pivotPermission) {
+            $table->unsignedBigInteger($pivotPermission);
+            $table->unsignedBigInteger($pivotRole);
+
+            $table->foreign($pivotPermission)
+                ->references('id') // permission id
+                ->on($tableNames['permissions'])
+                ->onDelete('cascade');
+
+            $table->foreign($pivotRole)
+                ->references('id') // role id
+                ->on($tableNames['roles'])
+                ->onDelete('cascade');
+
+            $table->primary([$pivotPermission, $pivotRole], 'role_has_permissions_permission_id_role_id_primary');
+        });
+
+        app('cache')
+            ->store(config('permission.cache.store') != 'default' ? config('permission.cache.store') : null)
+            ->forget(config('permission.cache.key'));
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        $tableNames = config('permission.table_names');
+
+        if (empty($tableNames)) {
+            throw new \Exception('Error: config/permission.php not found and defaults could not be merged. Please publish the package configuration before proceeding, or drop the tables manually.');
+        }
+
+        Schema::drop($tableNames['role_has_permissions']);
+        Schema::drop($tableNames['model_has_roles']);
+        Schema::drop($tableNames['model_has_permissions']);
+        Schema::drop($tableNames['roles']);
+        Schema::drop($tableNames['permissions']);
+    }
+};
+
+++++++++++++++++++++
+
+021_01_0002_000001_create_salon_settings_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+    Schema::disableForeignKeyConstraints();
+
+        Schema::create('salon_settings', function (Blueprint $table) {
+            $table->id();
+            $table->string('key');
+            $table->text('value');
+            $table->string('type');
+            $table->string('description');
+            $table->unsignedBigInteger('branch_id')->nullable();
+            $table->foreign('branch_id')->references('id')->on('branchs')->onDelete('cascade');
+            $table->string('setting_group')->nullable();
+                        $table->timestamps();
+
+        });
+
+        Schema::enableForeignKeyConstraints();
+
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('salon_settings');
+    }
+};
+
+++++++++++++++++++++
+
+2025_09_06_105106_create_personal_access_tokens_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('personal_access_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->morphs('tokenable');
+            $table->text('name');
+            $table->string('token', 64)->unique();
+            $table->text('abilities')->nullable();
+            $table->timestamp('last_used_at')->nullable();
+            $table->timestamp('expires_at')->nullable()->index();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('personal_access_tokens');
+    }
+};
+
+++++++++++++++++++++
+
+2025_09_06_105937_create_refresh_tokens_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('refresh_tokens', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('token_hash', 64)->unique();
+            $table->string('device')->nullable();
+            $table->string('ip')->nullable();
+            $table->timestamp('expires_at');
+            $table->boolean('revoked')->default(false);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('refresh_tokens');
+    }
+};
+
+++++++++++++++++++++
+
+2025_09_06_114158_create_otps_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('otps', function (Blueprint $table) {
+            $table->id();
+            $table->string('email')->index();
+            $table->string('phone')->nullable();
+            $table->string('otp');
+            $table->timestamp('expires_at');
+            $table->tinyInteger('type')->nullable();
+            $table->boolean('used')->default(false);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('otps');
+    }
+};
+++++++++++++++++++++
+
+2025_10_10_132506_create_reason_leaves_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('reason_leaves', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->string('description')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('reason_leaves');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_10_132842_create_provider_scheduled_works_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('provider_scheduled_works', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id');
+            $table->foreign('user_id')->references('id')->on('users');
+            $table->tinyInteger('day_of_week')
+            ->comment('0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday');
+            $table->time('start_time');
+            $table->time('end_time');
+            $table->boolean('is_work_day')->default(value: true);
+            $table->smallInteger('break_minutes')->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->string('notes')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('provider_scheduled_works');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_10_133507_create_provider_time_offs_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('provider_time_offs', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id');
+            $table->foreign('user_id')->references('id')->on('users');
+            $table->tinyInteger('type')->comment('0=Hourly, 1=FullDay');
+            $table->date('start_date')->nullable();
+            $table->date('end_date')->nullable();
+            $table->time('start_time')->nullable();
+            $table->time('end_time')->nullable();
+            $table->decimal('duration_hours')->nullable();
+            $table->tinyInteger('duration_days')->nullable();
+            $table->unsignedBigInteger('reason_id');
+            $table->foreign('reason_id')->references('id')->on('reason_leaves');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('provider_time_offs');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_10_134547_create_service_categories_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('service_categories', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->boolean('is_active');
+            $table->smallInteger('sort_order');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('service_categories');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_10_134548_create_services_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('services', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('category_id');
+            $table->foreign('category_id')->references('id')->on('service_categories');
+
+
+            $table->string('name');
+            $table->text('description');
+            $table->decimal('price');
+            $table->decimal('discount_price')->nullable();
+            $table->integer('duration_minutes');
+            $table->boolean('is_active');
+            $table->integer('sort_order');
+            $table->string('image_url')->nullable();
+            $table->string('color_code', 50);
+            $table->string('icon_url')->nullable();
+            $table->boolean('is_featured')->default(false);
+            $table->timestamps();
+
+
+            $table->index('category_id');
+            $table->index('is_active');
+
+            // Index للـ search
+            $table->index('name');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('services');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_10_140941_create_service_reviews_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('service_reviews', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('service_id');
+            $table->foreign('service_id')->references('id')->on('services')->onDelete('cascade');
+            $table->unsignedBigInteger('user_id');
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade'); // حذف التقييمات إذا حذفت حساب المستخدم
+            $table->decimal('rating', 3, 1);
+            $table->text('comment')->nullable();
+            $table->boolean('is_approved')->default(false);
+            $table->timestamps();
+
+            // Indexes لتحسين الأداء
+            $table->index('service_id');
+            $table->index('user_id');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('service_reviews');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_10_141405_create_provider_service_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('provider_service', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('service_id');
+            $table->foreign('service_id')->references('id')->on('services')->onDelete('cascade');
+
+            $table->unsignedBigInteger('provider_id');
+            $table->foreign('provider_id')->references('id')->on('users');
+            $table->boolean('is_active')->default(true);
+
+            $table->decimal('custom_price')->nullable();
+            $table->integer('custom_duration')->nullable();
+            $table->text('notes')->nullable();
+
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('provider_service');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_10_145021_create_appointments_table.php
+<?php
+
+use App\Enum\AppointmentStatus;
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('appointments', function (Blueprint $table) {
+            $table->id();
+            $table->string('number');
+            $table->unsignedBigInteger('customer_id')->nullable()->default(null);
+            $table->foreign('customer_id')->references('id')->on('users');
+
+            $table->unsignedBigInteger('provider_id');
+            $table->foreign('provider_id')->references('id')->on('users');
+
+            $table->string('customer_name')->nullable();
+            $table->string('customer_email')->nullable();
+            $table->string('customer_phone')->nullable();
+            
+            $table->dateTime('appointment_date');
+            $table->dateTime('start_time');
+            $table->dateTime('end_time');
+            $table->smallInteger('duration_minutes');
+            $table->decimal('subtotal');
+            $table->decimal('tax_amount');
+            $table->decimal('total_amount');
+            $table->tinyInteger('status')->comment(AppointmentStatus::CommentStatus());
+            $table->string('payment_method')->nullable();
+            $table->text('cancellation_reason')->nullable();
+            $table->dateTime('cancelled_at')->nullable();
+            $table->text('notes')->nullable();
+            $table->tinyInteger('payment_status')->default(0);
+            $table->tinyInteger('created_status')->default(0);
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('appointments');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_11_130100_create_appointment_services_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('appointment_services', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('appointment_id');
+            $table->foreign('appointment_id')->references('id')->on('appointments');
+
+            $table->unsignedBigInteger('service_id');
+            $table->foreign('service_id')->references('id')->on('services');
+
+            $table->string('service_name');
+            $table->smallInteger('duration_minutes');
+            $table->decimal('price');
+            $table->tinyInteger('sequence_order');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('appointment_services');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_13_201252_create_service_translations_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('service_translations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('service_id')->constrained('services')->onDelete('cascade');
+
+            $table->unsignedBigInteger('language_id');
+            $table->foreign('language_id')->references('id')->on('languages')->onDelete('cascade');
+            $table->string('language_code');
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('service_translations');
+    }
+};
+++++++++++++++++++++
+
+2025_10_13_202354_create_service_category_translations_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('service_category_translations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('service_category_id')->constrained('service_categories')->onDelete('cascade');
+
+            $table->unsignedBigInteger('language_id')->nullable();
+            $table->foreign('language_id')->references('id')->on('languages')->onDelete('cascade');
+            $table->string('language_code');
+            $table->text('name');
+            $table->text('description')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('service_category_translations');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_14_115414_create_reason_leave_translations_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('reason_leave_translations', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('reason_leave_id')->constrained('reason_leaves')->onDelete('cascade');
+            $table->unsignedBigInteger('language_id')->nullable();
+            $table->foreign('language_id')->references('id')->on('languages')->onDelete('cascade');
+            $table->string('language_code');
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('reason_leave_translations');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_24_143950_create_files_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('files', function (Blueprint $table) {
+                $table->id();
+                $table->string('instance_type');
+                $table->unsignedBigInteger('instance_id');
+                $table->string('name');
+                $table->string('extension', 10)->nullable()->default(null);
+                $table->string('path');
+                $table->string('disk');
+                $table->string('type', 75)->nullable()->default(null);
+                $table->string('key')->nullable()->default(null);
+                $table->string('group')->nullable()->default(null);
+                $table->index(['instance_type', 'instance_id']);
+                $table->softDeletes();
+                $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('files');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_25_180109_create_invoices_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('invoices', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('appointment_id')->nullable();
+            $table->foreign('appointment_id')->references('id')->on('appointments');
+
+            $table->unsignedBigInteger('customer_id')->nullable()->default(null);
+            $table->foreign('customer_id')->references('id')->on('users');
+
+            $table->string('invoice_number')->nullable()->default(null);
+            $table->decimal('subtotal');
+            $table->decimal('tax_amount')->nullable();
+            $table->decimal('tax_rate')->nullable();
+            $table->decimal('total_amount');
+            $table->tinyInteger('status');
+            $table->string('notes')->nullable();
+            $table->json('invoice_data')->nullable();
+            $table->string('segnture')->nullable();
+
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('invoices');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_25_180533_create_invoice_items_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('invoice_items', function (Blueprint $table) {
+            $table->id();
+
+            $table->unsignedBigInteger('invoice_id');
+            $table->foreign('invoice_id')->references('id')->on('invoices');
+
+            $table->text('description')->nullable();
+            $table->smallInteger('quantity');
+            $table->decimal('unit_price');
+            $table->decimal('tax_amount')->nullable();
+            $table->decimal('tax_rate')->nullable();
+            $table->decimal('total_amount');
+            $table->bigInteger('itemable_id');
+            $table->string('itemable_type');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('invoice_items');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_25_181223_create_payment_methods_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('payment_methods', function (Blueprint $table) {
+            $table->id();
+            $table->string('name', 20);
+            $table->string('code', 10);
+            $table->tinyInteger('type')->nullable();
+            $table->boolean('status');
+            $table->string('class')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('payment_methods');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_25_181800_create_save_payment_methods_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('save_payment_methods', function (Blueprint $table) {
+            $table->id();
+
+            $table->unsignedBigInteger('user_id');
+            $table->foreign('user_id')->references('id')->on('users');
+
+            $table->unsignedBigInteger('payment_method_id');
+            $table->foreign('payment_method_id')->references('id')->on('payment_methods');
+
+            $table->string('display_name');
+            $table->string('last_four', 12)->nullable();
+            $table->string('email')->nullable();
+            $table->string('token');
+            $table->dateTime('expires_at');
+            $table->boolean('is_default');
+            $table->mediumText('data')->nullable();
+            $table->string('zip')->nullable();
+            $table->smallInteger('exp_month')->nullable();
+            $table->smallInteger('exp_year')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('save_payment_methods');
+    }
+};
+
+++++++++++++++++++++
+
+2025_10_25_181959_create_payments_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('payments', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('payment_method_id')->nullable();
+            $table->foreign('payment_method_id')->references('id')->on('payment_methods');
+            $table->string('payment_number');
+            $table->decimal('amount');
+            $table->decimal('subtotal');
+            // $table->bigInteger('appointment_id');
+            $table->tinyInteger('status')->default(0);
+            $table->string('payment_gateway_id')->nullable();
+            $table->text('payment_metadata')->nullable();
+            $table->decimal('tax_amount');
+            $table->string('type');
+            $table->bigInteger('paymentable_id');
+            $table->string('paymentable_type');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('payments');
+    }
+};
+
+++++++++++++++++++++
+
+2025_12_11_163302_create_user_devices_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('user_devices', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->foreign('user_id')->references('id')->on('users');
+
+            $table->string('device_id')->unique();
+            $table->string('device_token')->nullable();
+            $table->string('platform',15)->nullable();
+            $table->string('os_version')->nullable();
+            $table->string('app_version')->nullable();
+            $table->boolean('is_active')->default(true);
+            $table->timestamp('last_active_at')->nullable();
+            $table->json('meta')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('user_devices');
+    }
+};
+
+++++++++++++++++++++
+
+2025_12_12_175344_create_notifications_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('notifications', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('type');
+            $table->morphs('notifiable');
+            $table->text('data');
+            $table->timestamp('read_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('notifications');
+    }
+};
+
+++++++++++++++++++++
+
+2025_12_19_231811_create_appointment_reminders_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('appointment_reminders', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('appointment_id');
+            $table->unsignedBigInteger('user_id');
+
+            $table->timestamp('remind_at');
+            $table->string('status', 20)->default('pending');
+
+            $table->timestamp('cancelled_at')->nullable();
+            $table->timestamp('sent_at')->nullable();
+
+            $table->uuid('job_uuid')->nullable();
+            $table->string('locale', 10)->nullable();
+
+            $table->string('title_key');
+            $table->string('message_key');
+            $table->json('params')->nullable();
+            $table->json('data')->nullable();
+
+
+            $table->index(['remind_at']);
+            $table->index(['appointment_id', 'status']);
+            $table->unique(['appointment_id', 'user_id', 'remind_at', 'status'], 'appointment_reminders_unique_pending');
+
+            $table->foreign('appointment_id')->references('id')->on('appointments')->onDelete('cascade');
+            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('appointment_reminders');
+    }
+};
+
+++++++++++++++++++++
+
+2025_12_20_235934_create_sample_pages_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('sample_pages', function (Blueprint $table) {
+            $table->id();
+            $table->string('page_key')->unique();
+            $table->string('template')->nullable();
+            $table->boolean('is_published')->default(false);
+
+            $table->unsignedInteger('version')->default(1);
+
+
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('sample_pages');
+    }
+};
+
+++++++++++++++++++++
+
+2025_12_21_154809_create_page_translations_table.php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('page_translations', function (Blueprint $table) {
+            $table->id();
+
+            $table->foreignId('page_id')
+                ->constrained('sample_pages')
+                ->cascadeOnDelete();
+
+            $table->string('lang', 10);
+
+            $table->string('title');
+            $table->text('content')->nullable();
+            $table->json('meta')->nullable();
+            $table->timestamps();
+            $table->unique(['page_id', 'lang']);
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('page_translations');
+    }
+};
+
+++++++++++++++++++++
+

@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProvidersController;
 use App\Http\Controllers\Api\ServicesController;
 use App\Http\Controllers\Api\SocialAuthController;
+use App\Http\Controllers\PrintController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -71,11 +72,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('profile/change-password', [ProfileController::class, 'changePassword']);
 
 
-Route::prefix('noticifation')->name('noticifation.')->group(function () {
-    Route::post('/test-send-to-all', [NotificationController::class, 'testSendToAll'])->name('test-send-to-all');
-
-
-});
+    Route::prefix('noticifation')->name('noticifation.')->group(function () {
+        Route::post('/test-send-to-all', [NotificationController::class, 'testSendToAll'])->name('test-send-to-all');
+    });
 
 
     Route::post('/register-device', [DevicesController::class, 'registerDevice']);
@@ -127,4 +126,33 @@ Route::prefix('noticifation')->name('noticifation.')->group(function () {
         Route::get('/{id}', [BookingController::class, 'show'])->name('bookings.show');
         Route::post('/{id}/cancel', [BookingController::class, 'cancel'])->name('bookings.cancel');
     });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Print API Routes
+|--------------------------------------------------------------------------
+*/
+Route::middleware(['auth:sanctum'])->group(function () {
+
+    // Print endpoints
+    Route::post('/invoice/{invoice}/print', [PrintController::class, 'apiPrint'])
+        ->name('api.invoice.print');
+
+    Route::post('/invoices/print-batch', [PrintController::class, 'apiPrintBatch'])
+        ->name('api.invoices.print-batch');
+
+    Route::get('/invoice/{invoice}/print-url', [PrintController::class, 'getPrintUrl'])
+        ->name('api.invoice.print-url');
+
+    // Printer management
+    Route::post('/printer/{printer}/test', [PrintController::class, 'testPrinter'])
+        ->name('api.printer.test');
+
+    // Statistics & Logs
+    Route::get('/print/statistics', [PrintController::class, 'statistics'])
+        ->name('api.print.statistics');
+
+    Route::get('/print/logs', [PrintController::class, 'logs'])
+        ->name('api.print.logs');
 });

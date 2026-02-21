@@ -33,6 +33,10 @@ class InvoiceItem extends Model
         'updated_at' => 'datetime',
     ];
 
+    protected $appends = [
+        'subtotal',
+    ];
+
     // Relationships
 
     public function invoice(): BelongsTo

@@ -20,7 +20,7 @@ return new class extends Migration
             $table->decimal('subtotal');
             // $table->bigInteger('appointment_id');
             $table->tinyInteger('status')->default(0);
-            $table->string('payment gateway_id')->nullable();
+            $table->string('payment_gateway_id')->nullable();
             $table->text('payment_metadata')->nullable();
             $table->decimal('tax_amount');
             $table->string('type');

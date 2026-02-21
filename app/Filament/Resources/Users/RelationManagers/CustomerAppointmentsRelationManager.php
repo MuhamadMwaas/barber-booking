@@ -79,7 +79,7 @@ class CustomerAppointmentsRelationManager extends RelationManager
                     ->badge()
                     ->color('success')
                     ->weight(FontWeight::Bold)
-                    ->money('SAR')
+                    ->money('EUR')
                     ->icon('heroicon-o-banknotes')
                     ->sortable(),
 

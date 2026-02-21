@@ -11,7 +11,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-
+use Illuminate\Support\Facades\Auth;
 class BookingService
 {
     protected BookingValidationService $validationService;
@@ -36,21 +36,22 @@ class BookingService
         $date = $bookingData['date'];
         $paymentMethod = $bookingData['payment_method'];
         $notes = $bookingData['notes'] ?? null;
-        $customerName = $bookingData['customer_name'] ?? ($customer->name?? null);
-        $customerEmail = $bookingData['customer_email'] ?? $customer->email?? null;
-        $customerPhone = $bookingData['customer_phone'] ?? $customer->phone?? null;
+        $customerName = $bookingData['customer_name'] ?? ($customer->full_name ?? null);
+        $customerEmail = $bookingData['customer_email'] ?? $customer->email ?? null;
+        $customerPhone = $bookingData['customer_phone'] ?? $customer->phone ?? null;
 
 
         $this->validationService->validateBasicData($services, $date);
 
-
-        $this->validationService->validateDailyBookingLimit($customer, $date);
+        if ($customer) {
+            $this->validationService->validateDailyBookingLimit($customer, $date);
+        }
 
 
         $services = $this->sortServicesByStartTime($services);
 
 
-        $preparedServices = $this->validateAndPrepareServices($services, $date, $customer);
+        $preparedServices = $this->validateAndPrepareServices($services, $date, $customer, $customerPhone);
 
         // 5. Calculate totals
         $totals = $this->calculateTotals($preparedServices);
@@ -58,9 +59,9 @@ class BookingService
         // 6. Create booking in transaction
         return DB::transaction(function () use ($customer, $date, $paymentMethod, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone) {
             // Determine created_status based on payment method
-            $createdStatus = $paymentMethod === 'cash' ? 1 : 0;
-            $paymentStatus = $paymentMethod === 'cash'
-                ? PaymentStatus::PENDING
+            $createdStatus = $paymentMethod == 'cash' ? 1 : 0;
+            $paymentStatus = $paymentMethod == 'cash'
+                ? PaymentStatus::PAID_ONSTIE_CASH
                 : PaymentStatus::PENDING;
 
             // Get first service for main appointment data
@@ -69,7 +70,7 @@ class BookingService
             // Create main appointment
             $appointment = Appointment::create([
                 'number' => $this->generateAppointmentNumber(),
-                'customer_id' => $customer->id,
+                'customer_id' => $customer?->id ?? null,
                 'provider_id' => $firstService['provider_id'],
                 'appointment_date' => $date,
                 'start_time' => Carbon::parse($date . ' ' . $firstService['start_time']),
@@ -99,7 +100,13 @@ class BookingService
                     'sequence_order' => $index + 1,
                 ]);
             }
+            $InvoiceService = app(InvoiceService::class);
 
+            $InvoiceService->createDtaftInvoiceFromAppointment(
+                $appointment,
+                'cash',
+                0
+            );
             return $appointment->load(['services', 'customer', 'provider', 'services_record']);
         });
     }
@@ -119,8 +126,12 @@ class BookingService
     /**
      * Validate and prepare services data
      */
-    private function validateAndPrepareServices(array $services, string $date, User $customer): array
-    {
+    private function validateAndPrepareServices(
+        array $services,
+        string $date,
+        ?User $customer,
+        ?string $customerPhone = null,
+    ): array {
         $preparedServices = [];
         $previousEndTime = null;
 
@@ -132,8 +143,8 @@ class BookingService
 
         foreach ($services as $index => $serviceData) {
 
-        $service = $servicesCollection->get($serviceData['service_id']);
-        $provider = $providersCollection->get($serviceData['provider_id']);
+            $service = $servicesCollection->get($serviceData['service_id']);
+            $provider = $providersCollection->get($serviceData['provider_id']);
 
             $this->validationService->validateProviderOffersService($provider, $service);
 
@@ -163,11 +174,20 @@ class BookingService
             );
 
             // 6. Validate no duplicate booking
-            $this->validationService->validateNoDuplicateBooking(
-                $customer,
-                $startTime,
-                array_column($services, 'service_id')
-            );
+            if ($customer) {
+                $this->validationService->validateNoDuplicateBooking(
+                    $customer,
+                    $startTime,
+                    array_column($services, 'service_id')
+                );
+            } else {
+                $this->validationService->validateNoDuplicateBookingByPhone(
+                    $customerPhone,
+                    $startTime,
+                    array_column($services, 'service_id')
+                );
+
+            }
 
             // Prepare service data
             $preparedServices[] = [
@@ -192,6 +212,113 @@ class BookingService
      */
     private function calculateTotals(array $preparedServices): array
     {
+        $totalDuration = array_sum(array_column($preparedServices, 'duration_minutes'));
+
+        // High internal precision
+        $internalScale = 6;
+
+        // tax rate (e.g., "19")
+        $taxRate = (string) get_setting('tax_rate', '0');
+
+        // factor = 1 + taxRate/100
+        $factor = '1';
+        if (bccomp($taxRate, '0', 6) === 1) {
+            $factor = bcadd('1', bcdiv($taxRate, '100', $internalScale), $internalScale);
+        }
+
+        // Totals (as strings)
+        $grossTotal = '0';
+        $netTotal = '0';
+        $taxTotal = '0';
+
+        foreach ($preparedServices as $service) {
+            // Always treat price as string to avoid float conversion
+            // Ensure it looks like "12.34"
+            $gross = isset($service['price'])
+                ? (string) $service['price']
+                : '0';
+
+            // normalize to internal scale
+            // (bc* doesn't need normalization, but it's good practice)
+            $gross = bcadd($gross, '0', $internalScale);
+
+            $grossTotal = bcadd($grossTotal, $gross, $internalScale);
+
+            if (bccomp($taxRate, '0', 6) !== 1) {
+                // taxRate <= 0
+                $net = $gross;
+                $tax = '0';
+            } else {
+                // net = gross / factor
+                $net = bcdiv($gross, $factor, $internalScale);
+
+                // tax = gross - net
+                $tax = bcsub($gross, $net, $internalScale);
+            }
+
+            // Round per line item to 2 decimals (invoice practice)
+            $net = $this->bcRound($net, 2);
+            $tax = $this->bcRound($tax, 2);
+
+            // Add rounded line amounts to totals (still as strings)
+            $netTotal = bcadd($netTotal, $net, 2);
+            $taxTotal = bcadd($taxTotal, $tax, 2);
+        }
+
+        // Final gross rounded to cents (money)
+        $grossTotal = $this->bcRound($grossTotal, 2);
+
+        // At this point: netTotal+taxTotal might differ by 0.01 due to per-line rounding.
+        // We'll reconcile using bcmath.
+        $sumNetTax = bcadd($netTotal, $taxTotal, 2);
+        $diff = bcsub($grossTotal, $sumNetTax, 2); // "-0.01", "0.00", "0.01"
+
+        if (bccomp($diff, '0.00', 2) !== 0) {
+            // Adjust taxTotal by the diff to force: gross = net + tax
+            $taxTotal = bcadd($taxTotal, $diff, 2);
+
+            // Optional safety: re-round
+            $taxTotal = $this->bcRound($taxTotal, 2);
+        }
+
+        return [
+            'subtotal' => $netTotal,
+            'tax_amount' => $taxTotal,
+            'total_amount' => $grossTotal,
+            'total_duration' => $totalDuration,
+        ];
+    }
+
+    private function bcRound(string $number, int $precision = 2): string
+    {
+        if ($precision < 0) {
+            throw new InvalidArgumentException('Precision must be >= 0');
+        }
+
+        $sign = '';
+        if (str_starts_with($number, '-')) {
+            $sign = '-';
+            $number = substr($number, 1);
+        }
+
+        // shift = 10^precision
+        $shift = '1' . str_repeat('0', $precision);
+
+        // number * shift
+        $shifted = bcmul($number, $shift, $precision + 6);
+
+        // add 0.5 then floor via bcdiv(..., 0)
+        $shiftedPlus = bcadd($shifted, '0.5', $precision + 6);
+        $floored = bcdiv($shiftedPlus, '1', 0);
+
+        // back to original scale
+        $result = bcdiv($floored, $shift, $precision);
+
+        return $sign === '-' ? '-' . $result : $result;
+    }
+
+    private function calculateTotalsInverse(array $preparedServices): array
+    {
         $subtotal = array_sum(array_column($preparedServices, 'price'));
         $totalDuration = array_sum(array_column($preparedServices, 'duration_minutes'));
 
@@ -208,12 +335,13 @@ class BookingService
         ];
     }
 
+
     /**
      * Get effective duration (custom or default)
      */
     private function getEffectiveDuration(User $provider, Service $service): int
     {
-        return $service->duration_minutes ;
+        return $service->duration_minutes;
         $pivot = DB::table('provider_service')
             ->where('provider_id', $provider->id)
             ->where('service_id', $service->id)
@@ -246,7 +374,7 @@ class BookingService
     /**
      * Generate unique appointment number
      */
-    private function generateAppointmentNumber(): string
+    public function generateAppointmentNumber(): string
     {
         $prefix = 'APT';
         $date = Carbon::now()->format('Ymd');

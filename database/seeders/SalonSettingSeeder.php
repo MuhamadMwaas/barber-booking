@@ -15,7 +15,7 @@ class SalonSettingSeeder extends Seeder
         $globalSettings = [
             [
                 'key' => 'tax_rate',
-                'value' => '5',
+                'value' => '19',
                 'type' => 'decimal',
                 'description' => 'VAT tax rate percentage',
                 'setting_group' => 'payment',
@@ -104,6 +104,42 @@ class SalonSettingSeeder extends Seeder
                 'description' => 'Available payment methods',
                 'setting_group' => 'payment',
             ],
+            [
+                'key' => 'company_name',
+                'value' => '',
+                'type' => 'string',
+                'description' => 'Company name',
+                'setting_group' => 'company',
+            ],
+            [
+                'key' => 'company_address',
+                'value' => '',
+                'type' => 'string',
+                'description' => 'Company address',
+                'setting_group' => 'company',
+            ],
+            [
+                'key' => 'company_phone',
+                'value' => '',
+                'type' => 'string',
+                'description' => 'Company phone',
+                'setting_group' => 'company',
+            ],
+            [
+                'key' => 'company_email',
+                'value' => '',
+                'type' => 'string',
+                'description' => 'Company email',
+                'setting_group' => 'company',
+            ],
+            [
+                'key' => 'company_tax_number',
+                'value' => '',
+                'type' => 'string',
+                'description' => 'Company tax number',
+                'setting_group' => 'company',
+            ],
+            
         ];
 
         foreach ($branches as $branch) {

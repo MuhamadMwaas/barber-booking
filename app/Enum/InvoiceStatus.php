@@ -80,6 +80,7 @@ enum InvoiceStatus: int
             self::PENDING,
             self::PARTIALLY_PAID,
             self::OVERDUE,
+             self::DRAFT,
         ]);
     }
 

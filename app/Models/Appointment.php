@@ -61,11 +61,13 @@ class Appointment extends Model
 
         static::creating(function ($appointment) {
             if (empty($appointment->number)) {
-                $prefix = 'APT';
-                $date = \Carbon\Carbon::now()->format('Ymd');
-                $random = strtoupper(substr(uniqid(), -6));
+                $BookingService=app(\App\Services\BookingService::class);
+                $appointment->number = $BookingService->generateAppointmentNumber();
+                // $prefix = 'APT';
+                // $date = \Carbon\Carbon::now()->format('Ymd');
+                // $random = strtoupper(substr(uniqid(), -6));
 
-                $appointment->number = "{$prefix}-{$date}-{$random}";
+                // $appointment->number = "{$prefix}-{$date}-{$random}";
             }
         });
 
@@ -104,7 +106,7 @@ class Appointment extends Model
     }
 public function reminders(): HasMany
 {
-    return $this->hasMany(AppointmentReminder::class, 'appointment_idappointment_id','id');
+    return $this->hasMany(AppointmentReminder::class, 'appointment_id','id');
 }
     // Accessors
 

@@ -253,6 +253,7 @@ return [
         'payment_success' => 'Payment recorded successfully',
         'payment_error' => 'Error recording payment',
         'invoice_created' => 'Invoice created',
+        'payment_done_fiskaly_failed' => 'Payment completed but Fiskaly signing failed. Invoice saved in offline mode.',
         'cancel_by_admin' => 'Cancel Appointment',
         'cancel_confirmation' => 'Confirm Cancellation',
         'cancel_description' => 'Are you sure you want to cancel this appointment? This action cannot be undone.',

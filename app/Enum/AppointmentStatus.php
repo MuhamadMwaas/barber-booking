@@ -8,6 +8,7 @@ enum AppointmentStatus: int
     case COMPLETED =1;
     case USER_CANCELLED = -1;
     case ADMIN_CANCELLED = -2;
+        case NO_SHOW = -3;
 
     public static function getValues(): array
     {
@@ -21,6 +22,7 @@ enum AppointmentStatus: int
             self::COMPLETED => 'Completed',
             self::USER_CANCELLED => 'User Cancelled',
             self::ADMIN_CANCELLED => 'Admin Cancelled',
+             self::NO_SHOW => 'No Show',
         };
     }
 

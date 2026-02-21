@@ -20,6 +20,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\HtmlString;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
@@ -67,6 +68,16 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ])->databaseNotifications();
+            ])->databaseNotifications()->renderHook(
+            'panels::styles.before',
+            fn() => new HtmlString('
+                <style>
+                    /* تخصيص زر الحذف */
+                    .fi-fo-repeater-item-header {
+                        background: navajowhite; !important;
+                    }
+                </style>
+            ')
+        );
     }
 }

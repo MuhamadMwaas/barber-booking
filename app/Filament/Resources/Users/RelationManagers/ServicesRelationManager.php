@@ -199,7 +199,7 @@ class ServicesRelationManager extends RelationManager
 
                 TextColumn::make('price')
                     ->label(__('resources.user.price'))
-                    ->money('SAR')
+                    ->money('EUR')
                     ->badge()
                     ->color('success')
                     ->sortable(),
