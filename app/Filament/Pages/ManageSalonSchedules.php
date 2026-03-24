@@ -2,12 +2,17 @@
 
 namespace App\Filament\Pages;
 
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use Filament\Pages\Page;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Auth;
 
 class ManageSalonSchedules extends Page
 {
+    use NavigationDefaultAccess;
+    use  ResourceTranslation;
     protected string $view = 'filament.pages.manage-salon-schedules';
     protected static bool $shouldRegisterNavigation = true;
 
@@ -44,17 +49,12 @@ class ManageSalonSchedules extends Page
     /**
      * مجموعة التنقل (مترجمة)
      */
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingStorefront;
+    protected static ?int $navigationSort = 62;
+
     public static function getNavigationGroup(): ?string
     {
-        return __('salon_schedule.navigation_group');
-    }
-
-    /**
-     * ترتيب الصفحة في القائمة
-     */
-    public static function getNavigationSort(): ?int
-    {
-        return 20;
+        return __('navigation.settings');
     }
 
     /**

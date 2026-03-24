@@ -11,6 +11,8 @@ use App\Filament\Resources\ProviderScheduledWorks\Schemas\ProviderScheduledWorkS
 use App\Filament\Resources\ProviderScheduledWorks\Schemas\ProviderScheduledWorkInfolist;
 use App\Filament\Resources\ProviderScheduledWorks\Tables\ProviderScheduledWorksTable;
 use App\Models\ProviderScheduledWork;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -19,9 +21,14 @@ use Filament\Tables\Table;
 
 class ProviderScheduledWorkResource extends Resource
 {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = ProviderScheduledWork::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'staff';
+
+    protected static ?int $navigationSort = 21;
 
     protected static ?string $recordTitleAttribute = 'day_of_week';
 

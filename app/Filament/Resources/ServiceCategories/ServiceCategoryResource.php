@@ -10,6 +10,8 @@ use App\Filament\Resources\ServiceCategories\Schemas\ServiceCategoryForm;
 use App\Filament\Resources\ServiceCategories\Schemas\ServiceCategoryInfolist;
 use App\Filament\Resources\ServiceCategories\Tables\ServiceCategoriesTable;
 use App\Models\ServiceCategory;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -18,9 +20,14 @@ use Filament\Tables\Table;
 
 class ServiceCategoryResource extends Resource
 {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = ServiceCategory::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSquares2x2;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'services';
+
+    protected static ?int $navigationSort = 11;
 
     protected static ?string $recordTitleAttribute = 'translated_name';
 

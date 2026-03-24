@@ -109,7 +109,7 @@ class AppointmentsTable
 
                         return new HtmlString(
                             $record->services->map(function ($service) {
-                                return '<span style="display: inline-block; padding: 2px 8px; margin: 2px; background: #f3f4f6; border-radius: 4px; font-size: 0.75rem;">'
+                                return '<span style="display: inline-block; padding: 2px 8px; margin: 2px; background: '.$service->color_code.'; border-radius: 4px; font-size: 0.75rem;">'
                                     . htmlspecialchars($service->pivot->service_name)
                                     . '</span>';
                             })->join('')

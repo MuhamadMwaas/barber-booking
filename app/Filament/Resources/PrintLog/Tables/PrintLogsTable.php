@@ -36,7 +36,7 @@ class PrintLogsTable {
                     ->sortable()
                     ->toggleable(),
 
-                TextColumn::make('user.name')
+                TextColumn::make('user.first_name')
                     ->label('User')
                     ->searchable()
                     ->sortable()
@@ -135,7 +135,7 @@ class PrintLogsTable {
 
                 SelectFilter::make('user_id')
                     ->label('User')
-                    ->relationship('user', 'name'),
+                    ->relationship('user', 'first_name'),
 
                 Filter::make('created_at')
                     ->form([

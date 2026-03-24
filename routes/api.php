@@ -76,6 +76,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/test-send-to-all', [NotificationController::class, 'testSendToAll'])->name('test-send-to-all');
     });
 
+    Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('/', [NotificationController::class, 'index'])->name('index');
+        Route::get('/unread-count', [NotificationController::class, 'unreadCount'])->name('unread-count');
+        Route::post('/{notificationId}/read', [NotificationController::class, 'markAsRead'])->name('mark-as-read');
+    });
+
 
     Route::post('/register-device', [DevicesController::class, 'registerDevice']);
     Route::post('/deregister-device', [DevicesController::class, 'unregisterDevice']);
@@ -120,7 +126,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('appointments.reminders.store');
 
 
-    Route::middleware(['auth:sanctum', 'verified'])->prefix('bookings')->group(function () {
+    Route::middleware([ 'verified'])->prefix('bookings')->group(function () {
         Route::get('/', [BookingController::class, 'index'])->name('bookings.index');
         Route::post('/', [BookingController::class, 'store'])->name('bookings.store');
         Route::get('/{id}', [BookingController::class, 'show'])->name('bookings.show');

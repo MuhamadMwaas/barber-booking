@@ -10,6 +10,8 @@ use App\Filament\Resources\Appointments\Schemas\AppointmentForm;
 use App\Filament\Resources\Appointments\Schemas\AppointmentInfolist;
 use App\Filament\Resources\Appointments\Tables\AppointmentsTable;
 use App\Models\Appointment;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -18,9 +20,14 @@ use Filament\Tables\Table;
 
 class AppointmentResource extends Resource
 {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = Appointment::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'appointments';
+
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $recordTitleAttribute = 'number';
 

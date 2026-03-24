@@ -435,6 +435,52 @@ return [
         'validation_error' => 'Validierungsfehler',
     ],
 
+    // ─────────────────────────────────────────────────────────────
+    // Rollenverwaltung
+    // ─────────────────────────────────────────────────────────────
+    'role' => [
+        'label' => 'Rolle',
+        'plural_label' => 'Rollen',
+        'navigation_label' => 'Rollen',
+        'title' => 'Rollenverwaltung',
+
+        // Formular
+        'name' => 'Rollenname',
+        'guard' => 'Guard',
+        'role_details' => 'Rollendetails',
+        'role_details_desc' => 'Definieren Sie den Rollennamen und seine Konfiguration',
+        'permissions_section' => 'Berechtigungen',
+        'permissions_section_desc' => 'Wählen Sie die Berechtigungen für diese Rolle',
+
+        // Tabelle
+        'permissions_count' => 'Berechtigungen',
+        'users_count' => 'Benutzer',
+        'created_at' => 'Erstellt am',
+
+        // Detailansicht
+        'statistics' => 'Statistiken',
+        'assigned_permissions' => 'Zugewiesene Berechtigungen',
+
+        // Beziehungsmanager
+        'permission_name' => 'Berechtigung',
+        'group' => 'Gruppe',
+        'attach_permission' => 'Berechtigung anhängen',
+        'user_name' => 'Name',
+        'user_email' => 'E-Mail',
+        'user_phone' => 'Telefon',
+        'user_active' => 'Aktiv',
+        'user_joined' => 'Beigetreten am',
+        'assign_user' => 'Benutzer zuweisen',
+
+        // Benachrichtigungen
+        'created_notification' => 'Rolle erfolgreich erstellt',
+        'updated_notification' => 'Rolle erfolgreich aktualisiert',
+        'deleted_notification' => 'Rolle erfolgreich gelöscht',
+
+        // Schutz
+        'protected_role' => 'Diese Rolle ist geschützt und kann nicht geändert werden',
+    ],
+
     // Common Actions
     'view' => 'Ansehen',
     'edit' => 'Bearbeiten',

@@ -13,8 +13,8 @@ use App\Filament\Resources\Providers\Schemas\ProviderForm;
 use App\Filament\Resources\Providers\Schemas\ProviderInfolist;
 use App\Filament\Resources\Providers\Tables\ProvidersTable;
 use App\Models\User;
+use App\Traits\NavigationDefaultAccess;
 use App\Traits\ResourceTranslation;
-use App\Traits\ResourceTranslationResource;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -24,15 +24,19 @@ use Illuminate\Database\Eloquent\Builder;
 
 class ProviderResource extends Resource
 {
-    use ResourceTranslationResource;
+    use NavigationDefaultAccess, ResourceTranslation;
 
     protected static ?string $model = User::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static ?string $translationResourceKey = 'provider_resource';
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'staff';
+
+    protected static ?int $navigationSort = 20;
 
     protected static ?string $recordTitleAttribute = 'full_name';
-
-    protected static ?int $navigationSort = 2;
 
     public static function getEloquentQuery(): Builder
     {

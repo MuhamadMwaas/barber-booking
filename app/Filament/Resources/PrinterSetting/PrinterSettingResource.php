@@ -6,6 +6,8 @@ use App\Filament\Resources\PrinterSetting\Pages;
 use App\Filament\Resources\PrinterSetting\Schemas\PrinterSettingForm;
 use App\Filament\Resources\PrinterSetting\Tables\PrinterSettingsTable;
 use App\Models\PrinterSetting;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -13,12 +15,14 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 class PrinterSettingResource extends Resource {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = PrinterSetting::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPrinter;
 
+    protected static string|\UnitEnum|null $navigationGroup = 'billing';
 
-    protected static ?int $navigationSort = 60;
+    protected static ?int $navigationSort = 41;
 
     protected static ?string $label = 'Printer';
 

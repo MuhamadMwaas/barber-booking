@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\SalonScheduleController;
 use App\Http\Controllers\Api\SocialApiAuthController;
+use App\Http\Middleware\EnsureStaffDashboardAccess;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\InvoiceTemplateController;
@@ -63,3 +64,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/invoices/print-batch', [PrintController::class, 'printBatch'])
         ->name('invoices.print-batch');
 });
+
+Route::get('/dashboard', \App\Livewire\StaffDashboard::class)
+    // ->middleware(['web', EnsureStaffDashboardAccess::class])
+    ->name('staff.dashboard');

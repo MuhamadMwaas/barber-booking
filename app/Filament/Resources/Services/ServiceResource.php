@@ -10,6 +10,8 @@ use App\Filament\Resources\Services\Schemas\ServiceForm;
 use App\Filament\Resources\Services\Schemas\ServiceInfolist;
 use App\Filament\Resources\Services\Tables\ServicesTable;
 use App\Models\Service;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -18,9 +20,16 @@ use Filament\Tables\Table;
 
 class ServiceResource extends Resource
 {
+    use NavigationDefaultAccess;
+    use ResourceTranslation;
+
     protected static ?string $model = Service::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedScissors;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'services';
+
+    protected static ?int $navigationSort = 10;
 
     protected static ?string $recordTitleAttribute = 'translated_name';
 

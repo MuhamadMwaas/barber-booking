@@ -8,11 +8,11 @@
 
 return [
     // Page titles
-    'page_title' => 'إدارة جداول الموظفين',
+    'page_title' => 'إدارة جداول دوام الموظفين',
     'page_heading' => 'إدارة جداول دوام مقدمي الخدمة',
     'page_subheading' => 'إعداد الشفتات الأسبوعية وساعات العمل لمقدمي الخدمة',
     'managing_schedule_for' => 'إدارة جدول :name',
-    'navigation_label' => 'جداول الموظفين',
+    'navigation_label' => 'جداول دوام الموظفين',
     'navigation_group' => 'إدارة الموظفين',
 
     // Provider selection

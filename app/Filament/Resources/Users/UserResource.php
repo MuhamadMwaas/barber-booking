@@ -12,6 +12,7 @@ use App\Filament\Resources\Users\Schemas\UserForm;
 use App\Filament\Resources\Users\Schemas\UserInfolist;
 use App\Filament\Resources\Users\Tables\UsersTable;
 use App\Models\User;
+use App\Traits\NavigationDefaultAccess;
 use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -21,10 +22,14 @@ use Filament\Tables\Table;
 
 class UserResource extends Resource
 {
-    use ResourceTranslation;
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = User::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'users';
+
+    protected static ?int $navigationSort = 50;
 
     protected static ?string $recordTitleAttribute = 'Users';
 

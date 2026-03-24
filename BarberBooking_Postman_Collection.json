@@ -1,0 +1,2215 @@
+{
+	"info": {
+		"name": "BarberBooking API Collection",
+		"description": "Postman Collection v2.1 for the BarberBooking Laravel API. This collection documents the current implemented behavior under {{base_url}}/api only, excludes the broken Google callback/mobile/redirect routes by request, and uses realistic sample payloads ready for import and execution.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"pm.request.headers.add({key: \"Accept\", value: \"application/json\"});"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:8000",
+			"type": "string"
+		},
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Auth",
+			"description": "Authentication, OTP, password reset, and token lifecycle endpoints.",
+			"item": [
+				{
+					"name": "Register",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"first_name\": \"أحمد\",\n  \"last_name\": \"الرشيدي\",\n  \"email\": \"ahmed@example.com\",\n  \"phone\": \"+966501234567\",\n  \"password\": \"Password@123\",\n  \"password_confirmation\": \"Password@123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/register",
+						"description": "يسجل مستخدماً جديداً ويعيد access token و refresh token.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- first_name: نص\n- last_name: نص\n- email: بريد إلكتروني فريد\n- password: نص قوي\n- password_confirmation: تأكيد كلمة المرور\n\nالحقول الاختيارية:\n- phone: نص فريد"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"ahmed@example.com\",\n  \"password\": \"Password@123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/login",
+						"description": "يسجل دخول المستخدم ويعيد access token و refresh token.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- email: بريد إلكتروني\n- password: نص"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});",
+									"",
+									"var json = pm.response.json();",
+									"if (json.token || json.data?.token || json.access_token) {",
+									"    var token = json.token || json.data?.token || json.access_token;",
+									"    pm.collectionVariables.set(\"auth_token\", token);",
+									"    console.log(\"✅ تم حفظ التوكن:\", token);",
+									"}"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"ضع_refresh_token_المعاد_من_تسجيل_الدخول\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/refresh",
+						"description": "يولد access token جديداً باستخدام refresh token.\n\nالمصادقة: لا يتطلب Bearer token.\n\nالحقول المطلوبة:\n- refresh_token: نص"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"url": "{{base_url}}/api/auth/logout",
+						"description": "يسجل خروج المستخدم ويحذف جميع التوكنات.\n\nالمصادقة: يتطلب Bearer token.\n\nلا توجد حقول مطلوبة أو اختيارية في جسم الطلب."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Forgot Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"ahmed@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/forgot-password",
+						"description": "يرسل OTP إلى البريد الإلكتروني لإعادة تعيين كلمة المرور.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- email: بريد إلكتروني"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Google Token Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"ضع_google_id_token_هنا\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/google",
+						"description": "يسجل الدخول باستخدام Google ID token عبر المسار الحالي العامل في المشروع.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- token: نص يمثل Google token"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Verify Email OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"ahmed@example.com\",\n  \"otp\": \"123456\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/verify-email-otp",
+						"description": "يؤكد البريد الإلكتروني عبر OTP.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- email: بريد إلكتروني\n- otp: نص بطول 6"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Resend Verification OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"ahmed@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/resend-verification-otp",
+						"description": "يعيد إرسال OTP لتأكيد البريد الإلكتروني.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- email: بريد إلكتروني موجود في جدول المستخدمين"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Request OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": 0,\n  \"email\": \"ahmed@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/request-otp",
+						"description": "يرسل OTP بحسب النوع.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- type: رقم، 0 للبريد و1 للهاتف\n\nالحقول الشرطية:\n- email: مطلوب عندما يكون type = 0\n- phone: مطلوب عندما يكون type = 1"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Verify OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": 0,\n  \"email\": \"ahmed@example.com\",\n  \"otp\": \"123456\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/verify-otp",
+						"description": "يتحقق من صحة OTP للبريد أو الهاتف.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- type: رقم، 0 للبريد و1 للهاتف\n- otp: نص\n\nالحقول الشرطية:\n- email: مطلوب عندما يكون type = 0\n- phone: مطلوب عندما يكون type = 1"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Reset Password Via OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": 0,\n  \"email\": \"ahmed@example.com\",\n  \"otp\": \"123456\",\n  \"password\": \"Password@123\",\n  \"password_confirmation\": \"Password@123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/auth/reset-password",
+						"description": "يعيد تعيين كلمة المرور حسب السلوك الحالي الفعلي للمشروع عبر OtpController.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- type: رقم، 0 للبريد و1 للهاتف\n- otp: نص\n- password: نص\n- password_confirmation: نص\n\nالحقول الشرطية:\n- email: مطلوب عندما يكون type = 0\n- phone: مطلوب عندما يكون type = 1"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "System",
+			"description": "Utility authenticated endpoints.",
+			"item": [
+				{
+					"name": "Get Authenticated User",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": "{{base_url}}/api/user",
+						"description": "يعيد المستخدم الحالي المصادق عليه.\n\nالمصادقة: يتطلب Bearer token.\n\nلا توجد حقول مطلوبة أو اختيارية."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Services",
+			"description": "Public service browsing endpoints.",
+			"item": [
+				{
+					"name": "List Services",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/services?category_id=1&featured=true&search=hair&sort_by=sort_order&sort_direction=asc&per_page=15",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"services"
+							],
+							"query": [
+								{
+									"key": "category_id",
+									"value": "1"
+								},
+								{
+									"key": "featured",
+									"value": "true"
+								},
+								{
+									"key": "search",
+									"value": "hair"
+								},
+								{
+									"key": "sort_by",
+									"value": "sort_order"
+								},
+								{
+									"key": "sort_direction",
+									"value": "asc"
+								},
+								{
+									"key": "per_page",
+									"value": "15"
+								}
+							]
+						},
+						"description": "يعيد قائمة الخدمات النشطة.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول الاختيارية من Controller مباشرة:\n- category_id: رقم\n- featured: منطقي/وجود الباراميتر\n- search: نص\n- sort_by: نص\n- sort_direction: نص\n- per_page: رقم\n\n⚠️ بعض هذه الحقول غير محكومة بـ validation صريح في الكود وتم توثيقها وفق السلوك الحالي في الـ Controller."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Show Service",
+					"request": {
+						"method": "GET",
+						"url": "{{base_url}}/api/services/1",
+						"description": "يعيد تفاصيل خدمة واحدة.\n\nالمصادقة: لا يتطلب مصادقة.\n\nباراميترات المسار:\n- id: رقم الخدمة"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Providers",
+			"description": "Public provider discovery endpoints.",
+			"item": [
+				{
+					"name": "List Providers",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/providers?search=ahmed&branch_id=1&service_id=1&sort_by=first_name&sort_direction=asc&per_page=15",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"providers"
+							],
+							"query": [
+								{
+									"key": "search",
+									"value": "ahmed"
+								},
+								{
+									"key": "branch_id",
+									"value": "1"
+								},
+								{
+									"key": "service_id",
+									"value": "1"
+								},
+								{
+									"key": "sort_by",
+									"value": "first_name"
+								},
+								{
+									"key": "sort_direction",
+									"value": "asc"
+								},
+								{
+									"key": "per_page",
+									"value": "15"
+								}
+							]
+						},
+						"description": "يعيد قائمة مقدمي الخدمة مع خدماتهم.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول الاختيارية من Controller مباشرة:\n- search: نص\n- branch_id: رقم\n- service_id: رقم\n- sort_by: نص\n- sort_direction: نص\n- per_page: رقم\n\n⚠️ هذه الحقول موثقة حسب السلوك الحالي في الـ Controller ولا يوجد لها validation صريح."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Show Provider",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/providers/1?locale=ar",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"providers",
+								"1"
+							],
+							"query": [
+								{
+									"key": "locale",
+									"value": "ar"
+								}
+							]
+						},
+						"description": "يعيد تفاصيل مقدم خدمة واحد.\n\nالمصادقة: لا يتطلب مصادقة.\n\nباراميترات المسار:\n- id: رقم مقدم الخدمة\n\nالحقول الاختيارية:\n- locale: نص\n\n⚠️ locale موثق حسب استخدامه المباشر في الـ Controller بدون validation صريح."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Availability",
+			"description": "Public availability lookup endpoints.",
+			"item": [
+				{
+					"name": "Provider Availability",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/availability/provider?service_id=1&provider_id=1&date=2026-03-24&branch_id=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"availability",
+								"provider"
+							],
+							"query": [
+								{
+									"key": "service_id",
+									"value": "1"
+								},
+								{
+									"key": "provider_id",
+									"value": "1"
+								},
+								{
+									"key": "date",
+									"value": "2026-03-24"
+								},
+								{
+									"key": "branch_id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "يعيد الأوقات المتاحة لمقدم خدمة معين في يوم معين.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- service_id: رقم\n- provider_id: رقم\n- date: تاريخ بصيغة Y-m-d\n\nالحقول الاختيارية:\n- branch_id: رقم"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Availability Calendar",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/availability/calendar?service_id=1&provider_id=1&start_date=2026-03-24&end_date=2026-03-31&branch_id=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"availability",
+								"calendar"
+							],
+							"query": [
+								{
+									"key": "service_id",
+									"value": "1"
+								},
+								{
+									"key": "provider_id",
+									"value": "1"
+								},
+								{
+									"key": "start_date",
+									"value": "2026-03-24"
+								},
+								{
+									"key": "end_date",
+									"value": "2026-03-31"
+								},
+								{
+									"key": "branch_id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "يعيد تقويم التوفر لفترة زمنية.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- service_id: رقم\n- start_date: تاريخ Y-m-d\n- end_date: تاريخ Y-m-d\n\nالحقول الاختيارية:\n- provider_id: رقم\n- branch_id: رقم\n\nملاحظة: المنطق الحالي يرفض المدى الأكبر من 31 يوماً."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Profile",
+			"description": "Authenticated profile endpoints.",
+			"item": [
+				{
+					"name": "Show Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": "{{base_url}}/api/profile",
+						"description": "يعيد بيانات الملف الشخصي للمستخدم الحالي.\n\nالمصادقة: يتطلب Bearer token.\n\nلا توجد حقول مطلوبة أو اختيارية."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Update Profile",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "first_name",
+									"value": "أحمد",
+									"type": "text"
+								},
+								{
+									"key": "last_name",
+									"value": "الرشيدي",
+									"type": "text"
+								},
+								{
+									"key": "phone",
+									"value": "+966501234567",
+									"type": "text"
+								},
+								{
+									"key": "address",
+									"value": "وصف تجريبي لأغراض الاختبار",
+									"type": "text"
+								},
+								{
+									"key": "city",
+									"value": "الرياض",
+									"type": "text"
+								},
+								{
+									"key": "image",
+									"type": "file",
+									"src": "",
+									"description": "أرفق الملف يدوياً"
+								}
+							]
+						},
+						"url": "{{base_url}}/api/profile",
+						"description": "يحدّث بيانات الملف الشخصي.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول الاختيارية:\n- first_name: نص\n- last_name: نص\n- phone: نص\n- address: نص\n- city: نص\n- image: ملف صورة\n\nاستخدم form-data لأن الطلب يدعم رفع ملف."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"current_password\": \"Password@123\",\n  \"password\": \"Password@123\",\n  \"password_confirmation\": \"Password@123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/profile/change-password",
+						"description": "يغيّر كلمة مرور المستخدم الحالي.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول المطلوبة:\n- current_password: نص\n- password: نص\n- password_confirmation: نص"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Devices",
+			"description": "Authenticated device registration endpoints.",
+			"item": [
+				{
+					"name": "Register Device",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"device_id\": \"device-001\",\n  \"device_token\": \"test-device-token\",\n  \"platform\": \"android\",\n  \"os_version\": \"14\",\n  \"app_version\": \"1.0.0\",\n  \"meta\": {\n    \"manufacturer\": \"Samsung\",\n    \"model\": \"S24\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/register-device",
+						"description": "يسجل جهاز المستخدم الحالي لاستقبال الإشعارات.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول المطلوبة:\n- device_id: نص\n\nالحقول الاختيارية:\n- device_token: نص\n- platform: نص من android أو ios\n- os_version: نص\n- app_version: نص\n- meta: كائن/مصفوفة"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Deregister Device",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"device_id\": \"device-001\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/deregister-device",
+						"description": "يلغي تفعيل جهاز مستخدم مسجل مسبقاً.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول المطلوبة:\n- device_id: نص"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Notifications",
+			"description": "Authenticated notification endpoints.",
+			"item": [
+				{
+					"name": "List Notifications",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/notifications?per_page=15&cursor=&status=all",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"notifications"
+							],
+							"query": [
+								{
+									"key": "per_page",
+									"value": "15"
+								},
+								{
+									"key": "cursor",
+									"value": ""
+								},
+								{
+									"key": "status",
+									"value": "all"
+								}
+							]
+						},
+						"description": "يعيد إشعارات المستخدم مع cursor pagination.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول الاختيارية:\n- per_page: رقم\n- cursor: نص\n- status: all أو read أو unread"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Unread Count",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": "{{base_url}}/api/notifications/unread-count",
+						"description": "يعيد عدد الإشعارات غير المقروءة للمستخدم الحالي.\n\nالمصادقة: يتطلب Bearer token.\n\nلا توجد حقول مطلوبة أو اختيارية."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Mark Notification As Read",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"url": "{{base_url}}/api/notifications/1/read",
+						"description": "يعلّم إشعاراً واحداً كمقروء.\n\nالمصادقة: يتطلب Bearer token.\n\nباراميترات المسار:\n- notificationId: معرف الإشعار كنص/UUID حسب تخزين Laravel notifications\n\nلا توجد حقول في جسم الطلب."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Test Send To All",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"url": "{{base_url}}/api/noticifation/test-send-to-all",
+						"description": "يرسل إشعاراً تجريبياً لجميع الأجهزة عبر المسار الحالي الفعلي في المشروع.\n\nالمصادقة: يتطلب Bearer token.\n\nلا توجد حقول مطلوبة أو اختيارية.\n\nملاحظة: المسار يحتوي على typo فعلي في المشروع: noticifation وليس notifications."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Appointments",
+			"description": "Authenticated appointment browsing and reminder endpoints.",
+			"item": [
+				{
+					"name": "List Appointments",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/appointments?status=ALL&payment_status=PENDING&date_from=2026-03-24&date_to=2026-03-31&type=upcoming&sort_by=appointment_date&sort_direction=asc&per_page=15",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"appointments"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "ALL"
+								},
+								{
+									"key": "payment_status",
+									"value": "PENDING"
+								},
+								{
+									"key": "date_from",
+									"value": "2026-03-24"
+								},
+								{
+									"key": "date_to",
+									"value": "2026-03-31"
+								},
+								{
+									"key": "type",
+									"value": "upcoming"
+								},
+								{
+									"key": "sort_by",
+									"value": "appointment_date"
+								},
+								{
+									"key": "sort_direction",
+									"value": "asc"
+								},
+								{
+									"key": "per_page",
+									"value": "15"
+								}
+							]
+						},
+						"description": "يعيد قائمة الحجوزات للمستخدم الحالي مع فلاتر متعددة.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول الاختيارية:\n- status: PENDING أو COMPLETED أو USER_CANCELLED أو ADMIN_CANCELLED أو ALL\n- payment_status: PENDING أو PAID_ONLINE أو PAID_ONSTIE_CASH أو PAID_ONSTIE_CARD أو FAILED أو REFUNDED أو PARTIALLY_REFUNDED\n- date_from: تاريخ Y-m-d\n- date_to: تاريخ Y-m-d\n- type: upcoming أو past\n- sort_by: appointment_date أو created_at أو total_amount\n- sort_direction: asc أو desc\n- per_page: رقم"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Appointment Statistics",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": "{{base_url}}/api/appointments/statistics",
+						"description": "يعيد إحصائيات الحجوزات للمستخدم الحالي.\n\nالمصادقة: يتطلب Bearer token.\n\nلا توجد حقول مطلوبة أو اختيارية."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Upcoming Appointments",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/appointments/upcoming?days=7",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"appointments",
+								"upcoming"
+							],
+							"query": [
+								{
+									"key": "days",
+									"value": "7"
+								}
+							]
+						},
+						"description": "يعيد الحجوزات القادمة لعدد أيام محدد.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول الاختيارية:\n- days: رقم من 1 إلى 90"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Past Appointments",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/appointments/past?limit=10",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"appointments",
+								"past"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						},
+						"description": "يعيد الحجوزات السابقة بحد أقصى محدد.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول الاختيارية:\n- limit: رقم من 1 إلى 50"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Search Appointments",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/appointments/search?query=APT",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"appointments",
+								"search"
+							],
+							"query": [
+								{
+									"key": "query",
+									"value": "APT"
+								}
+							]
+						},
+						"description": "يبحث في الحجوزات حسب الرقم أو الاسم وفق منطق الخدمة.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول المطلوبة:\n- query: نص بطول لا يقل عن 2"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Show Appointment",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": "{{base_url}}/api/appointments/1",
+						"description": "يعيد تفاصيل حجز واحد للمستخدم الحالي.\n\nالمصادقة: يتطلب Bearer token.\n\nباراميترات المسار:\n- id: رقم الحجز"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Cancel Appointment",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reason\": \"وصف تجريبي لأغراض الاختبار\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/appointments/1/cancel",
+						"description": "يلغي حجزاً قائماً عبر AppointmentController.\n\nالمصادقة: يتطلب Bearer token.\n\nباراميترات المسار:\n- id: رقم الحجز\n\nالحقول الاختيارية:\n- reason: نص"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Create Appointment Reminder",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"appointment_id\": 1,\n  \"remind_at\": \"2026-03-24T09:00:00\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/appointments/reminders",
+						"description": "ينشئ أو يعيد جدولة تذكير لحجز يخص المستخدم الحالي.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول المطلوبة:\n- appointment_id: رقم، ويجب أن يخص المستخدم الحالي\n- remind_at: تاريخ/وقت بعد الآن وقبل وقت بدء الحجز"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Bookings",
+			"description": "Authenticated booking lifecycle endpoints. Current project behavior requires auth:sanctum and the existing verified middleware on these routes.",
+			"item": [
+				{
+					"name": "List Bookings",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/bookings?status=PENDING",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"bookings"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "PENDING"
+								}
+							]
+						},
+						"description": "يعيد حجوزات العميل الحالي.\n\nالمصادقة: يتطلب Bearer token، والمسار محمي أيضاً بـ middleware `verified` الحالي في المشروع.\n\nالحقول الاختيارية:\n- status: نص\n\n⚠️ هذا الحقل موثق حسب استخدامه المباشر في الـ Controller بدون validation صريح."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Create Booking",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"date\": \"2026-03-24\",\n  \"payment_method\": \"cash\",\n  \"notes\": \"وصف تجريبي لأغراض الاختبار\",\n  \"services\": [\n    {\n      \"service_id\": 1,\n      \"provider_id\": 1,\n      \"start_time\": \"10:00\"\n    }\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/bookings",
+						"description": "ينشئ حجزاً جديداً للعميل الحالي.\n\nالمصادقة: يتطلب Bearer token، والمسار محمي أيضاً بـ middleware `verified` الحالي في المشروع.\n\nالحقول المطلوبة:\n- services: مصفوفة من 1 إلى 10 عناصر\n- services.*.service_id: رقم\n- services.*.provider_id: رقم\n- services.*.start_time: وقت بصيغة H:i\n- date: تاريخ Y-m-d\n- payment_method: نص من cash أو online\n\nالحقول الاختيارية:\n- notes: نص"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Show Booking",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": "{{base_url}}/api/bookings/1",
+						"description": "يعيد تفاصيل حجز واحد يخص المستخدم الحالي.\n\nالمصادقة: يتطلب Bearer token، والمسار محمي أيضاً بـ middleware `verified` الحالي في المشروع.\n\nباراميترات المسار:\n- id: رقم الحجز"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Cancel Booking",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"cancellation_reason\": \"وصف تجريبي لأغراض الاختبار\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/bookings/1/cancel",
+						"description": "يلغي حجزاً للمستخدم الحالي.\n\nالمصادقة: يتطلب Bearer token، والمسار محمي أيضاً بـ middleware `verified` الحالي في المشروع.\n\nباراميترات المسار:\n- id: رقم الحجز\n\nالحقول الاختيارية:\n- cancellation_reason: نص\n\n⚠️ هذا الحقل موثق حسب قراءة Controller مباشرة بدون validation صريح."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Print",
+			"description": "Authenticated invoice printing endpoints.",
+			"item": [
+				{
+					"name": "Print Invoice",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"printer_id\": 1,\n  \"template_id\": 1,\n  \"copies\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/invoice/1/print",
+						"description": "يطبع فاتورة واحدة عبر PrintController@apiPrint.\n\nالمصادقة: يتطلب Bearer token.\n\nباراميترات المسار:\n- invoice: رقم الفاتورة\n\nالحقول الاختيارية:\n- printer_id: رقم\n- template_id: رقم\n- copies: رقم من 1 إلى 10"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Batch Print Invoices",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"invoice_ids\": [1],\n  \"printer_id\": 1,\n  \"template_id\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "{{base_url}}/api/invoices/print-batch",
+						"description": "يطبع مجموعة فواتير دفعة واحدة.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول المطلوبة:\n- invoice_ids: مصفوفة أرقام لا تقل عن عنصر واحد\n\nالحقول الاختيارية:\n- printer_id: رقم\n- template_id: رقم"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Get Invoice Print URL",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/invoice/1/print-url?printer_id=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"invoice",
+								"1",
+								"print-url"
+							],
+							"query": [
+								{
+									"key": "printer_id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "يعيد رابط طباعة الفاتورة.\n\nالمصادقة: يتطلب Bearer token.\n\nباراميترات المسار:\n- invoice: رقم الفاتورة\n\nالحقول الاختيارية:\n- printer_id: رقم"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Test Printer",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"url": "{{base_url}}/api/printer/1/test",
+						"description": "يختبر الاتصال بطابعة محددة.\n\nالمصادقة: يتطلب Bearer token.\n\nباراميترات المسار:\n- printer: رقم إعداد الطابعة\n\nلا توجد حقول مطلوبة أو اختيارية في الجسم."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Print Statistics",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/print/statistics?printer_id=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"print",
+								"statistics"
+							],
+							"query": [
+								{
+									"key": "printer_id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "يعيد إحصائيات الطباعة.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول الاختيارية:\n- printer_id: رقم\n\n⚠️ هذا الحقل موثق حسب قراءة Controller مباشرة بدون validation صريح."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Print Logs",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{auth_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/api/print/logs?limit=10&printer_id=1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"print",
+								"logs"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "printer_id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "يعيد أحدث سجلات الطباعة.\n\nالمصادقة: يتطلب Bearer token.\n\nالحقول الاختيارية:\n- limit: رقم\n- printer_id: رقم\n\n⚠️ هذه الحقول موثقة حسب قراءة Controller مباشرة بدون validation صريح."
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"الحالة ناجحة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"});",
+									"",
+									"pm.test(\"الرد بصيغة JSON\", function () {",
+									"    pm.expect(pm.response.headers.get(\"Content-Type\"))",
+									"      .to.include(\"application/json\");",
+									"});"
+								]
+							}
+						}
+					]
+				}
+			]
+		}
+	]
+}

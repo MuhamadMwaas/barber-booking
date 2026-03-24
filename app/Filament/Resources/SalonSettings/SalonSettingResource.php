@@ -10,6 +10,8 @@ use App\Filament\Resources\SalonSettings\Schemas\SalonSettingForm;
 use App\Filament\Resources\SalonSettings\Schemas\SalonSettingInfolist;
 use App\Filament\Resources\SalonSettings\Tables\SalonSettingsTable;
 use App\Models\SalonSetting;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -18,9 +20,14 @@ use Filament\Tables\Table;
 
 class SalonSettingResource extends Resource
 {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = SalonSetting::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'settings';
+
+    protected static ?int $navigationSort = 60;
 
     protected static ?string $recordTitleAttribute = 'key';
 

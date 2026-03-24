@@ -180,6 +180,8 @@ return [
     'appointment' => [
         'label' => 'حجز',
         'plural_label' => 'الحجوزات',
+        'navigation_label' => 'الحجوزات',
+        'title' => 'حجز',
 
         // Table columns
         'booking_number' => 'رقم الحجز',
@@ -365,6 +367,8 @@ return [
     'service' => [
         'label' => 'خدمة',
         'plural_label' => 'الخدمات',
+        'navigation_label' => 'الخدمات',
+        'title' => 'خدمة',
 
         // Table columns
         'image' => 'الصورة',
@@ -457,6 +461,7 @@ return [
         'translations_section' => 'ترجمات الخدمة',
         'translations_section_desc' => 'أضف ترجمات للغات مختلفة',
         'language' => 'اللغة',
+        'language_id' => 'اللغة',
         'language_code' => 'رمز اللغة',
         'language_code_helper' => 'يتم ملؤه تلقائياً بناءً على اللغة المحددة',
         'translated_name' => 'اسم الخدمة (مترجم)',
@@ -488,6 +493,13 @@ return [
         'status' => 'حالة الفاتورة',
         'total' => 'المبلغ الإجمالي',
         'created_at' => 'تاريخ الإنشاء',
+    ],
+
+    'invoice_template' => [
+        'label' => 'قالب فاتورة',
+        'plural_label' => 'قوالب الفواتير',
+        'navigation_label' => 'قوالب الفواتير',
+        'title' => 'قالب فاتورة',
     ],
 
     'language' => [
@@ -1197,6 +1209,66 @@ return [
 
         // Validation
         'default_translation_required' => 'يجب توفير ترجمة للغة الافتراضية',
+    ],
+
+    // ─────────────────────────────────────────────────────────────
+    // إدارة الأدوار
+    // ─────────────────────────────────────────────────────────────
+    'role' => [
+        'label' => 'دور',
+        'plural_label' => 'الأدوار',
+        'navigation_label' => 'الأدوار',
+        'title' => 'إدارة الأدوار',
+
+        // النموذج
+        'name' => 'اسم الدور',
+        'guard' => 'الحارس',
+        'role_details' => 'تفاصيل الدور',
+        'role_details_desc' => 'حدد اسم الدور وإعداداته',
+        'permissions_section' => 'الصلاحيات',
+        'permissions_section_desc' => 'اختر الصلاحيات لهذا الدور',
+
+        // الجدول
+        'permissions_count' => 'الصلاحيات',
+        'users_count' => 'المستخدمون',
+        'created_at' => 'تاريخ الإنشاء',
+
+        // عرض التفاصيل
+        'statistics' => 'الإحصائيات',
+        'assigned_permissions' => 'الصلاحيات المسندة',
+
+        // مدير العلاقات
+        'permission_name' => 'الصلاحية',
+        'group' => 'المجموعة',
+        'attach_permission' => 'إرفاق صلاحية',
+        'user_name' => 'الاسم',
+        'user_email' => 'البريد الإلكتروني',
+        'user_phone' => 'الهاتف',
+        'user_active' => 'نشط',
+        'user_joined' => 'تاريخ الانضمام',
+        'assign_user' => 'إسناد مستخدم',
+
+        // الإشعارات
+        'created_notification' => 'تم إنشاء الدور بنجاح',
+        'updated_notification' => 'تم تحديث الدور بنجاح',
+        'deleted_notification' => 'تم حذف الدور بنجاح',
+
+        // الحماية
+        'protected_role' => 'هذا الدور محمي ولا يمكن تعديله',
+    ],
+
+    'printer_setting' => [
+        'label' => 'طابعة',
+        'plural_label' => 'الطابعات',
+        'navigation_label' => 'الطابعات',
+        'title' => 'طابعة',
+    ],
+
+    'print_log' => [
+        'label' => 'سجل طباعة',
+        'plural_label' => 'سجلات الطباعة',
+        'navigation_label' => 'سجلات الطباعة',
+        'title' => 'سجل طباعة',
     ],
 
     // Common Actions

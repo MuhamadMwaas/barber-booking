@@ -8,6 +8,7 @@ class Otp extends Model
 {
     protected $fillable = [
         'email',
+        'phone',
         'otp',
         'expires_at',
         'device',
@@ -15,5 +16,8 @@ class Otp extends Model
         'used'
     ];
 
-   
+    protected $casts = [
+        'expires_at' => 'datetime',
+        'used' => 'boolean',
+    ];
 }

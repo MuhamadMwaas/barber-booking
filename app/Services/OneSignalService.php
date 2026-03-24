@@ -70,20 +70,29 @@ class OneSignalService
         }
     }
 
+    protected function normalizeLocalizedField(string|array $value): array
+    {
+        if (is_array($value)) {
+            return array_filter(
+                $value,
+                static fn ($translation, $locale) => is_string($locale) && is_string($translation) && $translation !== '',
+                ARRAY_FILTER_USE_BOTH
+            );
+        }
+
+        return ['en' => $value];
+    }
+
     /**
      * إرسال إشعار لكل الأجهزة (كل المشتركين)
      */
-    public function sendToAll(string $title, string $body, array $data = []): array
+    public function sendToAll(string|array $title, string|array $body, array $data = []): array
     {
         $payload = [
             'app_id' => $this->appId,
             'included_segments' => ['All'],
-            'headings' => [
-                'en' => $title,   // عنوان الإشعار
-            ],
-            'contents' => [
-                'en' => $body,    // نص الإشعار
-            ],
+            'headings' => $this->normalizeLocalizedField($title),
+            'contents' => $this->normalizeLocalizedField($body),
         ];
         if (!empty($data)) {
             $payload['data'] = $data;
@@ -94,17 +103,13 @@ class OneSignalService
     /**
      * إرسال إشعار لجهاز واحد عن طريق player_id
      */
-    public function sendToDevice(string $playerId, string $title, string $body, array $data = []): array
+    public function sendToDevice(string $playerId, string|array $title, string|array $body, array $data = []): array
     {
         $payload = [
             'app_id' => $this->appId,
             'include_player_ids' => [$playerId],
-            'headings' => [
-                'en' => $title,
-            ],
-            'contents' => [
-                'en' => $body,
-            ],
+            'headings' => $this->normalizeLocalizedField($title),
+            'contents' => $this->normalizeLocalizedField($body),
         ];
         if (!empty($data)) {
             $payload['data'] = $data;
@@ -115,19 +120,15 @@ class OneSignalService
     /**
      * إرسال إشعار لمجموعة أجهزة (أكثر من player_id)
      */
-    public function sendToMany(array $playerIds, string $title, string $body, array $data = []): array
+    public function sendToMany(array $playerIds, string|array $title, string|array $body, array $data = []): array
     {
         $playerIds = array_filter($playerIds, fn($id) => !empty($id));
 
         $payload = [
             'app_id' => $this->appId,
             'include_player_ids' => $playerIds,
-            'headings' => [
-                'en' => $title,
-            ],
-            'contents' => [
-                'en' => $body,
-            ],
+            'headings' => $this->normalizeLocalizedField($title),
+            'contents' => $this->normalizeLocalizedField($body),
             'data' => $data,
         ];
 

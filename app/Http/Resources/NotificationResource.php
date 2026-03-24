@@ -12,7 +12,7 @@ class NotificationResource extends JsonResource
         /** @var NotificationService $notificationService */
         $notificationService = app(NotificationService::class);
 
-        $locale = app()->getLocale();
+        $locale = $request->user()?->locale ?? app()->getLocale();
 
         $params = $this->data['params'] ?? [];
 

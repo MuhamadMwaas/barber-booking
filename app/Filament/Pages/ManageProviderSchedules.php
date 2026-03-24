@@ -2,12 +2,15 @@
 
 namespace App\Filament\Pages;
 
+use App\Traits\NavigationDefaultAccess;
 use Filament\Pages\Page;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Auth;
 
 class ManageProviderSchedules extends Page
 {
+    use NavigationDefaultAccess;
     protected  string $view = 'filament.pages.manage-provider-schedules';
     protected static bool $shouldRegisterNavigation = true;
     /**
@@ -26,15 +29,6 @@ class ManageProviderSchedules extends Page
     }
 
     /**
-     * ترتيب الصفحة في القائمة
-     */
-
-    /**
-     * مجموعة التنقل
-     */
-    // protected static ?string $navigationGroup = 'Provider Management';
-
-    /**
      * عنوان الصفحة
      */
     public function getTitle(): string|Htmlable
@@ -47,15 +41,15 @@ class ManageProviderSchedules extends Page
      */
     public static function getNavigationLabel(): string
     {
-        return __('schedule.navigation_label2');
+        return __('schedule.navigation_label');
     }
 
-    /**
-     * مجموعة التنقل (مترجمة)
-     */
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedClock;
+    protected static ?int $navigationSort = 23;
+
     public static function getNavigationGroup(): ?string
     {
-        return __('schedule.navigation_group');
+        return __('navigation.staff');
     }
 
 

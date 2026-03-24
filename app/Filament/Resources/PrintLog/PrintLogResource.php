@@ -6,6 +6,8 @@ use App\Filament\Resources\PrintLog\Pages;
 use App\Filament\Resources\PrintLog\Schemas\PrintLogForm;
 use App\Filament\Resources\PrintLog\Tables\PrintLogsTable;
 use App\Models\PrintLog;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -13,21 +15,20 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 class PrintLogResource extends Resource {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = PrintLog::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQueueList;
 
+    protected static string|\UnitEnum|null $navigationGroup = 'billing';
 
-    protected static ?int $navigationSort = 70;
+    protected static ?int $navigationSort = 42;
 
     protected static ?string $label = 'Print Log';
 
     protected static ?string $pluralLabel = 'Print Logs';
 
 
-    // public static function getNavigationGroup(): ?string {
-    //     return __('filament/navigation.groups.shop');
-    // }
     public static function form(Schema $schema): Schema {
         return PrintLogForm::configure($schema);
     }

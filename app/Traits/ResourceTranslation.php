@@ -17,6 +17,10 @@ trait ResourceTranslation
      */
     protected static function resourceKey(): string
     {
+        if (property_exists(static::class, 'translationResourceKey') && filled(static::$translationResourceKey)) {
+            return static::$translationResourceKey;
+        }
+
         $className = class_basename(static::class);
         return str($className)->replace('Resource', '')->snake()->toString();
     }

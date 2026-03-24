@@ -184,6 +184,8 @@ return [
     'appointment' => [
         'label' => 'Appointment',
         'plural_label' => 'Appointments',
+        'navigation_label' => 'Appointments',
+        'title' => 'Appointment',
 
         // Table columns
         'booking_number' => 'Booking Number',
@@ -386,6 +388,8 @@ return [
     'service' => [
         'label' => 'Service',
         'plural_label' => 'Services',
+        'navigation_label' => 'Services',
+        'title' => 'Service',
 
         // Table columns
         'image' => 'Image',
@@ -478,6 +482,7 @@ return [
         'translations_section' => 'Service Translations',
         'translations_section_desc' => 'Add translations for different languages',
         'language' => 'Language',
+        'language_id' => 'Language',
         'language_code' => 'Language Code',
         'language_code_helper' => 'Auto-filled based on selected language',
         'translated_name' => 'Service Name (Translated)',
@@ -509,6 +514,13 @@ return [
         'status' => 'Invoice Status',
         'total' => 'Total Amount',
         'created_at' => 'Created At',
+    ],
+
+    'invoice_template' => [
+        'label' => 'Invoice Template',
+        'plural_label' => 'Invoice Templates',
+        'navigation_label' => 'Invoice Templates',
+        'title' => 'Invoice Template',
     ],
 
     'language' => [
@@ -1385,6 +1397,66 @@ return [
 
         // Validation
         'default_translation_required' => 'Default language translation is required',
+    ],
+
+    // ─────────────────────────────────────────────────────────────
+    // Role Management
+    // ─────────────────────────────────────────────────────────────
+    'role' => [
+        'label' => 'Role',
+        'plural_label' => 'Roles',
+        'navigation_label' => 'Roles',
+        'title' => 'Role Management',
+
+        // Form
+        'name' => 'Role Name',
+        'guard' => 'Guard',
+        'role_details' => 'Role Details',
+        'role_details_desc' => 'Define the role name and its configuration',
+        'permissions_section' => 'Permissions',
+        'permissions_section_desc' => 'Select the permissions for this role',
+
+        // Table
+        'permissions_count' => 'Permissions',
+        'users_count' => 'Users',
+        'created_at' => 'Created At',
+
+        // Infolist
+        'statistics' => 'Statistics',
+        'assigned_permissions' => 'Assigned Permissions',
+
+        // Relation Managers
+        'permission_name' => 'Permission',
+        'group' => 'Group',
+        'attach_permission' => 'Attach Permission',
+        'user_name' => 'Name',
+        'user_email' => 'Email',
+        'user_phone' => 'Phone',
+        'user_active' => 'Active',
+        'user_joined' => 'Joined At',
+        'assign_user' => 'Assign User',
+
+        // Notifications
+        'created_notification' => 'Role created successfully',
+        'updated_notification' => 'Role updated successfully',
+        'deleted_notification' => 'Role deleted successfully',
+
+        // Protection
+        'protected_role' => 'This role is protected and cannot be modified',
+    ],
+
+    'printer_setting' => [
+        'label' => 'Printer',
+        'plural_label' => 'Printers',
+        'navigation_label' => 'Printers',
+        'title' => 'Printer',
+    ],
+
+    'print_log' => [
+        'label' => 'Print Log',
+        'plural_label' => 'Print Logs',
+        'navigation_label' => 'Print Logs',
+        'title' => 'Print Log',
     ],
 
     // Common Actions

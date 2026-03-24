@@ -4,7 +4,9 @@ namespace App\Filament\Pages;
 
 use App\Models\ProviderTimeOff;
 use App\Models\User;
+use App\Traits\NavigationDefaultAccess;
 use Filament\Pages\Page;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -18,13 +20,15 @@ use Filament\Forms\Contracts\HasForms;
 
 class ManageProviderLeaves extends Page implements HasTable, HasForms
 {
+    use NavigationDefaultAccess;
     use InteractsWithTable;
     use InteractsWithForms;
 
 
     protected  string $view = 'filament.pages.manage-provider-leaves';
 
-    protected static ?int $navigationSort = 10;
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
+    protected static ?int $navigationSort = 24;
 
     public static function getNavigationLabel(): string
     {
@@ -33,7 +37,7 @@ class ManageProviderLeaves extends Page implements HasTable, HasForms
 
     public static function getNavigationGroup(): ?string
     {
-        return __('resources.provider_resource.provider_management');
+        return __('navigation.staff');
     }
 
     public function getTitle(): string

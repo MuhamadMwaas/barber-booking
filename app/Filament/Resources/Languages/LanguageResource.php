@@ -10,6 +10,8 @@ use App\Filament\Resources\Languages\Schemas\LanguageForm;
 use App\Filament\Resources\Languages\Schemas\LanguageInfolist;
 use App\Filament\Resources\Languages\Tables\LanguagesTable;
 use App\Models\Language;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -18,9 +20,14 @@ use Filament\Tables\Table;
 
 class LanguageResource extends Resource
 {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = Language::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedLanguage;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'settings';
+
+    protected static ?int $navigationSort = 61;
 
     protected static ?string $recordTitleAttribute = 'name';
 

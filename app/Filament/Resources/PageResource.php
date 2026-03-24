@@ -6,6 +6,8 @@ use App\Filament\Resources\PageResource\Pages;
 use App\Filament\Resources\PageResource\Schemas\PageForm;
 use App\Filament\Resources\PageResource\Tables\PagesTable;
 use App\Models\SamplePage;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -13,27 +15,16 @@ use Filament\Support\Icons\Heroicon;
 
 class PageResource extends Resource
 {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = SamplePage::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
-    protected static ?int $navigationSort = 50;
+    protected static ?string $translationResourceKey = 'page_resource';
 
-    public static function getNavigationLabel(): string
-    {
-        return __('resources.page_resource.navigation_label');
-    }
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentDuplicate;
 
-    public static function getModelLabel(): string
-    {
-        return __('resources.page_resource.label');
-    }
+    protected static string|\UnitEnum|null $navigationGroup = 'content';
 
-    public static function getPluralModelLabel(): string
-    {
-        return __('resources.page_resource.plural_label');
-    }
-
-
+    protected static ?int $navigationSort = 70;
 
     public static function form(Schema $schema): Schema
     {

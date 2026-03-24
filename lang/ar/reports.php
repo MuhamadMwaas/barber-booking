@@ -1,0 +1,66 @@
+<?php
+
+return [
+    'title' => 'التقارير والتحليلات',
+    'loading' => 'جاري تحميل التقارير...',
+    'no_data' => 'لا توجد بيانات للفترة المحددة',
+    'from' => 'من',
+    'to' => 'إلى',
+    'minutes' => 'دقيقة',
+
+    'presets' => [
+        'week' => 'آخر أسبوع',
+        'month' => 'آخر شهر',
+        'year' => 'آخر سنة',
+        'all' => 'كل الفترة',
+    ],
+
+    'stats' => [
+        'total_revenue' => 'إجمالي الدخل',
+        'avg_booking' => 'متوسط قيمة الحجز',
+        'total_bookings' => 'إجمالي الحجوزات',
+        'completed' => 'مكتملة',
+        'cancelled' => 'ملغاة',
+        'cancellation_rate' => 'نسبة الإلغاء',
+        'cash_revenue' => 'دخل نقدي',
+        'card_revenue' => 'دخل بطاقة',
+        'online_revenue' => 'دخل أونلاين',
+        'pending' => 'قيد الانتظار',
+        'no_show' => 'لم يحضر',
+        'avg_duration' => 'متوسط المدة',
+    ],
+
+    'charts' => [
+        'revenue_over_time' => 'الدخل عبر الزمن',
+        'bookings_over_time' => 'الحجوزات عبر الزمن',
+        'peak_hours' => 'أوقات الذروة',
+        'peak_days' => 'أكثر الأيام ازدحاماً',
+        'top_providers_revenue' => 'أفضل مقدمي الخدمات حسب الدخل',
+        'top_services_revenue' => 'أفضل الخدمات حسب الدخل',
+        'most_requested_services' => 'الخدمات الأكثر طلباً',
+    ],
+
+    'tables' => [
+        'provider' => 'مقدم الخدمة',
+        'customer' => 'العميل',
+        'hours' => 'الساعات',
+        'appointments' => 'المواعيد',
+        'utilization' => 'نسبة الإشغال',
+        'services_count' => 'الخدمات المكتملة',
+        'bookings' => 'الحجوزات',
+        'total_spent' => 'إجمالي الإنفاق',
+        'top_providers_services' => 'أفضل مقدمي الخدمات حسب عدد الخدمات',
+        'top_customers' => 'أفضل العملاء',
+        'provider_utilization' => 'إشغال مقدمي الخدمات',
+    ],
+
+    'days' => [
+        'sunday' => 'الأحد',
+        'monday' => 'الإثنين',
+        'tuesday' => 'الثلاثاء',
+        'wednesday' => 'الأربعاء',
+        'thursday' => 'الخميس',
+        'friday' => 'الجمعة',
+        'saturday' => 'السبت',
+    ],
+];

@@ -5,6 +5,9 @@ namespace App\Filament\Pages;
 use App\Filament\Resources\ProviderScheduledWorks\Schemas\ProviderScheduledWorkForm;
 use App\Models\ProviderScheduledWork;
 use App\Models\User;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
+use Filament\Support\Icons\Heroicon;
 use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
@@ -14,7 +17,9 @@ use Illuminate\Support\Facades\Auth;
 
 class ViewProviderScheduleTimeline extends Page implements HasSchemas
 {
+    use NavigationDefaultAccess;
     use InteractsWithSchemas;
+    use ResourceTranslation;
 
     protected  string $view = 'filament.pages.view-provider-schedule-timeline';
 
@@ -92,12 +97,10 @@ class ViewProviderScheduleTimeline extends Page implements HasSchemas
         return __('schedule.navigation_label');
     }
 
-    /**
-     * Navigation group
-     */
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendar;
     public static function getNavigationGroup(): ?string
     {
-        return __('schedule.navigation_group');
+        return __('navigation.staff');
     }
 
     /**

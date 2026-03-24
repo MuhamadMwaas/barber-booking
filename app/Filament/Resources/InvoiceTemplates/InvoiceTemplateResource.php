@@ -10,6 +10,8 @@ use App\Filament\Resources\InvoiceTemplates\Schemas\InvoiceTemplateForm;
 use App\Filament\Resources\InvoiceTemplates\Schemas\InvoiceTemplateInfolist;
 use App\Filament\Resources\InvoiceTemplates\Tables\InvoiceTemplatesTable;
 use App\Models\InvoiceTemplate;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -20,9 +22,15 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class InvoiceTemplateResource extends Resource
 {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = InvoiceTemplate::class;
 
-    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-document-text';
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'billing';
+
+    protected static ?int $navigationSort = 40;
+
     protected static ?string $recordTitleAttribute = 'name';
 
     public static function form(Schema $schema): Schema

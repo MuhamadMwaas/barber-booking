@@ -9,6 +9,8 @@ use App\Filament\Resources\ReasonLeaves\Schemas\ReasonLeaveForm;
 use App\Filament\Resources\ReasonLeaves\Schemas\ReasonLeaveInfolist;
 use App\Filament\Resources\ReasonLeaves\Tables\ReasonLeavesTable;
 use App\Models\ReasonLeave;
+use App\Traits\NavigationDefaultAccess;
+use App\Traits\ResourceTranslation;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -17,9 +19,14 @@ use Filament\Tables\Table;
 
 class ReasonLeaveResource extends Resource
 {
+    use NavigationDefaultAccess, ResourceTranslation;
     protected static ?string $model = ReasonLeave::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedNoSymbol;
+
+    protected static string|\UnitEnum|null $navigationGroup = 'staff';
+
+    protected static ?int $navigationSort = 22;
 
     protected static ?string $recordTitleAttribute = 'name';
 

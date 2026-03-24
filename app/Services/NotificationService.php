@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Notification;
 
 class NotificationService
 {
+    protected array $defaultPushLocales = ['en', 'ar', 'de'];
 
     public function __construct(
         protected OneSignalService $oneSignal
@@ -47,8 +48,8 @@ class NotificationService
         ]);
 
 
-        $translatedTitle = $this->translateKey($titleKey, $params);
-        $translatedMessage = $this->translateKey($messageKey, $params);
+        $translatedTitle = $this->translateForPushLocales($titleKey, $params);
+        $translatedMessage = $this->translateForPushLocales($messageKey, $params);
 
         if (!empty($deviceIds)) {
             $this->sendToDeviceIds($deviceIds, $translatedTitle, $translatedMessage, $data);
@@ -71,8 +72,8 @@ class NotificationService
 
     public function sendToDeviceIds(
         array $deviceIds,
-        string $title,
-        string $message,
+        string|array $title,
+        string|array $message,
         array $data = [],
         array $params = []
     ): void {
@@ -89,6 +90,27 @@ class NotificationService
                 'device_ids_count' => count($deviceIds),
             ]);
         }
+    }
+
+    protected function translateForPushLocales(string $key, array $params = []): array
+    {
+        $translations = [];
+
+        foreach ($this->getPushLocales() as $locale) {
+            $translations[$locale] = $this->translateKey($key, $params, $locale);
+        }
+
+        return $translations;
+    }
+
+    protected function getPushLocales(): array
+    {
+        $locales = config('app.push_notification_locales', $this->defaultPushLocales);
+
+        return array_values(array_unique(array_filter(
+            $locales,
+            static fn ($locale) => is_string($locale) && $locale !== ''
+        )));
     }
 
     public function notificationTranslationResolve(string $key, array $data = [], ?string $locale = null)

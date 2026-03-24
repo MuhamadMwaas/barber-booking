@@ -37,7 +37,7 @@ class UsersTable
 
                 // الدور (Role من Spatie)
                 TextColumn::make('roles.name')
-                    ->label(__('resources.role'))
+                    ->label(__('resources.user.role'))
                     ->badge()
                     ->color(fn (string $state): string => match (strtolower($state)) {
                         'admin' => 'danger',

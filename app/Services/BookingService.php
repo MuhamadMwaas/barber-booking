@@ -378,10 +378,14 @@ class BookingService
     {
         $prefix = 'APT';
         $date = Carbon::now()->format('Ymd');
-        $random = strtoupper(substr(uniqid(), -6));
+        do {
+            $random = strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+            $number = "{$prefix}-{$date}-{$random}";
+        } while (Appointment::where('number', $number)->exists());
 
-        return "{$prefix}-{$date}-{$random}";
-    }
+
+        return $number;
+            }
 
     /**
      * Cancel booking
@@ -418,8 +422,12 @@ class BookingService
     public function getBookingDetails(int $appointmentId, User $customer): Appointment
     {
         $appointment = Appointment::with(['services', 'provider', 'customer', 'services_record'])
-            ->findOrFail($appointmentId);
-
+            ->find($appointmentId);
+        if (!$appointment) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException(
+                "Appointment #{$appointmentId} not found"
+            );
+        }
         // Verify customer owns this appointment
         if ($appointment->customer_id !== $customer->id) {
             throw new InvalidArgumentException('Unauthorized access to this appointment');

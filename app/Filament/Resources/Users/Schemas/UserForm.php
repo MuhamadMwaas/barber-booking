@@ -106,14 +106,14 @@ class UserForm
                                 Select::make('role')
                                     ->label(__('resources.user.role'))
                                     ->placeholder(__('resources.user.select_role'))
-                                    ->options([
-                                        'admin' => __('resources.user.admin'),
-                                        'customer' => __('resources.user.customer'),
-                                        'manager' => __('resources.user.manager'),
-                                        'provider' => __('resources.user.provider'),
-                                    ])
+                                    ->options(fn () => \Spatie\Permission\Models\Role::where('guard_name', 'web')
+                                        ->whereNotIn('name', ['SuperAdmin', 'admin'])
+                                        ->pluck('name', 'name')
+                                        ->toArray())
                                     ->required()
                                     ->native(false)
+                                    ->searchable()
+                                    ->preload()
                                     ->helperText(__('resources.user.role_helper'))
                                     ->live()
                                     ->afterStateUpdated(function ($state, callable $set) {
