@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Appointments\Tables;
 
 use App\Enum\AppointmentStatus;
 use App\Enum\PaymentStatus;
+use App\Models\Appointment;
 use App\Services\InvoiceService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -30,6 +31,7 @@ class AppointmentsTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('invoice'))
             ->columns([
                 // رقم الحجز
                 TextColumn::make('number')
@@ -557,6 +559,16 @@ class AppointmentsTable
                             }
                         })
                     ->modalWidth('2xl'),
+
+                Action::make('print_invoice')
+                    ->label(__('resources.appointment.print_invoice'))
+                    ->icon('heroicon-o-printer')
+                    ->color('gray')
+                    ->url(fn (Appointment $record): ?string => $record->invoice
+                        ? route('invoice.print', ['invoice' => $record->invoice])
+                        : null)
+                    ->openUrlInNewTab()
+                    ->visible(fn (Appointment $record): bool => $record->canPrintInvoice()),
 
 
 

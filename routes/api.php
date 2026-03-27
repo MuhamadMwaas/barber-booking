@@ -74,6 +74,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('noticifation')->name('noticifation.')->group(function () {
         Route::post('/test-send-to-all', [NotificationController::class, 'testSendToAll'])->name('test-send-to-all');
+        Route::post('/test-send-to-customers', [NotificationController::class, 'testSendToAllCustomers'])->name('test-send-to-customers');
     });
 
     Route::prefix('notifications')->name('notifications.')->group(function () {

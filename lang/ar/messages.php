@@ -4,7 +4,7 @@ return [
     // Appointment Creation Validation Messages
     'appointment' => [
         'at_least_one_service' => 'يجب اختيار خدمة واحدة على الأقل',
-        'select_customer' => 'يجب اختيار العميل',
+        'select_customer' => 'يجب اختيار عميل مسجل أو إدخال اسم الضيف ورقم هاتفه',
         'select_provider' => 'يجب اختيار مقدم الخدمة',
         'select_date' => 'يجب اختيار تاريخ الموعد',
         'select_start_time' => 'يجب اختيار وقت البداية',

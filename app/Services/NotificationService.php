@@ -92,7 +92,7 @@ class NotificationService
         }
     }
 
-    protected function translateForPushLocales(string $key, array $params = []): array
+    public function translateForPushLocales(string $key, array $params = []): array
     {
         $translations = [];
 

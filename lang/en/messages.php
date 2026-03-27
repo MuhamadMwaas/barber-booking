@@ -4,7 +4,7 @@ return [
     // Appointment Creation Validation Messages
     'appointment' => [
         'at_least_one_service' => 'At least one service must be selected',
-        'select_customer' => 'Customer must be selected',
+        'select_customer' => 'A registered customer must be selected or guest name and phone must be entered',
         'select_provider' => 'Service provider must be selected',
         'select_date' => 'Appointment date must be selected',
         'select_start_time' => 'Start time must be selected',

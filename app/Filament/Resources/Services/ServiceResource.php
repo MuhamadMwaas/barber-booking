@@ -52,6 +52,7 @@ class ServiceResource extends Resource
     {
         return [
             RelationManagers\ProvidersRelationManager::class,
+            RelationManagers\AppointmentsRelationManager::class,
         ];
     }
 

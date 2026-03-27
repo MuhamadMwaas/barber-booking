@@ -47,6 +47,8 @@ class AppointmentResource extends JsonResource
                 'email' => $this->provider->email,
                 'phone' => $this->provider->phone,
                 'avatar_url' => $this->provider->avatar_url,
+                'profile_image_url' => $this->provider->profile_image_url,
+
 
             ],
 

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Support\Facades\Log;
 
 class Appointment extends Model
 {
@@ -204,22 +205,35 @@ public function reminders(): HasMany
 
     public function getCustomerEmailAttribute()
     {
-        return $this->customer ? $this->customer->email : $this->customer_email;
+        return $this->customer?->email ?? $this->getRawOriginal('customer_email');
     }
 
     public function getCustomerPhoneAttribute()
     {
-        return $this->customer ? $this->customer->phone : $this->customer_phone;
+        return $this->customer?->phone ?? $this->getRawOriginal('customer_phone');
     }
     public function getCustomerNameAttribute(): string
     {
         return $this->customer?->full_name
-            ?? ($this->customer_name ?: 'Guest');
+            ?? ($this->getRawOriginal('customer_name') ?: 'Guest');
     }
 
     public function getHasCustomerAccountAttribute(): bool
     {
         return (bool) $this->customer_id;
+    }
+
+    public function canPrintInvoice(): bool
+    {
+        if (! $this->payment_status?->isSuccessful()) {
+            return false;
+        }
+
+        $invoice = $this->relationLoaded('invoice')
+            ? $this->invoice
+            : $this->invoice()->first();
+
+        return $invoice?->status?->isPaid() ?? false;
     }
 
 

@@ -26,10 +26,7 @@ class ServicesTable
                     ->label(__('resources.service.image'))
                     ->circular()
                     ->size(60)
-                    ->defaultImageUrl(fn ($record) =>
-                        'https://ui-avatars.com/api/?name=' . urlencode($record->name) .
-                        '&color=fff&background=' . str_replace('#', '', $record->color_code ?? '3B82F6')
-                    ),
+                  ,
 
                 // Service Name with Category
                 TextColumn::make('name')

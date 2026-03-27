@@ -20,6 +20,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\Radio;
 use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -40,14 +41,36 @@ class AppointmentForm
                     // Step 1: Customer Selection (الخطوة الأولى: اختيار الزبون)
                     Wizard\Step::make('customer')
                         ->label(__('resources.appointment.wizard_customer_label'))
-                        ->icon('heroicon-o-user')
-                        ->description(__('resources.appointment.wizard_customer_desc'))
-                        ->schema([
-                            Section::make(__('resources.appointment.customer_info'))
-                                ->schema([
-                                    Select::make('customer_id')
-                                        ->label(__('resources.appointment.customer_label'))
-                                        ->relationship('customer', 'first_name')
+	                        ->icon('heroicon-o-user')
+	                        ->description(__('resources.appointment.wizard_customer_desc'))
+	                        ->schema([
+	                            Section::make(__('resources.appointment.customer_info'))
+	                                ->schema([
+	                                    Radio::make('customer_type')
+	                                        ->label(__('resources.appointment.booking_for'))
+	                                        ->options([
+	                                            'registered' => __('resources.appointment.registered_customer'),
+	                                            'guest' => __('resources.appointment.guest_customer'),
+	                                        ])
+	                                        ->default('registered')
+	                                        ->live()
+	                                        ->inline()
+	                                        ->afterStateUpdated(function (Set $set, ?string $state) {
+	                                            if ($state === 'guest') {
+	                                                $set('customer_id', null);
+	                                            }
+
+	                                            if ($state === 'registered') {
+	                                                $set('customer_name', null);
+	                                                $set('customer_phone', null);
+	                                                $set('customer_email', null);
+	                                            }
+	                                        })
+	                                        ->columnSpanFull(),
+
+	                                    Select::make('customer_id')
+	                                        ->label(__('resources.appointment.customer_label'))
+	                                        ->relationship('customer', 'first_name')
                                         ->searchable(['first_name', 'last_name', 'phone', 'email'])
                                         ->preload()
                                         ->getOptionLabelFromRecordUsing(fn (User $record) =>
@@ -113,16 +136,40 @@ class AppointmentForm
                                             $customer->assignRole('customer');
                                             return $customer->id;
                                         })
-                                        ->createOptionAction(fn (Action $action) =>
-                                            $action
-                                                ->modalHeading(__('resources.appointment.add_new_customer'))
-                                                ->modalButton(__('resources.appointment.add_customer'))
-                                                ->modalWidth('2xl')
-                                        )
-                                        ->required()
-                                        ->columnSpanFull(),
-                                ]),
-                        ]),
+	                                        ->createOptionAction(fn (Action $action) =>
+	                                            $action
+	                                                ->modalHeading(__('resources.appointment.add_new_customer'))
+	                                                ->modalButton(__('resources.appointment.add_customer'))
+	                                                ->modalWidth('2xl')
+	                                        )
+	                                        ->required(fn (Get $get) => ($get('customer_type') ?? 'registered') === 'registered')
+	                                        ->visible(fn (Get $get) => ($get('customer_type') ?? 'registered') === 'registered')
+	                                        ->dehydrated(fn (Get $get) => ($get('customer_type') ?? 'registered') === 'registered')
+	                                        ->columnSpanFull(),
+
+	                                    Section::make(__('resources.appointment.guest_details'))
+	                                        ->description(__('resources.appointment.guest_details_desc'))
+	                                        ->visible(fn (Get $get) => ($get('customer_type') ?? 'registered') === 'guest')
+	                                        ->schema([
+	                                            TextInput::make('customer_name')
+	                                                ->label(__('resources.appointment.customer_name'))
+	                                                ->required(fn (Get $get) => ($get('customer_type') ?? 'registered') === 'guest')
+	                                                ->maxLength(255),
+
+	                                            TextInput::make('customer_phone')
+	                                                ->label(__('resources.user.phone'))
+	                                                ->tel()
+	                                                ->required(fn (Get $get) => ($get('customer_type') ?? 'registered') === 'guest')
+	                                                ->maxLength(20),
+
+	                                            TextInput::make('customer_email')
+	                                                ->label(__('resources.user.email'))
+	                                                ->email()
+	                                                ->maxLength(255),
+	                                        ])
+	                                        ->columnSpanFull(),
+	                                ]),
+	                        ]),
 
                     // Step 2: Service + Schedule & Timeline (الخطوة الثانية: الخدمة + التاريخ والجدول الزمني)
                     Wizard\Step::make('service_schedule')

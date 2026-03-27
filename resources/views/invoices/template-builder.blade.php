@@ -40,14 +40,13 @@
 
     {{-- Print Script --}}
     <script>
-        // Auto-print function (can be triggered externally)
-        // function printInvoice() {
-        //     window.print();
+        function printInvoice() {
+            window.print();
 
-        // }
+        }
 
-        // Optional: Auto-print on load
-        // window.onload = function() { window.print(); };
+        window.onload = function() { window.print(); };
     </script>
 </body>
 </html>
+

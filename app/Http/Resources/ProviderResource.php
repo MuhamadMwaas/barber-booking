@@ -27,6 +27,7 @@ class ProviderResource extends JsonResource
             'is_active' => $this->is_active,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
+            'profile_image_url' => $this->profile_image_url,
 
             'total_booking_count' => $this->appointmentsFinshedAsProvider()->count() ?? 0,
 

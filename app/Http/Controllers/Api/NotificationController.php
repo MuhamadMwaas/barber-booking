@@ -3,6 +3,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\NotificationResource;
+use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\OneSignalService;
 use Illuminate\Http\JsonResponse;
@@ -106,6 +107,38 @@ class NotificationController extends Controller
             'success' => true,
             'message' => 'Test notification sent successfully',
             'data' => NotificationResource::collection($notifications)->resolve(request()),
+        ]);
+    }
+
+    public function testSendToAllCustomers(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'title'   => 'nullable|string|max:255',
+            'message' => 'nullable|string|max:1000',
+        ]);
+
+        $titleKey   = $validated['title']   ?? 'Test Notification';
+        $messageKey = $validated['message'] ?? 'هذه رسالة تجريبية من Backend Laravel لجميع العملاء.';
+
+        // 1. Get all customers
+        $customers = User::role('customer')->get();
+
+        // 2. Send database notification to every customer
+        $this->notificationService->sendToPhoneUsersDatabase($customers, $titleKey, $messageKey, [], []);
+
+        // 3. Build localized arrays for all configured push locales (en, ar, de ...)
+        //    This mirrors exactly how sendNotificationToUser() works internally.
+        $localizedTitle   = $this->notificationService->translateForPushLocales($titleKey);
+        $localizedMessage = $this->notificationService->translateForPushLocales($messageKey);
+
+        // 4. OneSignal broadcast to ALL subscribers with full locale support
+        $this->oneSignal->sendToAll($localizedTitle, $localizedMessage);
+
+        return response()->json([
+            'success'          => true,
+            'message'          => 'Test notification sent to all customers successfully',
+            'customers_count'  => $customers->count(),
+            'locales_sent'     => array_keys($localizedTitle),
         ]);
     }
 }

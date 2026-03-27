@@ -88,6 +88,9 @@ class CreateAppointment extends CreateRecord
         // Get services from the Repeater component
         $services = $this->getServicesFromRepeater();
 
+        // Prepare registered / guest customer snapshot
+        $data = $this->prepareCustomerData($data);
+
         // Calculate totals from services
         $data = $this->calculateTotalsFromServices($data, $services);
 
@@ -219,7 +222,11 @@ class CreateAppointment extends CreateRecord
         }
 
         // Ensure required fields exist
-        if (empty($formData['customer_id'])) {
+        $hasRegisteredCustomer = ! empty($formData['customer_id']);
+        $hasGuestCustomer = ! empty(trim((string) ($formData['customer_name'] ?? '')))
+            && ! empty(trim((string) ($formData['customer_phone'] ?? '')));
+
+        if (! $hasRegisteredCustomer && ! $hasGuestCustomer) {
             throw new \InvalidArgumentException(__('messages.appointment.select_customer'));
         }
 
@@ -254,7 +261,9 @@ class CreateAppointment extends CreateRecord
     {
         $validationService = app(BookingValidationService::class);
         $provider = User::findOrFail($formData['provider_id']);
-        $customer = User::findOrFail($formData['customer_id']);
+        $customer = ! empty($formData['customer_id'])
+            ? User::findOrFail($formData['customer_id'])
+            : null;
         $date = Carbon::parse($formData['appointment_date'])->format('Y-m-d');
 
         // Get services and filter empty ones
@@ -272,8 +281,10 @@ class CreateAppointment extends CreateRecord
         // 1. Validate basic booking data
         $validationService->validateBasicData($services, $date);
 
-        // 2. Validate daily booking limit for customer
-        $validationService->validateDailyBookingLimit($customer, $date);
+        // 2. Validate daily booking limit for registered customer only
+        if ($customer) {
+            $validationService->validateDailyBookingLimit($customer, $date);
+        }
 
         // 3. Validate each service and provider relationship
         $serviceIds = array_column($services, 'service_id');
@@ -298,8 +309,40 @@ class CreateAppointment extends CreateRecord
             $endTime
         );
 
-        // 5. Validate no duplicate booking for this customer
-        $validationService->validateNoDuplicateBooking($customer, $startTime, $serviceIds);
+        // 5. Validate duplicate bookings for registered / guest customer
+        if ($customer) {
+            $validationService->validateNoDuplicateBooking($customer, $startTime, $serviceIds);
+        } else {
+            $validationService->validateNoDuplicateBookingByPhone(
+                $formData['customer_phone'] ?? null,
+                $startTime,
+                $serviceIds
+            );
+        }
+    }
+
+    private function prepareCustomerData(array $data): array
+    {
+        if (!empty($data['customer_id'])) {
+            $customer = User::find($data['customer_id']);
+
+            if ($customer) {
+                $data['customer_name'] = $customer->full_name;
+                $data['customer_email'] = $customer->email;
+                $data['customer_phone'] = $customer->phone;
+            }
+
+            return $data;
+        }
+
+        $data['customer_id'] = null;
+        $data['customer_name'] = trim((string) ($data['customer_name'] ?? ''));
+        $data['customer_phone'] = trim((string) ($data['customer_phone'] ?? ''));
+        $data['customer_email'] = filled($data['customer_email'] ?? null)
+            ? trim((string) $data['customer_email'])
+            : null;
+
+        return $data;
     }
 
     /**

@@ -84,9 +84,9 @@ class ProviderInfolist
                     ->columnSpanFull(),
 
                 // Grid for Contact & Location Info
-                Grid::make(2)
-                    ->schema([
-                        Section::make(__('resources.provider_resource.contact_information'))
+	                Grid::make(2)
+	                    ->schema([
+	                        Section::make(__('resources.provider_resource.contact_information'))
                             ->icon('heroicon-o-map-pin')
                             ->schema([
                                 TextEntry::make('address')
@@ -149,12 +149,39 @@ class ProviderInfolist
                                     ->dateTimeTooltip()
                                     ->visible(fn ($record) => $record->email_verified_at !== null),
                             ])
-                            ->collapsible()
-                            ->columnSpan(1),
-                    ]),
+	                            ->collapsible()
+	                            ->columnSpan(1),
+	                    ]),
 
-                // Provider Statistics
-                Section::make(__('resources.provider_resource.provider_statistics'))
+	                Section::make(__('resources.provider_resource.services_offered'))
+	                    ->icon('heroicon-o-scissors')
+	                    ->schema([
+	                        TextEntry::make('services_list')
+	                            ->label('')
+	                            ->icon('heroicon-o-list-bullet')
+	                            ->badge()
+	                            ->separator(',')
+	                            ->getStateUsing(function ($record) {
+	                                $services = $record->services()
+	                                    ->orderBy('services.sort_order')
+	                                    ->get()
+	                                    ->map(fn ($service) => $service->translated_name)
+	                                    ->filter()
+	                                    ->values()
+	                                    ->toArray();
+
+	                                return $services ?: [__('resources.provider_resource.no_services')];
+	                            })
+	                            ->listWithLineBreaks()
+	                            ->bulleted()
+	                            ->columnSpanFull(),
+	                    ])
+	                    ->columnSpanFull()
+	                    ->collapsible()
+	                    ->collapsed(false),
+
+	                // Provider Statistics
+	                Section::make(__('resources.provider_resource.provider_statistics'))
                     ->description(__('resources.provider_resource.provider_stats'))
                     ->icon('heroicon-o-chart-bar')
                     ->schema([
