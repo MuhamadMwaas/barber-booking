@@ -18,14 +18,12 @@ return [
     'total_days_off' => 'إجمالي أيام الإجازة',
     'total_hours_off' => 'إجمالي ساعات الإجازة',
     'total_records' => 'السجلات',
-
     'presets' => [
         'week' => 'آخر أسبوع',
         'month' => 'آخر شهر',
         'year' => 'آخر سنة',
         'all' => 'كل الفترات',
     ],
-
     'stats' => [
         'total_revenue' => 'إجمالي الإيرادات',
         'avg_booking' => 'متوسط قيمة الحجز',
@@ -41,7 +39,6 @@ return [
         'avg_duration' => 'متوسط المدة',
         'utilization' => 'نسبة الاستغلال',
     ],
-
     'charts' => [
         'revenue_over_time' => 'الإيرادات عبر الزمن',
         'bookings_over_time' => 'الحجوزات عبر الزمن',
@@ -49,7 +46,6 @@ return [
         'peak_days' => 'أكثر الأيام ازدحاماً',
         'service_revenue_distribution' => 'توزيع الإيرادات حسب الخدمة',
     ],
-
     'tables' => [
         'service_performance' => 'أداء الخدمات',
         'top_customers' => 'أفضل العملاء',
@@ -76,14 +72,12 @@ return [
         'type' => 'النوع',
         'reason' => 'السبب',
     ],
-
     'status' => [
         'pending' => 'قيد الانتظار',
         'completed' => 'مكتمل',
         'cancelled' => 'ملغي',
         'no_show' => 'لم يحضر',
     ],
-
     'time_off_type' => [
         'hourly' => 'ساعات',
         'full_day' => 'يوم كامل',

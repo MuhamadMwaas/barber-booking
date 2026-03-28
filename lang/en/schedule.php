@@ -1,11 +1,5 @@
 <?php
 
-/**
- * English translations for Schedule Management
- *
- * ملف الترجمة الإنجليزية لنظام إدارة الشفتات
- */
-
 return [
     // Page titles
     'page_title' => 'Provider Schedule Management',

@@ -7,6 +7,7 @@ use App\Enum\InvoiceStatus;
 use App\Enum\PaymentStatus;
 use App\Models\Appointment;
 use App\Models\AppointmentService as AppointmentServiceModel;
+use App\Models\Language;
 use App\Models\ProviderTimeOff;
 use App\Models\Service;
 use App\Models\User;
@@ -670,13 +671,30 @@ class StaffDashboard extends Component {
             'timelineData' => $timelineData,
             'calendarCounts' => $calendarCounts,
             'allProviders' => $allProviders,
+            'activeLanguages' => $this->getActiveLanguages(),
             'selectedAppointment' => $selectedAppointment,
             'preloadedData' => $this->getPreloadedData(),
         ])->layout('layouts.dashboard');
     }
 
+    private function getActiveLanguages(): array {
+        return cache()->remember('dashboard_active_languages', 60, function () {
+            return Language::query()
+                ->where('is_active', true)
+                ->orderBy('order')
+                ->orderBy('name')
+                ->get(['name', 'native_name', 'code'])
+                ->map(fn(Language $language) => [
+                    'name' => $language->name,
+                    'native_name' => $language->native_name,
+                    'code' => $language->code,
+                ])
+                ->toArray();
+        });
+    }
+
     private function getPreloadedData(): array {
-        return cache()->remember('dashboard_preloaded_data', 60, function () {
+        return cache()->remember('dashboard_preloaded_data_' . app()->getLocale(), 60, function () {
             $serviceData = $this->dashboardService->getAllServicesGrouped();
             return [
                 'categories' => $serviceData['categories'],

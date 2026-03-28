@@ -242,7 +242,7 @@ class UserInfolist
                                             ])
                                             ->sum('payments.amount');
 
-                                        return number_format($total, 2) . ' ' . __('resources.user.sar_currency');
+                                        return number_format($total, 2) . ' ' . __('resources.user.eur_currency');
                                     }),
                             ]),
 
@@ -268,7 +268,7 @@ class UserInfolist
                                             ->whereYear('payments.created_at', now()->year)
                                             ->sum('payments.amount');
 
-                                        return number_format($total, 2) . ' ' . __('resources.user.sar_currency');
+                                        return number_format($total, 2) . ' ' . __('resources.user.eur_currency');
                                     }),
 
                                 TextEntry::make('last_month_earnings')
@@ -291,7 +291,7 @@ class UserInfolist
                                             ->whereYear('payments.created_at', $lastMonth->year)
                                             ->sum('payments.amount');
 
-                                        return number_format($total, 2) . ' ' . __('resources.user.sar_currency');
+                                        return number_format($total, 2) . ' ' . __('resources.user.eur_currency');
                                     }),
 
                                 TextEntry::make('total_reviews')
@@ -455,7 +455,7 @@ class UserInfolist
                                     ->weight(FontWeight::Bold)
                                     ->color('success')
                                     ->getStateUsing(fn ($record) =>
-                                        number_format($record->invoices()->sum('total_amount'), 2) . ' ' . __('resources.user.sar_currency')
+                                        number_format($record->invoices()->sum('total_amount'), 2) . ' ' . __('resources.user.eur_currency')
                                     ),
                             ]),
 
@@ -505,7 +505,7 @@ class UserInfolist
                                     ->color('primary')
                                     ->getStateUsing(function ($record) {
                                         $avg = $record->invoices()->avg('total_amount');
-                                        return $avg ? number_format($avg, 2) . ' ' . __('resources.user.sar_currency') : '0.00';
+                                        return $avg ? number_format($avg, 2) . ' ' . __('resources.user.eur_currency') : '0.00';
                                     }),
                             ]),
 

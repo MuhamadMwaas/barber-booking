@@ -237,7 +237,7 @@ class ProviderInfolist
                                             ])
                                             ->sum('payments.amount');
 
-                                        return number_format($total, 2) . ' ' . __('resources.provider_resource.sar_currency');
+                                        return number_format($total, 2) . ' ' . __('resources.provider_resource.eur_currency');
                                     }),
                             ]),
 
@@ -262,7 +262,7 @@ class ProviderInfolist
                                             ->whereYear('payments.created_at', now()->year)
                                             ->sum('payments.amount');
 
-                                        return number_format($total, 2) . ' ' . __('resources.provider_resource.sar_currency');
+                                        return number_format($total, 2) . ' ' . __('resources.provider_resource.eur_currency');
                                     }),
 
                                 TextEntry::make('total_appointments')

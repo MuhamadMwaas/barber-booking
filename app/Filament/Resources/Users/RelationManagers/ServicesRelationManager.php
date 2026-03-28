@@ -116,7 +116,7 @@ class ServicesRelationManager extends RelationManager
                             ->where('appointments.customer_id', $this->ownerRecord->id)
                             ->sum('appointment_services.price');
 
-                        return number_format($total, 2) . ' ' . __('resources.user.sar_currency');
+                        return number_format($total, 2) . ' ' . __('resources.user.eur_currency');
                     })
                     ->icon('heroicon-o-banknotes')
                     ->sortable(),
@@ -135,7 +135,7 @@ class ServicesRelationManager extends RelationManager
                             ->where('appointments.status', AppointmentStatus::COMPLETED)
                             ->sum('appointment_services.price');
 
-                        return number_format($revenue, 2) . ' ' . __('resources.user.sar_currency');
+                        return number_format($revenue, 2) . ' ' . __('resources.user.eur_currency');
                     })
                     ->icon('heroicon-o-currency-dollar')
                     ->description(__('resources.user.from_completed_only'))
@@ -152,7 +152,7 @@ class ServicesRelationManager extends RelationManager
                             ->where('appointments.customer_id', $this->ownerRecord->id)
                             ->avg('appointment_services.price');
 
-                        return $avg ? number_format($avg, 2) . ' ' . __('resources.user.sar_currency') : '0.00';
+                        return $avg ? number_format($avg, 2) . ' ' . __('resources.user.eur_currency') : '0.00';
                     })
                     ->icon('heroicon-o-calculator')
                     ->toggleable(),
@@ -261,7 +261,7 @@ class ServicesRelationManager extends RelationManager
                             ->where('appointments.status', AppointmentStatus::COMPLETED)
                             ->sum('appointment_services.price');
 
-                        return number_format($revenue, 2) . ' ' . __('resources.user.sar_currency');
+                        return number_format($revenue, 2) . ' ' . __('resources.user.eur_currency');
                     })
                     ->icon('heroicon-o-currency-dollar')
                     ->description(__('resources.user.from_completed_only'))

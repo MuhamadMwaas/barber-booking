@@ -5,13 +5,20 @@ namespace App\Filament\Pages;
 use App\Services\ReportsService;
 use App\Traits\NavigationDefaultAccess;
 use Carbon\Carbon;
+use Filament\Panel;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
 class Reports extends Page {
     use NavigationDefaultAccess;
+
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedChartBar;
     protected static ?int $navigationSort = 30;
+
+    public static function getRoutePath(Panel $panel): string
+    {
+        return '/';
+    }
 
     public static function getNavigationGroup(): ?string
     {

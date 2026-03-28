@@ -102,17 +102,17 @@ class Payment extends Model
 
     public function getFormattedAmountAttribute(): string
     {
-        return number_format($this->amount, 2) . ' AED';
+        return number_format($this->amount, 2) . ' EUR';
     }
 
     public function getFormattedSubtotalAttribute(): string
     {
-        return number_format($this->subtotal, 2) . ' AED';
+        return number_format($this->subtotal, 2) . ' EUR';
     }
 
     public function getFormattedTaxAmountAttribute(): string
     {
-        return number_format($this->tax_amount, 2) . ' AED';
+        return number_format($this->tax_amount, 2) . ' EUR';
     }
 
     public function getIsSuccessfulAttribute(): bool

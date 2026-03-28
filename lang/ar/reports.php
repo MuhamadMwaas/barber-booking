@@ -7,14 +7,12 @@ return [
     'from' => 'من',
     'to' => 'إلى',
     'minutes' => 'دقيقة',
-
     'presets' => [
         'week' => 'آخر أسبوع',
         'month' => 'آخر شهر',
         'year' => 'آخر سنة',
         'all' => 'كل الفترة',
     ],
-
     'stats' => [
         'total_revenue' => 'إجمالي الدخل',
         'avg_booking' => 'متوسط قيمة الحجز',
@@ -29,7 +27,6 @@ return [
         'no_show' => 'لم يحضر',
         'avg_duration' => 'متوسط المدة',
     ],
-
     'charts' => [
         'revenue_over_time' => 'الدخل عبر الزمن',
         'bookings_over_time' => 'الحجوزات عبر الزمن',
@@ -39,7 +36,6 @@ return [
         'top_services_revenue' => 'أفضل الخدمات حسب الدخل',
         'most_requested_services' => 'الخدمات الأكثر طلباً',
     ],
-
     'tables' => [
         'provider' => 'مقدم الخدمة',
         'customer' => 'العميل',
@@ -53,7 +49,6 @@ return [
         'top_customers' => 'أفضل العملاء',
         'provider_utilization' => 'إشغال مقدمي الخدمات',
     ],
-
     'days' => [
         'sunday' => 'الأحد',
         'monday' => 'الإثنين',

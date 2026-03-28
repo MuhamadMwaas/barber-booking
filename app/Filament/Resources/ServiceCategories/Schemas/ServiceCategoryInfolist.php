@@ -133,7 +133,7 @@ class ServiceCategoryInfolist
                                                         </div>
                                                         <div style="font-size: 0.85rem; color: #64748b; margin-top: 0.25rem;">
                                                             <span style="margin-right: 1rem;">⏱️ ' . $service->duration_minutes . ' ' . __('resources.service.minutes') . '</span>
-                                                            <span>💰 ' . number_format($service->price, 2) . ' ' . __('resources.service.sar') . '</span>
+                                                            <span>💰 ' . number_format($service->price, 2) . ' ' . __('resources.service.euro') . '</span>
                                                         </div>
                                                     </div>
                                                 </div>

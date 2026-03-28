@@ -456,8 +456,8 @@ class ServiceAvailabilityService
             'has_discount' => $hasDiscount,
             'discount_amount' => $hasDiscount ? ($originalPrice - $effectivePrice) : 0,
             'discount_percentage' => $hasDiscount ? round((($originalPrice - $effectivePrice) / $originalPrice) * 100, 2) : 0,
-            'currency' => 'AED',
-            'formatted_price' => number_format($effectivePrice, 2) . ' AED',
+            'currency' => 'EUR',
+            'formatted_price' => number_format($effectivePrice, 2) . ' EUR',
         ];
     }
 

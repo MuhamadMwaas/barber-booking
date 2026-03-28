@@ -153,7 +153,7 @@ return [
         'last_3_months' => 'Last 3 Months',
         'last_6_months' => 'Last 6 Months',
         'this_year' => 'This Year',
-        'sar_currency' => 'SAR',
+        'eur_currency' => 'EUR',
 
         // Services Statistics
         'customer_services_statistics' => 'Customer Services Statistics',
@@ -328,6 +328,8 @@ return [
         'providers_timeline' => 'Providers Timeline',
         'service_duration' => 'Total Service Duration',
         'total_duration' => 'Total Duration',
+        'edit_total_duration_helper' => 'You can manually edit the total duration - the timeline will update automatically',
+        'auto_calculated' => 'Auto calculated',
         'no_providers_available' => 'No providers available for this date',
         'select_service_and_date' => 'Please select at least one service and a date',
         'available' => 'Available',
@@ -404,7 +406,7 @@ return [
         'providers' => 'Service Providers',
         'price' => 'Price',
         'discount' => 'Discount Price',
-        'sar' => 'SAR',
+        'euro' => 'EUR',
         'duration' => 'Duration',
         'total_bookings' => 'Total Bookings',
         'completed_bookings' => 'Completed',
@@ -964,7 +966,7 @@ return [
     'last_3_months' => 'Last 3 Months',
     'last_6_months' => 'Last 6 Months',
     'this_year' => 'This Year',
-    'sar_currency' => 'SAR',
+    'eur_currency' => 'EUR',
 
     // Services Statistics
     'customer_services_statistics' => 'Customer Services Statistics',
@@ -1257,7 +1259,7 @@ return [
         'upcoming_appointments' => 'Upcoming Appointments',
         'pending_appointments' => 'Pending Appointments',
         'services_offered' => 'Services Offered',
-        'sar_currency' => 'SAR',
+        'eur_currency' => 'EUR',
         'all_time' => 'All Time',
         'vs_last_month' => 'vs Last Month',
         'total_completed' => 'Total Completed',
@@ -1379,6 +1381,7 @@ return [
         'payment_notes' => 'Payment Notes',
         'payment_success' => 'Payment successful',
         'invoice_created' => 'Invoice created',
+        'print_invoice' => 'Print Invoice',
         'payment_error' => 'Payment error',
         'no_appointments_yet' => 'No appointments yet',
         'no_appointments_desc' => 'No appointments have been added for this provider yet',

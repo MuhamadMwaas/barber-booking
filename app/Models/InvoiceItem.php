@@ -60,12 +60,12 @@ class InvoiceItem extends Model
 
     public function getFormattedUnitPriceAttribute(): string
     {
-        return number_format($this->unit_price, 2) . ' AED';
+        return number_format($this->unit_price, 2) . ' EUR';
     }
 
     public function getFormattedTotalAmountAttribute(): string
     {
-        return number_format($this->total_amount, 2) . ' AED';
+        return number_format($this->total_amount, 2) . ' EUR';
     }
 
     public function getSubtotalAttribute(): float

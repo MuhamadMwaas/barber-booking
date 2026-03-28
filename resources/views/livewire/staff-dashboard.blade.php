@@ -11,6 +11,24 @@
             </nav>
         </div>
         <div class="flex items-center space-x-4">
+            <div class="relative" x-data="{ languageOpen: false }">
+                <button @click="languageOpen = !languageOpen" class="flex items-center space-x-2 rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.5 21m3.548-6.5A18.021 18.021 0 0017.5 21M12 11a9 9 0 100-18 9 9 0 000 18zm0 0c2.485 0 4.5 4.03 4.5 9s-2.015 9-4.5 9-4.5-4.03-4.5-9 2.015-9 4.5-9z"></path></svg>
+                    <span class="font-medium uppercase">{{ app()->getLocale() }}</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </button>
+                <div x-show="languageOpen" x-cloak @click.outside="languageOpen = false" x-transition class="absolute {{ app()->getLocale() === 'ar' ? 'left-0' : 'right-0' }} mt-2 w-52 rounded-lg border bg-white py-1 shadow-xl z-50">
+                    @foreach($activeLanguages as $language)
+                        <a
+                            href="{{ url('/dashboard/language/' . $language['code']) }}"
+                            class="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 {{ app()->getLocale() === $language['code'] ? 'font-semibold text-amber-600' : 'text-gray-700' }}"
+                        >
+                            <span>{{ $language['native_name'] ?: $language['name'] }}</span>
+                            <span class="text-xs uppercase text-gray-400">{{ $language['code'] }}</span>
+                        </a>
+                    @endforeach
+                </div>
+            </div>
             {{-- Notifications --}}
             <div class="relative" x-data="{ notifOpen: false }">
                 <button @click="notifOpen = !notifOpen" class="relative p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
@@ -131,6 +149,11 @@
                     <h2 class="text-sm font-semibold text-gray-700">
                         {{ \Carbon\Carbon::parse($selectedDate)->format('l, d M Y') }}
                     </h2>
+                    @if($selectedDate !== $today)
+                        <button wire:click="goToToday" class="px-2 py-1 text-xs text-amber-600 hover:text-amber-700 font-medium rounded hover:bg-amber-50">
+                            {{ __('dashboard.today') }}
+                        </button>
+                    @endif
                     @if($selectedDate === $today)
                         <span class="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">{{ __('dashboard.today') }}</span>
                     @endif

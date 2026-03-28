@@ -11,6 +11,8 @@ return [
     'all' => 'الكل',
     'add_booking' => 'إضافة حجز',
     'add_time_off' => 'إضافة إجازة',
+    'language' => 'اللغة',
+    'change_language' => 'تغيير اللغة',
     'notifications' => 'الإشعارات',
     'no_notifications' => 'لا توجد إشعارات',
     'search' => 'بحث',
@@ -20,7 +22,6 @@ return [
     'day_off' => 'يوم إجازة',
     'bookings' => 'حجوزات',
     'no_bookings' => 'لا توجد حجوزات لهذا اليوم',
-
     'booking_modal' => [
         'title' => 'حجز جديد',
         'existing_customer' => 'عميل مسجل',
@@ -44,7 +45,6 @@ return [
         'services' => 'الخدمات',
         'remove_service' => 'إزالة',
     ],
-
     'appointment_modal' => [
         'title' => 'تفاصيل الحجز',
         'edit' => 'تعديل',
@@ -73,7 +73,6 @@ return [
         'new_start_time' => 'وقت البدء الجديد',
         'new_duration' => 'المدة الجديدة (دقيقة)',
     ],
-
     'payment_modal' => [
         'title' => 'معالجة الدفع',
         'service_price' => 'سعر الخدمة',
@@ -86,7 +85,6 @@ return [
         'cancel' => 'إلغاء',
         'discount_note' => 'يمكنك تعديل المبلغ للخصومات',
     ],
-
     'time_off_modal' => [
         'title' => 'إضافة إجازة',
         'select_provider' => 'اختر الموظف',
@@ -101,19 +99,16 @@ return [
         'save' => 'حفظ',
         'cancel' => 'إلغاء',
     ],
-
     'timeline' => [
         'no_providers' => 'لم يتم اختيار مقدمي خدمة',
         'drag_to_book' => 'اسحب لإنشاء حجز',
     ],
-
     'status' => [
         'pending' => 'قيد الانتظار',
         'completed' => 'مكتمل',
         'cancelled' => 'ملغي',
         'no_show' => 'لم يحضر',
     ],
-
     'days' => [
         'sun' => 'أحد',
         'mon' => 'إثنين',
@@ -123,7 +118,6 @@ return [
         'fri' => 'جمعة',
         'sat' => 'سبت',
     ],
-
     'months' => [
         1 => 'يناير',
         2 => 'فبراير',

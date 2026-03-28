@@ -148,7 +148,7 @@ class InvoiceFinalizationService
             'data' => [
                 'invoice_number' => $invoice->id,
                 'amount' => $amountPaid,
-                'currency' => 'AED',
+                'currency' => 'EUR',
                 'payment_type' => $paymentType,
                 'items' => $invoice->items->map(fn($item) => [
                     'description' => $item->description,

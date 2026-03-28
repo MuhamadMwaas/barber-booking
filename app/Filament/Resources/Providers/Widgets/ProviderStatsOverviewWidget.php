@@ -122,14 +122,14 @@ class ProviderStatsOverviewWidget extends BaseWidget
 
         return [
             // Total Earnings
-            Stat::make(__('resources.provider_resource.total_earnings'), number_format($totalEarnings, 2) . ' ' . __('resources.provider_resource.sar_currency'))
+            Stat::make(__('resources.provider_resource.total_earnings'), number_format($totalEarnings, 2) . ' ' . __('resources.provider_resource.eur_currency'))
                 ->description(__('resources.provider_resource.all_time'))
                 ->descriptionIcon('heroicon-o-banknotes')
                 ->color('success')
                 ->chart($monthlyEarnings),
 
             // Current Month Earnings
-            Stat::make(__('resources.provider_resource.current_month_earnings'), number_format($currentMonthEarnings, 2) . ' ' . __('resources.provider_resource.sar_currency'))
+            Stat::make(__('resources.provider_resource.current_month_earnings'), number_format($currentMonthEarnings, 2) . ' ' . __('resources.provider_resource.eur_currency'))
                 ->description(
                     $earningsTrend > 0
                         ? '+' . number_format($earningsTrend, 1) . '% ' . __('resources.provider_resource.vs_last_month')

@@ -1,27 +1,17 @@
 <?php
 
-/**
- * German translations for Schedule Management
- *
- * Deutsche Übersetzungen für die Schichtverwaltung
- */
-
 return [
-    // Page titles
     'page_title' => 'Mitarbeiter-Schichtverwaltung',
     'page_heading' => 'Arbeitspläne der Dienstleister verwalten',
     'page_subheading' => 'Wöchentliche Schichten und Arbeitszeiten für Dienstleister konfigurieren',
     'managing_schedule_for' => 'Zeitplan für :name verwalten',
     'navigation_label' => 'Mitarbeiter-Pläne',
+    'navigation_label2' => 'Mitarbeiterdienstplaene',
     'navigation_group' => 'Mitarbeiterverwaltung',
-
-    // Provider selection
     'select_provider' => 'Mitarbeiter auswählen',
     'choose_provider' => '-- Mitarbeiter wählen --',
     'select_provider_prompt' => 'Wählen Sie einen Mitarbeiter zur Verwaltung',
     'select_provider_desc' => 'Wählen Sie einen Dienstleister aus dem Dropdown-Menü oben, um seinen Wochenplan anzuzeigen und zu verwalten.',
-
-    // Days of week
     'sunday' => 'Sonntag',
     'monday' => 'Montag',
     'tuesday' => 'Dienstag',
@@ -29,8 +19,6 @@ return [
     'thursday' => 'Donnerstag',
     'friday' => 'Freitag',
     'saturday' => 'Samstag',
-
-    // Shift management
     'shift' => 'Schicht',
     'shifts' => 'Schichten',
     'add_shift' => 'Schicht hinzufügen',
@@ -42,8 +30,12 @@ return [
     'hours' => 'Stunden',
     'total_hours' => 'Gesamt-Wochenstunden',
     'total_shifts' => 'Gesamt-Schichten',
-
-    // Actions
+    'branch' => 'Filiale',
+    'branch_hours' => 'Filial-Öffnungszeiten',
+    'legend' => 'Legende',
+    'shift_block' => 'Arbeitsschicht',
+    'day_off_indicator' => 'Freier Tag',
+    'view_timeline' => 'Timeline anzeigen',
     'save_schedule' => 'Plan speichern',
     'cancel' => 'Abbrechen',
     'reset' => 'Zurücksetzen',
@@ -61,28 +53,12 @@ return [
     'apply_to_selected' => 'Auf ausgewählte anwenden',
     'mark_as_off' => 'Als freien Tag markieren',
     'mark_as_work' => 'Als Arbeitstag markieren',
-
-    // Branch schedule
-    'branch' => 'Filiale',
-    'branch_hours' => 'Filial-Öffnungszeiten',
-
-    // Legend
-    'legend' => 'Legende',
-    'shift_block' => 'Arbeitsschicht',
-    'day_off_indicator' => 'Freier Tag',
-    'view_timeline' => 'Timeline anzeigen',
-
-    // Bulk paste modal
     'bulk_paste_title' => 'Plan für mehrere Mitarbeiter einfügen',
     'bulk_paste_desc' => 'Wählen Sie die Mitarbeiter aus, auf die der kopierte Plan angewendet werden soll:',
     'selected_count' => ':count ausgewählt',
-
-    // Status messages
     'unsaved_changes' => 'Sie haben ungespeicherte Änderungen',
     'clipboard_has_day' => 'Tagesplan in Zwischenablage',
     'clipboard_has_week' => 'Wochenplan in Zwischenablage',
-
-    // Success messages
     'messages' => [
         'saved_successfully' => ':count Schicht(en) erfolgreich gespeichert!',
         'reset_successfully' => 'Plan auf letzten gespeicherten Stand zurückgesetzt',
@@ -96,8 +72,6 @@ return [
         'day_applied_to_week' => ':day Plan auf alle Tage angewendet',
         'bulk_paste_success' => 'Plan auf :count Mitarbeiter angewendet',
     ],
-
-    // Error messages
     'errors' => [
         'select_provider' => 'Bitte wählen Sie einen Mitarbeiter aus',
         'select_provider_first' => 'Bitte wählen Sie zuerst einen Mitarbeiter aus',
@@ -115,8 +89,6 @@ return [
         'bulk_paste_failed' => 'Plan konnte nicht auf ausgewählte Mitarbeiter angewendet werden',
     ],
     'errors_found' => 'Bitte beheben Sie die folgenden Fehler:',
-
-    // Confirmations
     'confirm_reset_title' => 'Plan zurücksetzen?',
     'confirm_reset_message' => 'Dies verwirft alle ungespeicherten Änderungen und lädt den letzten gespeicherten Plan.',
     'confirm_reset' => 'Zurücksetzen',
@@ -124,8 +96,6 @@ return [
     'confirm_clear_message' => 'Dies entfernt alle Schichten von allen Tagen. Sie können vor dem Speichern noch abbrechen.',
     'confirm_clear' => 'Alle löschen',
     'confirm_remove_shift' => 'Sind Sie sicher, dass Sie diese Schicht entfernen möchten?',
-
-    // Info section
     'info_title' => 'Planverwaltung',
     'info_description' => 'Arbeitszeiten und Schichten für Ihre Dienstleister verwalten',
     'feature_shifts_title' => 'Mehrere Schichten',
@@ -134,8 +104,6 @@ return [
     'feature_copy_desc' => 'Pläne zwischen Tagen oder Mitarbeitern kopieren',
     'feature_validation_title' => 'Intelligente Validierung',
     'feature_validation_desc' => 'Automatische Überschneidungserkennung verhindert Konflikte',
-
-    // Help section
     'help_title' => 'Hilfe & Tipps',
     'help_how_to_use' => 'Verwendung',
     'help_step_1' => 'Wählen Sie einen Mitarbeiter aus dem Dropdown-Menü',
@@ -143,13 +111,11 @@ return [
     'help_step_3' => 'Legen Sie Start- und Endzeiten für jede Schicht fest',
     'help_step_4' => 'Optional: Pausenzeit in Minuten hinzufügen',
     'help_step_5' => 'Klicken Sie auf "Plan speichern", um Ihre Änderungen zu speichern',
-
     'help_tips_title' => 'Tipps',
     'help_tip_1' => 'Verwenden Sie "Auf alle Tage anwenden", um den Tagesplan schnell auf die ganze Woche zu kopieren',
     'help_tip_2' => 'Das System erkennt überschneidende Schichten automatisch',
     'help_tip_3' => 'Sie können Pläne zwischen verschiedenen Mitarbeitern kopieren',
     'help_tip_4' => 'Markieren Sie eine Schicht als "Freier Tag", wenn der Mitarbeiter an dieser Schicht nicht arbeitet',
-
     'help_shortcuts_title' => 'Schnellaktionen',
     'help_shortcut_copy_day' => 'Schichten von einem Tag kopieren',
     'help_shortcut_apply_all' => 'Tag auf ganze Woche anwenden',

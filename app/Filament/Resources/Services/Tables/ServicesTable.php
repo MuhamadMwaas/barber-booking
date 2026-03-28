@@ -75,7 +75,7 @@ class ServicesTable
                     ->weight(FontWeight::Bold)
                     ->description(function ($record) {
                         if ($record->discount_price) {
-                            return __('resources.service.discount') . ': ' . number_format($record->discount_price, 2) . ' ' . __('resources.service.sar');
+                            return __('resources.service.discount') . ': ' . number_format($record->discount_price, 2) . ' ' . __('resources.service.euro');
                         }
                         return null;
                     })
@@ -134,7 +134,7 @@ class ServicesTable
                             ->where('service_id', $record->id)
                             ->sum('price');
 
-                        return number_format($total, 2) . ' ' . __('resources.service.sar');
+                        return number_format($total, 2) . ' ' . __('resources.service.euro');
                     })
                     ->icon('heroicon-o-currency-dollar')
                     ->sortable()
@@ -152,7 +152,7 @@ class ServicesTable
                             ->where('appointments.status', AppointmentStatus::COMPLETED)
                             ->sum('appointment_services.price');
 
-                        return number_format($revenue, 2) . ' ' . __('resources.service.sar');
+                        return number_format($revenue, 2) . ' ' . __('resources.service.euro');
                     })
                     ->description(__('resources.service.from_completed_only'))
                     ->icon('heroicon-o-banknotes')
@@ -169,7 +169,7 @@ class ServicesTable
                             ->where('service_id', $record->id)
                             ->avg('price');
 
-                        return $avg ? number_format($avg, 2) . ' ' . __('resources.service.sar') : '0.00';
+                        return $avg ? number_format($avg, 2) . ' ' . __('resources.service.euro') : '0.00';
                     })
                     ->icon('heroicon-o-calculator')
                     ->toggleable(),

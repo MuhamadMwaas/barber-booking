@@ -11,6 +11,8 @@ return [
     'all' => 'Alle',
     'add_booking' => 'Termin hinzufügen',
     'add_time_off' => 'Abwesenheit hinzufügen',
+    'language' => 'Sprache',
+    'change_language' => 'Sprache wechseln',
     'notifications' => 'Benachrichtigungen',
     'no_notifications' => 'Keine Benachrichtigungen',
     'search' => 'Suchen',
@@ -20,7 +22,6 @@ return [
     'day_off' => 'Frei',
     'bookings' => 'Termine',
     'no_bookings' => 'Keine Termine für diesen Tag',
-
     'booking_modal' => [
         'title' => 'Neuer Termin',
         'existing_customer' => 'Bestehender Kunde',
@@ -44,7 +45,6 @@ return [
         'services' => 'Dienstleistungen',
         'remove_service' => 'Entfernen',
     ],
-
     'appointment_modal' => [
         'title' => 'Termindetails',
         'edit' => 'Bearbeiten',
@@ -73,7 +73,6 @@ return [
         'new_start_time' => 'Neue Startzeit',
         'new_duration' => 'Neue Dauer (Min.)',
     ],
-
     'payment_modal' => [
         'title' => 'Zahlung verarbeiten',
         'service_price' => 'Dienstleistungspreis',
@@ -86,7 +85,6 @@ return [
         'cancel' => 'Abbrechen',
         'discount_note' => 'Sie können den Betrag für Rabatte anpassen',
     ],
-
     'time_off_modal' => [
         'title' => 'Abwesenheit hinzufügen',
         'select_provider' => 'Mitarbeiter wählen',
@@ -101,19 +99,16 @@ return [
         'save' => 'Speichern',
         'cancel' => 'Abbrechen',
     ],
-
     'timeline' => [
         'no_providers' => 'Keine Mitarbeiter ausgewählt',
         'drag_to_book' => 'Ziehen, um einen Termin zu erstellen',
     ],
-
     'status' => [
         'pending' => 'Ausstehend',
         'completed' => 'Abgeschlossen',
         'cancelled' => 'Storniert',
         'no_show' => 'Nicht erschienen',
     ],
-
     'days' => [
         'sun' => 'So',
         'mon' => 'Mo',
@@ -123,7 +118,6 @@ return [
         'fri' => 'Fr',
         'sat' => 'Sa',
     ],
-
     'months' => [
         1 => 'Januar',
         2 => 'Februar',

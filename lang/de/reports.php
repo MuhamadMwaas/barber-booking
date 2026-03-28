@@ -7,14 +7,12 @@ return [
     'from' => 'Von',
     'to' => 'Bis',
     'minutes' => 'Min',
-
     'presets' => [
         'week' => 'Letzte Woche',
         'month' => 'Letzter Monat',
         'year' => 'Letztes Jahr',
         'all' => 'Gesamter Zeitraum',
     ],
-
     'stats' => [
         'total_revenue' => 'Gesamtumsatz',
         'avg_booking' => 'Durchschn. Buchungswert',
@@ -29,7 +27,6 @@ return [
         'no_show' => 'Nicht erschienen',
         'avg_duration' => 'Durchschn. Dauer',
     ],
-
     'charts' => [
         'revenue_over_time' => 'Umsatz im Zeitverlauf',
         'bookings_over_time' => 'Buchungen im Zeitverlauf',
@@ -39,7 +36,6 @@ return [
         'top_services_revenue' => 'Top-Dienstleistungen nach Umsatz',
         'most_requested_services' => 'Meistgefragte Dienstleistungen',
     ],
-
     'tables' => [
         'provider' => 'Anbieter',
         'customer' => 'Kunde',
@@ -53,7 +49,6 @@ return [
         'top_customers' => 'Top-Kunden',
         'provider_utilization' => 'Anbieterauslastung',
     ],
-
     'days' => [
         'sunday' => 'Sonntag',
         'monday' => 'Montag',

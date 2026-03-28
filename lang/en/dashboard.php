@@ -11,6 +11,8 @@ return [
     'all' => 'All',
     'add_booking' => 'Add Booking',
     'add_time_off' => 'Add Time Off',
+    'language' => 'Language',
+    'change_language' => 'Change language',
     'notifications' => 'Notifications',
     'no_notifications' => 'No notifications',
     'search' => 'Search',

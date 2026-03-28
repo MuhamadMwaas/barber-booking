@@ -168,7 +168,7 @@ class DashboardService {
             ])->toArray(),
             'services' => $services->map(fn($s) => [
                 'id' => $s->id,
-                'name' => $s->name,
+                'name' => $s->translated_name,
                 'price' => (float) $s->price,
                 'discount_price' => $s->discount_price ? (float) $s->discount_price : null,
                 'duration_minutes' => $s->duration_minutes,

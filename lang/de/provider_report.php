@@ -18,14 +18,12 @@ return [
     'total_days_off' => 'Gesamte freie Tage',
     'total_hours_off' => 'Gesamte freie Stunden',
     'total_records' => 'Einträge',
-
     'presets' => [
         'week' => 'Letzte Woche',
         'month' => 'Letzter Monat',
         'year' => 'Letztes Jahr',
         'all' => 'Gesamter Zeitraum',
     ],
-
     'stats' => [
         'total_revenue' => 'Gesamtumsatz',
         'avg_booking' => 'Durchschn. Buchungswert',
@@ -41,7 +39,6 @@ return [
         'avg_duration' => 'Durchschn. Dauer',
         'utilization' => 'Auslastung',
     ],
-
     'charts' => [
         'revenue_over_time' => 'Umsatz im Zeitverlauf',
         'bookings_over_time' => 'Buchungen im Zeitverlauf',
@@ -49,7 +46,6 @@ return [
         'peak_days' => 'Geschäftigste Tage',
         'service_revenue_distribution' => 'Umsatz nach Dienstleistung',
     ],
-
     'tables' => [
         'service_performance' => 'Dienstleistungsübersicht',
         'top_customers' => 'Top-Kunden',
@@ -76,14 +72,12 @@ return [
         'type' => 'Typ',
         'reason' => 'Grund',
     ],
-
     'status' => [
         'pending' => 'Ausstehend',
         'completed' => 'Abgeschlossen',
         'cancelled' => 'Storniert',
         'no_show' => 'Nicht erschienen',
     ],
-
     'time_off_type' => [
         'hourly' => 'Stündlich',
         'full_day' => 'Ganztägig',

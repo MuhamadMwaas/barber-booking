@@ -226,7 +226,7 @@ class AppointmentForm
                                                         ->label(__('resources.appointment.price_label'))
                                                         ->numeric()
                                                         ->required()
-                                                        ->prefix(get_setting('currency_symbol', '$'))
+                                                        ->prefix(get_setting('currency_symbol', 'EUR'))
                                                         ->live()
                                                         ->afterStateUpdated(function (Get $get, Set $set) {
                                                             self::calculateTotals($get, $set);
@@ -444,7 +444,7 @@ class AppointmentForm
         return [
         'label'=>__('resources.appointment.subtotal_label') . ' (' . get_setting('tax_rate', 0) . '%)',
         'value' => $get('subtotal') ?? 0,
-        'currency' => get_setting('currency_symbol', '$'),
+        'currency' => get_setting('currency_symbol', 'EUR'),
         'size' => '1.2em',
         'color' => null,
     ];}),
@@ -453,7 +453,7 @@ class AppointmentForm
     ->view('filament.fields.cost-value',fn(Get $get) => [
         'label'=>__('resources.appointment.tax_label') . ' (' . get_setting('tax_rate', 0) . '%)',
         'value' => $get('tax_amount') ?? 0,
-        'currency' => get_setting('currency_symbol', '$'),
+        'currency' => get_setting('currency_symbol', 'EUR'),
         'size' => '1.2em',
         'color' => null,
     ]),
@@ -463,7 +463,7 @@ ViewField::make('total_display')
     ->view('filament.fields.cost-value',fn(Get $get) => [
         'label'=>__('resources.appointment.total_label'),
         'value' => $get('total_amount') ?? 0,
-        'currency' => get_setting('currency_symbol', '$'),
+        'currency' => get_setting('currency_symbol', 'EUR'),
         'size' => '1.5em',
         'color' => '#10b981',
     ]),

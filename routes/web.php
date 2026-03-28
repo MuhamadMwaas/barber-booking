@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\InvoiceTemplateController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PrintController;
+use App\Models\Language;
 use App\Models\Invoice;
 use App\Services\TaxCalculatorService;
 use Illuminate\Support\Carbon;
@@ -65,6 +66,18 @@ Route::middleware(['auth'])->group(function () {
         ->name('invoices.print-batch');
 });
 
-Route::get('/dashboard', \App\Livewire\StaffDashboard::class)
-    ->middleware(['web', EnsureStaffDashboardAccess::class])
-    ->name('staff.dashboard');
+Route::middleware(['web', EnsureStaffDashboardAccess::class])->group(function () {
+    Route::get('/dashboard', \App\Livewire\StaffDashboard::class)
+        ->name('staff.dashboard');
+
+    Route::get('/dashboard/language/{code}', function (string $code) {
+        $language = Language::query()
+            ->where('is_active', true)
+            ->where('code', $code)
+            ->firstOrFail();
+
+        session(['locale' => $language->code]);
+
+        return redirect()->back();
+    })->name('staff.dashboard.language');
+});

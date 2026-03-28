@@ -3,6 +3,6 @@
 
 
 return [
-    'new_appointment' => 'موعد جديد',
-    'new_appointment_message' => 'تم إنشاء حجز جديد لخدمة :service بتاريخ :date في تمام الساعة :time. طريقة الدفع: :payment_type.',
+    'new_appointment' => 'New Appointment',
+    'new_appointment_message' => 'A new booking for :service has been created on :date at :time. Payment method: :payment_type.',
 ];
