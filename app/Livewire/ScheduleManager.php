@@ -62,7 +62,7 @@ class ScheduleManager extends Component
     /**
      * رسائل الخطأ
      */
-    public array $errors = [];
+    public array $errorMessages = [];
 
     /**
      * رسائل النجاح
@@ -420,7 +420,7 @@ class ScheduleManager extends Component
     public function pasteDay(int $day): void
     {
         if (empty($this->clipboard) || $this->clipboardType !== 'day') {
-            $this->errors[] = __('schedule.errors.nothing_to_paste');
+            $this->errorMessages[] = __('schedule.errors.nothing_to_paste');
             return;
         }
 
@@ -443,7 +443,7 @@ class ScheduleManager extends Component
     public function copyWeek(): void
     {
         if (!$this->selectedUserId) {
-            $this->errors[] = __('schedule.errors.select_provider_first');
+            $this->errorMessages[] = __('schedule.errors.select_provider_first');
             return;
         }
 
@@ -501,12 +501,12 @@ class ScheduleManager extends Component
     public function pasteToCurrentUser(): void
     {
         if (empty($this->clipboard) || $this->clipboardType !== 'week') {
-            $this->errors[] = __('schedule.errors.nothing_to_paste');
+            $this->errorMessages[] = __('schedule.errors.nothing_to_paste');
             return;
         }
 
         if (!$this->selectedUserId) {
-            $this->errors[] = __('schedule.errors.select_provider_first');
+            $this->errorMessages[] = __('schedule.errors.select_provider_first');
             return;
         }
 
@@ -556,7 +556,7 @@ class ScheduleManager extends Component
     public function openBulkPasteModal(): void
     {
         if (empty($this->clipboard) || $this->clipboardType !== 'week') {
-            $this->errors[] = __('schedule.errors.copy_week_first');
+            $this->errorMessages[] = __('schedule.errors.copy_week_first');
             return;
         }
 
@@ -579,12 +579,12 @@ class ScheduleManager extends Component
     public function applyWeekToUsers(): void
     {
         if (empty($this->clipboard) || $this->clipboardType !== 'week') {
-            $this->errors[] = __('schedule.errors.copy_week_first');
+            $this->errorMessages[] = __('schedule.errors.copy_week_first');
             return;
         }
 
         if (empty($this->selectedUsersForBulkPaste)) {
-            $this->errors[] = __('schedule.errors.select_users_to_paste');
+            $this->errorMessages[] = __('schedule.errors.select_users_to_paste');
             return;
         }
 
@@ -630,7 +630,7 @@ class ScheduleManager extends Component
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Bulk paste failed: ' . $e->getMessage());
-            $this->errors[] = __('schedule.errors.bulk_paste_failed');
+            $this->errorMessages[] = __('schedule.errors.bulk_paste_failed');
         }
     }
 
@@ -763,14 +763,14 @@ class ScheduleManager extends Component
 
         // التحقق من اختيار موظف
         if (!$this->selectedUserId) {
-            $this->errors[] = __('schedule.errors.select_provider_first');
+            $this->errorMessages[] = __('schedule.errors.select_provider_first');
             return;
         }
 
         // التحقق من صحة البيانات
         $validationErrors = $this->validateSchedule();
         if (!empty($validationErrors)) {
-            $this->errors = $validationErrors;
+            $this->errorMessages = $validationErrors;
             return;
         }
 
@@ -825,7 +825,7 @@ class ScheduleManager extends Component
                 'trace' => $e->getTraceAsString()
             ]);
 
-            $this->errors[] = __('schedule.errors.save_failed') . ': ' . $e->getMessage();
+            $this->errorMessages[] = __('schedule.errors.save_failed') . ': ' . $e->getMessage();
         }
     }
 
@@ -872,7 +872,7 @@ class ScheduleManager extends Component
      */
     protected function clearMessages(): void
     {
-        $this->errors = [];
+        $this->errorMessages = [];
         $this->successMessage = '';
     }
 

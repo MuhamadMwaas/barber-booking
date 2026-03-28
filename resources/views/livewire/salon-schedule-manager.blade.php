@@ -102,7 +102,7 @@
         </div>
     @endif
 
-    @if(!empty($errors))
+    @if(!empty($errorMessages))
         <div class="mb-4 p-4 rounded-lg bg-red-50 border border-red-200">
             <div class="flex items-start gap-2 text-red-800">
                 <svg class="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -110,7 +110,7 @@
                 </svg>
                 <div>
                     <ul class="list-disc list-inside text-sm space-y-1">
-                        @foreach($errors as $error)
+                        @foreach($errorMessages as $error)
                             <li>{{ $error }}</li>
                         @endforeach
                     </ul>

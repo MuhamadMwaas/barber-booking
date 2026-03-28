@@ -67,7 +67,7 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['web', EnsureStaffDashboardAccess::class])->group(function () {
-    Route::get('/dashboard', \App\Livewire\StaffDashboard::class)
+    Route::livewire('/dashboard', \App\Livewire\StaffDashboard::class)
         ->name('staff.dashboard');
 
     Route::get('/dashboard/language/{code}', function (string $code) {

@@ -51,7 +51,7 @@ class SalonScheduleManager extends Component
     /**
      * رسائل الخطأ
      */
-    public array $errors = [];
+    public array $errorMessages = [];
 
     /**
      * رسائل النجاح
@@ -301,7 +301,7 @@ class SalonScheduleManager extends Component
     public function pasteDay(int $day): void
     {
         if (empty($this->clipboard) || $this->clipboardType !== 'day') {
-            $this->errors[] = __('salon_schedule.errors.nothing_to_paste');
+            $this->errorMessages[] = __('salon_schedule.errors.nothing_to_paste');
             return;
         }
 
@@ -393,14 +393,14 @@ class SalonScheduleManager extends Component
 
         // التحقق من اختيار فرع
         if (!$this->selectedBranchId) {
-            $this->errors[] = __('salon_schedule.please_select_branch');
+            $this->errorMessages[] = __('salon_schedule.please_select_branch');
             return;
         }
 
         // التحقق من صحة البيانات
         $validationErrors = $this->validateSchedule();
         if (!empty($validationErrors)) {
-            $this->errors = $validationErrors;
+            $this->errorMessages = $validationErrors;
             return;
         }
 
@@ -446,7 +446,7 @@ class SalonScheduleManager extends Component
                 'trace' => $e->getTraceAsString()
             ]);
 
-            $this->errors[] = __('salon_schedule.save_error') . ': ' . $e->getMessage();
+            $this->errorMessages[] = __('salon_schedule.save_error') . ': ' . $e->getMessage();
 
             // إرسال إشعار خطأ
             Notification::make()
@@ -476,7 +476,7 @@ class SalonScheduleManager extends Component
      */
     protected function clearMessages(): void
     {
-        $this->errors = [];
+        $this->errorMessages = [];
         $this->successMessage = '';
     }
 
