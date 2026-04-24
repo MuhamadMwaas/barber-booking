@@ -15,8 +15,15 @@ use Illuminate\Validation\Rules\Password;
 
 class UserForm
 {
-    public static function configure(Schema $schema): Schema
+    public static function configure(Schema $schema, string $mode = 'all'): Schema
     {
+        $isCustomerMode = $mode === 'customer';
+        $excludedRoles = ['SuperAdmin', 'admin'];
+
+        if ($mode === 'management') {
+            $excludedRoles[] = 'customer';
+        }
+
         return $schema
             ->components([
                 // Personal Information Section
@@ -107,10 +114,13 @@ class UserForm
                                     ->label(__('resources.user.role'))
                                     ->placeholder(__('resources.user.select_role'))
                                     ->options(fn () => \Spatie\Permission\Models\Role::where('guard_name', 'web')
-                                        ->whereNotIn('name', ['SuperAdmin', 'admin'])
+                                        ->when($isCustomerMode, fn ($query) => $query->where('name', 'customer'))
+                                        ->when(! $isCustomerMode, fn ($query) => $query->whereNotIn('name', $excludedRoles))
                                         ->pluck('name', 'name')
                                         ->toArray())
                                     ->required()
+                                    ->default($isCustomerMode ? 'customer' : null)
+                                    ->visible(! $isCustomerMode)
                                     ->native(false)
                                     ->searchable()
                                     ->preload()

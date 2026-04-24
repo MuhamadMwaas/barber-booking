@@ -157,32 +157,36 @@ class ProviderScheduledWorkForm
             ->description(__('resources.provider_scheduled_work.summary_description'))
             ->icon('heroicon-o-presentation-chart-line')
             ->columns(3)
-            ->schema([
+->schema([
                 Placeholder::make('total_working_minutes')
                     ->label(__('resources.provider_scheduled_work.total_working_minutes'))
                     ->content(function (Get $get) {
-                        $minutes = self::calculateWeeklyWorkingMinutes($get('days') ?? []);
-                     $totalMinutes = 0;
+                        $days = $get('days') ?? [];
+                        if (!is_array($days) || empty($days)) {
+                            return self::formatMinutes(0);
+                        }
+                        $totalMinutes = 0;
 
-foreach ($get('days')as $day) {
-    foreach ($day['shifts'] as $shiftId => $shift) {
-        // تجاهل إذا ليس يوم عمل
-        if (empty($shift['is_work_day'])) {
-            continue;
-        }
+                        foreach ($days as $day) {
+                            if (!is_array($day) || !isset($day['shifts']) || !is_array($day['shifts'])) {
+                                continue;
+                            }
+                            foreach ($day['shifts'] as $shiftId => $shift) {
+                                if (empty($shift['is_work_day'])) {
+                                    continue;
+                                }
 
-        $minutes = self::getShiftDurationInMinutesAttribute(
-            $shift['start_time'],
-            $shift['end_time']
-        );
-        // خصم الاستراحة إذا موجود
-        if (!empty($shift['break_minutes'])) {
-            $minutes -= $shift['break_minutes'];
-        }
+                                $minutes = self::getShiftDurationInMinutesAttribute(
+                                    $shift['start_time'],
+                                    $shift['end_time']
+                                );
+                                if (!empty($shift['break_minutes'])) {
+                                    $minutes -= $shift['break_minutes'];
+                                }
 
-        $totalMinutes += $minutes;
-    }
-};
+                                $totalMinutes += $minutes;
+                            }
+                        };
                         return self::formatMinutes($totalMinutes);
                     }),
                 Placeholder::make('active_days_count')

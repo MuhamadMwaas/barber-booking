@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Providers\Pages;
 use App\Filament\Resources\Providers\ProviderResource;
 use App\Filament\Resources\Providers\Widgets\ProviderLeaveStatsWidget;
 use App\Filament\Resources\Providers\Widgets\ProviderStatsOverviewWidget;
+use App\Models\ReasonLeave;
 use App\Models\ProviderTimeOff;
 use Filament\Actions\EditAction;
 use Filament\Actions\Action;
@@ -61,6 +62,7 @@ class ViewProvider extends ViewRecord
                             Select::make('reason_id')
                                 ->label(__('resources.provider_resource.reason'))
                                 ->relationship('timeOffs.reason', 'name')
+                                ->getOptionLabelFromRecordUsing(fn (ReasonLeave $record): string => $record->getNameIn(app()->getLocale()))
                                 ->required()
                                 ->searchable()
                                 ->preload()
@@ -131,6 +133,7 @@ class ViewProvider extends ViewRecord
                             Select::make('reason_id')
                                 ->label(__('resources.provider_resource.reason'))
                                 ->relationship('timeOffs.reason', 'name')
+                                ->getOptionLabelFromRecordUsing(fn (ReasonLeave $record): string => $record->getNameIn(app()->getLocale()))
                                 ->required()
                                 ->searchable()
                                 ->preload()

@@ -12,7 +12,9 @@
       "Bash(if not exist \"d:\\Coding\\BarberBooking\\resources\\views\\filament\\forms\\components\" mkdir \"d:\\Coding\\BarberBooking\\resources\\views\\filament\\forms\\components\")",
       "Bash({ head -n 317 \"d:\\Coding\\BarberBooking\\app\\Filament\\Resources\\Appointments\\Schemas\\AppointmentForm.php\")",
       "Bash(})",
-      "Bash(php:*)"
+      "Bash(php:*)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -n \"class InvoiceService\" \"d:/Coding/BarberBooking/app/Services\"/*.php)"
     ],
     "deny": [],
     "ask": []

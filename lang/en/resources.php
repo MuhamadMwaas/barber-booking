@@ -5,6 +5,14 @@ return [
         'label' => 'User',
         'plural_label' => 'Users',
         'navigation_label' => 'Users',
+        'customers_label' => 'Customer',
+        'customers_plural_label' => 'Customers',
+        'customers_navigation_label' => 'Customers',
+        'customers_title' => 'Customer Management',
+        'management_label' => 'Administrator',
+        'management_plural_label' => 'Management',
+        'management_navigation_label' => 'Management',
+        'management_title' => 'Management Users',
         'title' => 'User Management',
 
         // Table columns
@@ -353,6 +361,16 @@ return [
         'provider_not_working_this_day' => 'Provider does not work on this day',
         'provider_has_day_off' => 'Provider has a day off on this date',
         'no_available_slots' => 'No available time slots for the selected date and duration',
+
+        // Timeline legend & tooltips
+        'slot_available'          => 'Available',
+        'slot_selected'           => 'Selected',
+        'slot_booked'             => 'Booked',
+        'slot_timeoff'            => 'Day off',
+        'slot_outside'            => 'Outside hours',
+        'booked_slot'             => 'Booked appointment',
+        'timeoff_slot'            => 'Time off',
+        'select_service_date_first' => 'Select a service and a date first',
 
         // Form - Services Section
         'services_section' => 'Services',

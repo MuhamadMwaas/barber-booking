@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Filament\Resources\Users;
+namespace App\Filament\Resources\Customers;
 
-use App\Filament\Resources\Users\Pages\CreateUser;
-use App\Filament\Resources\Users\Pages\EditUser;
-use App\Filament\Resources\Users\Pages\ListUsers;
-use App\Filament\Resources\Users\Pages\ViewUser;
+use App\Filament\Resources\Customers\Pages\CreateCustomer;
+use App\Filament\Resources\Customers\Pages\EditCustomer;
+use App\Filament\Resources\Customers\Pages\ListCustomers;
+use App\Filament\Resources\Customers\Pages\ViewCustomer;
 use App\Filament\Resources\Users\RelationManagers\CustomerAppointmentsRelationManager;
 use App\Filament\Resources\Users\RelationManagers\ServicesRelationManager;
 use App\Filament\Resources\Users\Schemas\UserForm;
@@ -21,23 +21,25 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
-class UserResource extends Resource
+class CustomerResource extends Resource
 {
     use NavigationDefaultAccess, ResourceTranslation;
 
     protected static ?string $model = User::class;
 
+    protected static ?string $translationResourceKey = 'user';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
     protected static string|\UnitEnum|null $navigationGroup = 'staff';
 
-    protected static ?int $navigationSort = 89;
+    protected static ?int $navigationSort = 88;
 
     protected static ?string $recordTitleAttribute = 'Users';
 
     public static function form(Schema $schema): Schema
     {
-        return UserForm::configure($schema, mode: 'management');
+        return UserForm::configure($schema, mode: 'customer');
     }
 
     public static function infolist(Schema $schema): Schema
@@ -52,20 +54,19 @@ class UserResource extends Resource
 
     public static function getRelations(): array
     {
-
         return [
             ServicesRelationManager::class,
-            CustomerAppointmentsRelationManager::class
+            CustomerAppointmentsRelationManager::class,
         ];
     }
 
     public static function getPages(): array
     {
         return [
-            'index' => ListUsers::route('/'),
-            'create' => CreateUser::route('/create'),
-            'view' => ViewUser::route('/{record}'),
-            'edit' => EditUser::route('/{record}/edit'),
+            'index' => ListCustomers::route('/'),
+            'create' => CreateCustomer::route('/create'),
+            'view' => ViewCustomer::route('/{record}'),
+            'edit' => EditCustomer::route('/{record}/edit'),
         ];
     }
 
@@ -77,26 +78,26 @@ class UserResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->whereDoesntHave('roles', fn (Builder $query) => $query->where('name', 'customer'));
+            ->whereHas('roles', fn (Builder $query) => $query->where('name', 'customer'));
     }
 
     public static function getModelLabel(): string
     {
-        return static::translate('management_label');
+        return static::translate('customers_label');
     }
 
     public static function getPluralModelLabel(): string
     {
-        return static::translate('management_plural_label');
+        return static::translate('customers_plural_label');
     }
 
     public static function getNavigationLabel(): string
     {
-        return static::translate('management_navigation_label');
+        return static::translate('customers_navigation_label');
     }
 
     public static function getTitleCaseModelLabel(): string
     {
-        return static::translate('management_title');
+        return static::translate('customers_title');
     }
 }

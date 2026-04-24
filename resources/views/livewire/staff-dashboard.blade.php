@@ -675,7 +675,7 @@
                             <select wire:model="timeOffReasonId" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
                                 <option value="">-- {{ __('dashboard.time_off_modal.reason') }} --</option>
                                 @foreach($this->reasonLeaves as $reason)
-                                    <option value="{{ $reason->id }}">{{ $reason->name }}</option>
+                                    <option value="{{ $reason->id }}">{{ $reason->getNameIn(app()->getLocale()) }}</option>
                                 @endforeach
                             </select>
                         </div>

@@ -6,9 +6,9 @@ use App\Enum\OtpType;
 use App\Mail\SendOtpMail;
 use App\Models\Otp;
 use App\Models\User;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Carbon;
 
 class OtpService
 {

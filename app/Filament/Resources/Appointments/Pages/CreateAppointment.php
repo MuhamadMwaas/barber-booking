@@ -155,6 +155,11 @@ class CreateAppointment extends CreateRecord
         return $this->getResource()::getUrl('view', ['record' => $this->getRecord()]);
     }
 
+    protected function getFormActions(): array
+    {
+        return [];
+    }
+
     /**
      * Show success notification
      */
@@ -357,17 +362,21 @@ class CreateAppointment extends CreateRecord
 
         $servicesCollection = collect($services);
 
-        // Calculate subtotal
-        $subtotal = $servicesCollection->sum('price');
-        $data['subtotal'] = round($subtotal, 2);
+        // Prices are GROSS (tax-inclusive) — extract net and tax via reverse calculation
+        $grossTotal = (float) $servicesCollection->sum('price');
+        $taxRate    = (float) get_setting('tax_rate', 0);
 
-        // Calculate tax
-        $taxRate = (float) get_setting('tax_rate', 0);
-        $taxAmount = $subtotal * ($taxRate / 100);
-        $data['tax_amount'] = round($taxAmount, 2);
+        if ($taxRate > 0) {
+            $netTotal  = $grossTotal / (1 + $taxRate / 100);
+            $taxAmount = $grossTotal - $netTotal;
+        } else {
+            $netTotal  = $grossTotal;
+            $taxAmount = 0.0;
+        }
 
-        // Calculate total
-        $data['total_amount'] = round($subtotal + $taxAmount, 2);
+        $data['subtotal']     = round($netTotal,   2);
+        $data['tax_amount']   = round($taxAmount,  2);
+        $data['total_amount'] = round($grossTotal, 2);
 
         return $data;
     }

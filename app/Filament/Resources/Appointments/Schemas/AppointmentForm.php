@@ -8,10 +8,12 @@ use App\Models\Appointment;
 use App\Models\ProviderTimeOff;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\BookingValidationService;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Grid;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
@@ -25,10 +27,13 @@ use Filament\Schemas\Components\Wizard;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
+use Filament\Support\Exceptions\Halt;
 use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\ViewField;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 
 class AppointmentForm
@@ -70,7 +75,13 @@ class AppointmentForm
 
 	                                    Select::make('customer_id')
 	                                        ->label(__('resources.appointment.customer_label'))
-	                                        ->relationship('customer', 'first_name')
+	                                        ->relationship(
+                                            name: 'customer',
+                                            titleAttribute: 'first_name',
+                                            modifyQueryUsing: fn ($query) => $query
+                                                ->role('customer')
+                                                ->where('is_active', true),
+                                        )
                                         ->searchable(['first_name', 'last_name', 'phone', 'email'])
                                         ->preload()
                                         ->getOptionLabelFromRecordUsing(fn (User $record) =>
@@ -176,6 +187,78 @@ class AppointmentForm
                         ->label(__('resources.appointment.wizard_services_label'))
                         ->icon('heroicon-o-scissors')
                         ->description(__('resources.appointment.select_service_then_time'))
+                        ->afterValidation(function (Get $get) {
+                            // 1. Validate at least one service with a selected service_id
+                            $services = collect($get('services_record') ?? [])
+                                ->filter(fn ($s) => !empty($s['service_id']));
+
+                            if ($services->isEmpty()) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title(__('messages.appointment.validation_error'))
+                                    ->body(__('messages.appointment.at_least_one_service'))
+                                    ->send();
+                                throw new Halt();
+                            }
+
+                            // 2. Validate appointment date
+                            if (empty($get('appointment_date'))) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title(__('messages.appointment.validation_error'))
+                                    ->body(__('messages.appointment.select_date'))
+                                    ->send();
+                                throw new Halt();
+                            }
+
+                            // 3. Validate provider selected
+                            if (empty($get('provider_id'))) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title(__('messages.appointment.validation_error'))
+                                    ->body(__('messages.appointment.select_provider'))
+                                    ->send();
+                                throw new Halt();
+                            }
+
+                            // 4. Validate time slot selected
+                            if (empty($get('start_time'))) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title(__('messages.appointment.validation_error'))
+                                    ->body(__('messages.appointment.select_start_time'))
+                                    ->send();
+                                throw new Halt();
+                            }
+
+                            // 5. Validate slot availability against business rules
+                            try {
+                                $providerId      = $get('provider_id');
+                                $appointmentDate = $get('appointment_date');
+                                $startTimeRaw    = $get('start_time');
+                                $totalDuration   = (int) $services->sum('duration_minutes') ?: 30;
+
+                                $provider = User::find($providerId);
+                                $date     = Carbon::parse($appointmentDate)->format('Y-m-d');
+                                $start    = Carbon::parse($date . ' ' . Carbon::parse($startTimeRaw)->format('H:i:s'));
+                                $end      = $start->copy()->addMinutes($totalDuration);
+
+                                $firstServiceId = $services->first()['service_id'] ?? null;
+                                $firstService   = $firstServiceId ? Service::find($firstServiceId) : null;
+
+                                if ($provider && $firstService) {
+                                    app(BookingValidationService::class)
+                                        ->validateTimeSlotAvailability($provider, $firstService, $start, $end);
+                                }
+                            } catch (\InvalidArgumentException $e) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title(__('messages.appointment.validation_error'))
+                                    ->body($e->getMessage())
+                                    ->send();
+                                throw new Halt();
+                            }
+                        })
                         ->schema([
                             // Service Selection Section
                             Section::make(__('resources.appointment.services_section'))
@@ -303,17 +386,24 @@ class AppointmentForm
                                 ->label(__('resources.appointment.providers_availability'))
                                 ->view('filament.forms.components.appointment-timeline')
                                 ->viewData(fn (Get $get) => [
-                                    'date' => $get('appointment_date'),
-                                    'services' => $get('services_record') ?? [],
+                                    'date'             => $get('appointment_date'),
+                                    'services'         => $get('services_record') ?? [],
                                     'selectedProvider' => $get('provider_id'),
-                                    'selectedTime' => $get('start_time'),
-                                    'serviceDuration' => collect($get('services_record') ?? [])->sum('duration_minutes') ?: 30,
+                                    'selectedTime'     => $get('start_time'),
+                                    'serviceDuration'  => collect($get('services_record') ?? [])
+                                                            ->sum('duration_minutes') ?: 30,
                                 ])
-                                ->visible(fn (Get $get) => !empty($get('appointment_date')) && !empty($get('services_record')))
+                                ->visible(fn (Get $get) =>
+                                    !empty($get('appointment_date')) &&
+                                    collect($get('services_record') ?? [])
+                                        ->filter(fn ($s) => !empty($s['service_id']))
+                                        ->isNotEmpty()
+                                )
                                 ->columnSpanFull()
                                 ->live()
                                 ->dehydrated(false),
 
+                            // Selected slot details (shown only after services + date are both chosen)
                             Section::make(__('resources.appointment.selected_slot'))
                                 ->description(__('resources.appointment.select_appointment_details'))
                                 ->schema([
@@ -339,14 +429,14 @@ class AppointmentForm
                                                     }
 
                                                     // Get providers who offer ALL selected services
-                                                    return User::role('provider')
-                                                        ->where('is_active', true)
-                                                        ->whereHas('services', function($query) use ($serviceIds) {
-                                                            $query->whereIn('services.id', $serviceIds);
-                                                        })
-                                                        ->get()
-                                                        ->pluck('full_name', 'id')
-                                                        ->toArray();
+                                                    $query = User::role('provider')->where('is_active', true);
+                                                    foreach ($serviceIds as $serviceId) {
+                                                        $query->whereHas('services', fn ($q) => $q
+                                                            ->where('services.id', $serviceId)
+                                                            ->where('provider_service.is_active', true)
+                                                        );
+                                                    }
+                                                    return $query->get()->pluck('full_name', 'id')->toArray();
                                                 })
                                                 ->searchable()
                                                 ->required()
@@ -403,7 +493,12 @@ class AppointmentForm
                                         ->hidden()
                                         ->dehydrated(),
                                 ])
-                                ->visible(fn (Get $get) => !empty($get('appointment_date'))),
+                                ->visible(fn (Get $get) =>
+                                    !empty($get('appointment_date')) &&
+                                    collect($get('services_record') ?? [])
+                                        ->filter(fn ($s) => !empty($s['service_id']))
+                                        ->isNotEmpty()
+                                ),
 
                             // Hidden fields for totals
                             TextInput::make('subtotal')
@@ -527,9 +622,17 @@ ViewField::make('total_display')
                 ])
                 ->columnSpanFull()
                 ->persistStepInQueryString()
-                ->submitAction(new HtmlString('<button type="submit" class="filament-button filament-button-size-md inline-flex items-center justify-center py-1 gap-1 font-medium rounded-lg border transition-colors focus:outline-none focus:ring-offset-2 focus:ring-2 focus:ring-inset min-h-[2.25rem] px-4 text-sm text-white shadow focus:ring-white border-transparent bg-primary-600 hover:bg-primary-500 focus:bg-primary-700 focus:ring-offset-primary-700">
-                    <span>' . __('resources.appointment.create_appointment') . '</span>
-                </button>')),
+                ->submitAction(new HtmlString(Blade::render(<<<'BLADE'
+                    <x-filament::button
+                        color="warning"
+                        :icon="\Filament\Support\Icons\Heroicon::OutlinedCalendarDays"
+                        icon-position="after"
+                        size="lg"
+                        type="submit"
+                    >
+                        {{ __('resources.appointment.create_appointment') }}
+                    </x-filament::button>
+                BLADE))),
             ]);
     }
 
@@ -571,14 +674,21 @@ ViewField::make('total_display')
     {
         $services = collect($get('services_record') ?? []);
 
-        $subtotal = $services->sum('price');
+        // Prices are GROSS (tax-inclusive) — extract net and tax via reverse calculation
+        $grossTotal = (float) $services->sum('price');
         $taxRate = (float) get_setting('tax_rate', 0);
-        $taxAmount = $subtotal * ($taxRate / 100);
-        $totalAmount = $subtotal + $taxAmount;
 
-        $set('subtotal', round($subtotal, 2));
-        $set('tax_amount', round($taxAmount, 2));
-        $set('total_amount', round($totalAmount, 2));
+        if ($taxRate > 0) {
+            $netTotal  = $grossTotal / (1 + $taxRate / 100);
+            $taxAmount = $grossTotal - $netTotal;
+        } else {
+            $netTotal  = $grossTotal;
+            $taxAmount = 0.0;
+        }
+
+        $set('subtotal',    round($netTotal,   2));
+        $set('tax_amount',  round($taxAmount,  2));
+        $set('total_amount', round($grossTotal, 2));
 
         // Calculate total duration
         $totalDuration = $services->sum('duration_minutes') ?: 0;
@@ -628,12 +738,14 @@ ViewField::make('total_display')
         }
 
         // Get only providers who offer ALL selected services
-        $providers = User::role('provider')
-            ->where('is_active', true)
-            ->whereHas('services', function($query) use ($serviceIds) {
-                $query->whereIn('services.id', $serviceIds);
-            })
-            ->get();
+        $providerQuery = User::role('provider')->where('is_active', true);
+        foreach ($serviceIds as $serviceId) {
+            $providerQuery->whereHas('services', fn ($q) => $q
+                ->where('services.id', $serviceId)
+                ->where('provider_service.is_active', true)
+            );
+        }
+        $providers = $providerQuery->get();
 
         $providersData = [];
 

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Traits\NavigationDefaultAccess;
 use App\Traits\ResourceTranslation;
+use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
@@ -92,7 +93,7 @@ class ManageSalonSchedules extends Page
     public function getBreadcrumbs(): array
     {
         return [
-            route('filament.admin.pages.dashboard') => __('filament-panels::pages/dashboard.title'),
+            Filament::getHomeUrl() => __('Home'),
             static::getUrl() => static::getNavigationLabel(),
         ];
     }

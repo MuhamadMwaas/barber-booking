@@ -2,10 +2,10 @@
 
 namespace App\Mail;
 
+use Carbon\CarbonInterface;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Carbon;
 
 class SendOtpMail extends Mailable
 {
@@ -14,7 +14,7 @@ class SendOtpMail extends Mailable
     public function __construct(
         public string $otp,
         public string $userName,
-        public Carbon $expiresAt,
+        public CarbonInterface $expiresAt,
     ) {
     }
 

@@ -259,12 +259,7 @@ class ProviderScheduledWorksTable
                     ->color('info')
                     ->url(fn ($record) => ViewProviderScheduleTimeline::getUrl(['userId' => $record->id]))
                     ->openUrlInNewTab(),
-                ActionsAction::make('manage_schedule')
-                    ->label(__('resources.provider_scheduled_work.manage_schedule'))
-                    ->icon('heroicon-o-pencil-square')
-                    ->color('primary')
-                    ->url(fn($record) => ViewProviderScheduleTimeline::getUrl() . '?userId=' . $record->id)
-                    ->tooltip(__('resources.provider_scheduled_work.manage_schedule_tooltip')),
+
             ])
 
             ->bulkActions([

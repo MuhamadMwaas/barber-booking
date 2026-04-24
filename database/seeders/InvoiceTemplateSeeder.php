@@ -19,7 +19,7 @@ class InvoiceTemplateSeeder extends Seeder
         $this->createEnglishTemplate();
 
         // Compact 58mm Template
-        $this->createCompact58mmTemplate();
+        // $this->createCompact58mmTemplate();
     }
 
     /**
