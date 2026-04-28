@@ -107,6 +107,10 @@ return [
     'timeline' => [
         'no_providers' => 'No providers selected',
         'drag_to_book' => 'Drag to create a booking',
+        'scale' => 'Scale',
+        'scale_10' => '10 min',
+        'scale_15' => '15 min',
+        'scale_30' => '30 min',
     ],
 
     'status' => [

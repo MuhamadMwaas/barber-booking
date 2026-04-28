@@ -35,6 +35,8 @@ class BookingService
         $services = $bookingData['services'];
         $date = $bookingData['date'];
         $paymentMethod = $bookingData['payment_method'];
+        $isConfirmed = $bookingData['is_confirmed'] ?? ($paymentMethod == 'cash');
+        $markAsPaid = $bookingData['mark_as_paid'] ?? ($paymentMethod == 'cash');
         $notes = $bookingData['notes'] ?? null;
         $customerName = $bookingData['customer_name'] ?? ($customer->full_name ?? null);
         $customerEmail = $bookingData['customer_email'] ?? $customer->email ?? null;
@@ -57,10 +59,10 @@ class BookingService
         $totals = $this->calculateTotals($preparedServices);
 
         // 6. Create booking in transaction
-        return DB::transaction(function () use ($customer, $date, $paymentMethod, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone) {
-            // Determine created_status based on payment method
-            $createdStatus = $paymentMethod == 'cash' ? 1 : 0;
-            $paymentStatus = $paymentMethod == 'cash'
+        return DB::transaction(function () use ($customer, $date, $paymentMethod, $isConfirmed, $markAsPaid, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone) {
+            // Allow staff-created bookings to be confirmed without being marked as paid yet.
+            $createdStatus = $isConfirmed ? 1 : 0;
+            $paymentStatus = $markAsPaid
                 ? PaymentStatus::PAID_ONSTIE_CASH
                 : PaymentStatus::PENDING;
 

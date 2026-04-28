@@ -241,7 +241,7 @@ class ServiceForm
                                                             ->numeric()
                                                             ->suffix(__('resources.service.minutes'))
                                                             ->minValue(5)
-                                                            ->step(5)
+                                                            ->step(1)
                                                             ->placeholder(__('resources.service.use_default_duration'))
                                                             ->helperText(__('resources.service.custom_duration_helper')),
 

@@ -102,6 +102,10 @@ return [
     'timeline' => [
         'no_providers' => 'Keine Mitarbeiter ausgewählt',
         'drag_to_book' => 'Ziehen, um einen Termin zu erstellen',
+        'scale' => 'Raster',
+        'scale_10' => '10 Min.',
+        'scale_15' => '15 Min.',
+        'scale_30' => '30 Min.',
     ],
     'status' => [
         'pending' => 'Ausstehend',

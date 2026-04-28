@@ -79,7 +79,7 @@ class DashboardService {
     }
 
     public function getAppointmentsForDate(string $date, array $providerIds = []): Collection {
-        $query = Appointment::with(['services', 'services_record', 'customer', 'provider', 'invoice'])
+        $query = Appointment::with(['services', 'services_record.service', 'customer', 'provider', 'invoice'])
             ->whereDate('appointment_date', $date)
             ->where('created_status', 1)
             ->whereNotIn('status', [

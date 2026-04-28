@@ -268,6 +268,8 @@ class StaffDashboard extends Component {
             $bookingData = [
                 'date' => $this->selectedDate,
                 'payment_method' => 'cash',
+                'is_confirmed' => true,
+                'mark_as_paid' => false,
                 'notes' => $data['notes'] ?? '',
                 'services' => [],
             ];
@@ -323,6 +325,8 @@ class StaffDashboard extends Component {
             $bookingData = [
                 'date' => $this->selectedDate,
                 'payment_method' => 'cash',
+                'is_confirmed' => true,
+                'mark_as_paid' => false,
                 'notes' => $this->bookingNotes,
                 'services' => [],
             ];
@@ -570,6 +574,14 @@ class StaffDashboard extends Component {
                 $appointmentsByProvider[$pid] = [];
             }
             $services = $apt->services_record->map(fn($s) => $s->service_name)->implode(', ');
+            $primaryServiceColor = $apt->services_record
+                ->sortBy('sequence_order')
+                ->first()?->service?->color_code;
+
+            $serviceColorCode = is_string($primaryServiceColor) && preg_match('/^#[0-9A-Fa-f]{6}$/', $primaryServiceColor)
+                ? $primaryServiceColor
+                : null;
+
             $appointmentsByProvider[$pid][] = [
                 'id' => $apt->id,
                 'number' => $apt->number,
@@ -583,6 +595,7 @@ class StaffDashboard extends Component {
                 'status_label' => $apt->status->getLabel(),
                 'payment_status' => $apt->payment_status->value,
                 'total_amount' => (float) $apt->total_amount,
+                'service_color_code' => $serviceColorCode,
             ];
         }
 

@@ -1,13 +1,15 @@
 <?php
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\AccountDeletionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
-class ProfileController
+class ProfileController extends Controller
 {
   public function show(Request $request)
 {
@@ -75,5 +77,34 @@ class ProfileController
         $user->tokens()->delete();
         $user->refreshTokens()->update(['revoked' => true]);
         return response()->json(['message' => 'Password updated']);
+    }
+
+    public function destroy(Request $request, AccountDeletionService $accountDeletionService)
+    {
+        $user = $request->user();
+
+        if ($user->hasRole('admin') || $user->hasRole('provider')) {
+            return response()->json([
+                'message' => 'This endpoint is available for customer accounts only.',
+            ], 403);
+        }
+
+        $request->validate([
+            'current_password' => 'nullable|string',
+            'confirmation' => 'required|accepted',
+        ]);
+
+        if ($user->password && !Hash::check($request->current_password ?? '', $user->password)) {
+            return response()->json([
+                'message' => 'Current password incorrect',
+            ], 422);
+        }
+
+        $accountDeletionService->deleteCustomerAccount($user);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Account deleted successfully',
+        ]);
     }
 }

@@ -70,6 +70,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('profile', [ProfileController::class, 'show']);
     Route::post('profile', [ProfileController::class, 'update']);
     Route::post('profile/change-password', [ProfileController::class, 'changePassword']);
+    Route::delete('profile', [ProfileController::class, 'destroy']);
 
 
     Route::prefix('noticifation')->name('noticifation.')->group(function () {

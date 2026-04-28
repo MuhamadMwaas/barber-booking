@@ -187,7 +187,7 @@ class AppointmentForm
                         ->label(__('resources.appointment.wizard_services_label'))
                         ->icon('heroicon-o-scissors')
                         ->description(__('resources.appointment.select_service_then_time'))
-                        ->afterValidation(function (Get $get) {
+                        ->afterValidation(function (Get $get, Set $set) {
                             // 1. Validate at least one service with a selected service_id
                             $services = collect($get('services_record') ?? [])
                                 ->filter(fn ($s) => !empty($s['service_id']));
@@ -200,6 +200,9 @@ class AppointmentForm
                                     ->send();
                                 throw new Halt();
                             }
+
+                            // Force totals to be recalculated before the payment step renders.
+                            self::calculateTotals($get, $set);
 
                             // 2. Validate appointment date
                             if (empty($get('appointment_date'))) {
@@ -536,32 +539,40 @@ class AppointmentForm
     ->label(__('resources.appointment.subtotal_label') . ' (' . get_setting('tax_rate', 0) . '%)')
 
     ->view('filament.fields.cost-value',function(Get $get){
+        $totals = self::calculateTotalsData($get('services_record') ?? []);
+
         return [
         'label'=>__('resources.appointment.subtotal_label') . ' (' . get_setting('tax_rate', 0) . '%)',
-        'value' => $get('subtotal') ?? 0,
+        'value' => $totals['subtotal'],
         'currency' => get_setting('currency_symbol', 'EUR'),
         'size' => '1.2em',
         'color' => null,
     ];}),
     ViewField::make('tax_display')
     ->label(__('resources.appointment.tax_label') . ' (' . get_setting('tax_rate', 0) . '%)')
-    ->view('filament.fields.cost-value',fn(Get $get) => [
+    ->view('filament.fields.cost-value',function (Get $get) {
+        $totals = self::calculateTotalsData($get('services_record') ?? []);
+
+        return [
         'label'=>__('resources.appointment.tax_label') . ' (' . get_setting('tax_rate', 0) . '%)',
-        'value' => $get('tax_amount') ?? 0,
+        'value' => $totals['tax_amount'],
         'currency' => get_setting('currency_symbol', 'EUR'),
         'size' => '1.2em',
         'color' => null,
-    ]),
+    ];}),
 
 ViewField::make('total_display')
     ->label(__('resources.appointment.total_label'))
-    ->view('filament.fields.cost-value',fn(Get $get) => [
+    ->view('filament.fields.cost-value',function (Get $get) {
+        $totals = self::calculateTotalsData($get('services_record') ?? []);
+
+        return [
         'label'=>__('resources.appointment.total_label'),
-        'value' => $get('total_amount') ?? 0,
+        'value' => $totals['total_amount'],
         'currency' => get_setting('currency_symbol', 'EUR'),
         'size' => '1.5em',
         'color' => '#10b981',
-    ]),
+    ];}),
 
                                         ]),
                                 ]),
@@ -672,10 +683,26 @@ ViewField::make('total_display')
 
     protected static function calculateTotals(Get $get, Set $set): void
     {
-        $services = collect($get('services_record') ?? []);
+        $totals = self::calculateTotalsData($get('services_record') ?? []);
 
-        // Prices are GROSS (tax-inclusive) — extract net and tax via reverse calculation
-        $grossTotal = (float) $services->sum('price');
+        $set('subtotal', $totals['subtotal']);
+        $set('tax_amount', $totals['tax_amount']);
+        $set('total_amount', $totals['total_amount']);
+        $set('calculated_duration', $totals['total_duration']);
+        $set('duration_minutes', $totals['total_duration']);
+
+        // Update end time if start time exists
+        if ($get('start_time') && $get('appointment_date') && $totals['total_duration'] > 0) {
+            self::updateEndTime($get, $set);
+        }
+    }
+
+    protected static function calculateTotalsData(array $services): array
+    {
+        $normalizedServices = self::normalizeServicesForTotals($services);
+
+        // Prices are GROSS (tax-inclusive) — extract net and tax via reverse calculation.
+        $grossTotal = (float) $normalizedServices->sum('price');
         $taxRate = (float) get_setting('tax_rate', 0);
 
         if ($taxRate > 0) {
@@ -686,19 +713,43 @@ ViewField::make('total_display')
             $taxAmount = 0.0;
         }
 
-        $set('subtotal',    round($netTotal,   2));
-        $set('tax_amount',  round($taxAmount,  2));
-        $set('total_amount', round($grossTotal, 2));
+        return [
+            'subtotal' => round($netTotal, 2),
+            'tax_amount' => round($taxAmount, 2),
+            'total_amount' => round($grossTotal, 2),
+            'total_duration' => (int) ($normalizedServices->sum('duration_minutes') ?: 0),
+        ];
+    }
 
-        // Calculate total duration
-        $totalDuration = $services->sum('duration_minutes') ?: 0;
-        $set('calculated_duration', $totalDuration);
-        $set('duration_minutes', $totalDuration);
+    protected static function normalizeServicesForTotals(array $services): Collection
+    {
+        $serviceRows = collect($services)
+            ->filter(fn ($service) => is_array($service) && !empty($service['service_id']));
 
-        // Update end time if start time exists
-        if ($get('start_time') && $get('appointment_date')) {
-            self::updateEndTime($get, $set);
+        if ($serviceRows->isEmpty()) {
+            return collect();
         }
+
+        $serviceModels = Service::whereIn('id', $serviceRows->pluck('service_id')->unique()->all())
+            ->get()
+            ->keyBy('id');
+
+        return $serviceRows->map(function (array $serviceRow) use ($serviceModels): array {
+            $serviceModel = $serviceModels->get($serviceRow['service_id']);
+
+            $price = ($serviceRow['price'] ?? null) !== null && $serviceRow['price'] !== ''
+                ? (float) $serviceRow['price']
+                : (float) ($serviceModel?->display_price ?? 0);
+
+            $duration = ($serviceRow['duration_minutes'] ?? null) !== null && $serviceRow['duration_minutes'] !== ''
+                ? (int) $serviceRow['duration_minutes']
+                : (int) ($serviceModel?->duration_minutes ?? 0);
+
+            return [
+                'price' => $price,
+                'duration_minutes' => $duration,
+            ];
+        });
     }
 
     protected static function generateAppointmentNumber(): string
