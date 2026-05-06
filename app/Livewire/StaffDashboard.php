@@ -68,14 +68,14 @@ class StaffDashboard extends Component {
         $this->calendarYear = (int) Carbon::today()->format('Y');
         $this->calendarMonth = (int) Carbon::today()->format('n');
 
-        $providers = $this->dashboardService->getProviders();
-        $this->selectedProviderIds = $providers->pluck('id')->toArray();
+        $this->syncSelectedProvidersForSelectedDate();
 
         $this->addEmptyBookingService();
     }
 
     public function selectDate(string $date) {
         $this->selectedDate = $date;
+        $this->syncSelectedProvidersForSelectedDate();
         $this->dispatch('dateChanged', date: $date);
     }
 
@@ -84,6 +84,7 @@ class StaffDashboard extends Component {
         $this->selectedDate = $today->format('Y-m-d');
         $this->calendarYear = (int) $today->format('Y');
         $this->calendarMonth = (int) $today->format('n');
+        $this->syncSelectedProvidersForSelectedDate();
     }
 
     public function previousMonth() {
@@ -99,7 +100,15 @@ class StaffDashboard extends Component {
     }
 
     public function toggleProvider(int $providerId) {
-        if (in_array($providerId, $this->selectedProviderIds)) {
+        $selectableProviderIds = $this->getSelectableProviderIdsFromProviders(
+            $this->dashboardService->getProvidersWithStatus($this->selectedDate)
+        );
+
+        if (!in_array($providerId, $selectableProviderIds, true)) {
+            return;
+        }
+
+        if (in_array($providerId, $this->selectedProviderIds, true)) {
             $this->selectedProviderIds = array_values(array_diff($this->selectedProviderIds, [$providerId]));
         } else {
             $this->selectedProviderIds[] = $providerId;
@@ -553,19 +562,20 @@ class StaffDashboard extends Component {
         $startTime = substr($salonSchedule->open_time, 0, 5);
         $endTime = substr($salonSchedule->close_time, 0, 5);
 
-        $appointments = $this->dashboardService->getAppointmentsForDate(
-            $this->selectedDate,
-            $this->selectedProviderIds
-        );
-
-        $timeOffs = $this->dashboardService->getTimeOffsForDate(
-            $this->selectedDate,
-            $this->selectedProviderIds
-        );
-
         $providers = $allProviders
-            ->filter(fn($p) => in_array($p['id'], $this->selectedProviderIds))
+            ->filter(fn($provider) => $this->isProviderSelectableForTimeline($provider))
+            ->filter(fn($provider) => in_array($provider['id'], $this->selectedProviderIds, true))
             ->values();
+
+        $visibleProviderIds = $providers->pluck('id')->all();
+
+        $appointments = empty($visibleProviderIds)
+            ? collect()
+            : $this->dashboardService->getAppointmentsForDate($this->selectedDate, $visibleProviderIds);
+
+        $timeOffs = empty($visibleProviderIds)
+            ? collect()
+            : $this->dashboardService->getTimeOffsForDate($this->selectedDate, $visibleProviderIds);
 
         $appointmentsByProvider = [];
         foreach ($appointments as $apt) {
@@ -648,6 +658,25 @@ class StaffDashboard extends Component {
         return $this->dashboardService->getReasonLeaves();
     }
 
+    private function syncSelectedProvidersForSelectedDate(): void {
+        $this->selectedProviderIds = $this->getSelectableProviderIdsFromProviders(
+            $this->dashboardService->getProvidersWithStatus($this->selectedDate)
+        );
+    }
+
+    private function getSelectableProviderIdsFromProviders($providers): array {
+        return $providers
+            ->filter(fn($provider) => $this->isProviderSelectableForTimeline($provider))
+            ->pluck('id')
+            ->map(fn($providerId) => (int) $providerId)
+            ->values()
+            ->all();
+    }
+
+    private function isProviderSelectableForTimeline(array $provider): bool {
+        return (bool) ($provider['is_work_day'] ?? false) && !((bool) ($provider['has_day_off'] ?? false));
+    }
+
     private function resetBookingForm() {
         $this->customerType = 'existing';
         $this->selectedCustomerId = null;
@@ -672,6 +701,10 @@ class StaffDashboard extends Component {
 
     public function render() {
         $allProviders = $this->dashboardService->getProvidersWithStatus($this->selectedDate);
+        $this->selectedProviderIds = array_values(array_intersect(
+            $this->selectedProviderIds,
+            $this->getSelectableProviderIdsFromProviders($allProviders)
+        ));
         $timelineData = $this->getTimelineDataFromProviders($allProviders);
         $calendarCounts = $this->getCalendarData();
 

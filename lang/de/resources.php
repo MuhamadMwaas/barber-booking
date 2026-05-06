@@ -1058,6 +1058,8 @@ return [
         'is_active' => 'Aktiv',
         'status_helper' => 'Inaktive Dienstleister koennen sich nicht anmelden.',
         'notes' => 'Notizen',
+        'cannot_delete_title' => 'Dienstleister kann nicht gelöscht werden',
+        'cannot_delete_has_appointments' => 'Dieser Dienstleister hat vorhandene Termine und kann nicht gelöscht werden. Deaktivieren Sie das Konto stattdessen.',
         'view_complete_profile' => 'Vollstaendiges Profil anzeigen',
         'email_verified' => 'E-Mail bestaetigt',
         'not_verified' => 'Nicht bestaetigt',

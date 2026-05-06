@@ -25,6 +25,8 @@ class DeleteAccountTest extends TestCase
             'email' => 'customer@example.com',
             'phone' => '123456789',
             'password' => 'Password@123',
+            'registration_method' => 'email',
+            'email_verified_at' => now(),
         ]);
         $customer->assignRole($customerRole);
 
@@ -33,6 +35,7 @@ class DeleteAccountTest extends TestCase
             'last_name' => 'Provider',
             'email' => 'provider@example.com',
             'password' => 'Password@123',
+            'registration_method' => 'email',
         ]);
 
         $appointmentId = DB::table('appointments')->insertGetId([
@@ -173,6 +176,7 @@ class DeleteAccountTest extends TestCase
             'last_name' => 'Provider',
             'email' => 'provider-only@example.com',
             'password' => 'Password@123',
+            'registration_method' => 'email',
         ]);
         $provider->assignRole($providerRole);
 

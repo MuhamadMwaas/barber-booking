@@ -3,11 +3,10 @@
 namespace App\Services;
 
 use App\Enum\OtpType;
-use App\Mail\SendOtpMail;
+use App\Jobs\SendOtpDeliveryJob;
 use App\Models\Otp;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Carbon;
 
 class OtpService
@@ -28,39 +27,26 @@ class OtpService
                 'expires_at' => $expiresAt,
             ]);
 
-            if ($type === OtpType::EMAIL_OTP) {
-                Mail::to($user->email)->send(
-                    new SendOtpMail(
-                        otp: $otp,
-                        userName: $user->full_name,
-                        expiresAt: $expiresAt
-                    )
-                );
-            }
-
-            if ($type->value == OtpType::EMAIL_OTP->value) {
-
-
-            }
-
-            if ($type->value == OtpType::SMS_OTP->value) {
-            }
-
+            SendOtpDeliveryJob::dispatch(
+                userId: $user->id,
+                otp: $otp,
+                type: $type,
+                expiresAt: $expiresAt->toIso8601String(),
+            )->afterCommit();
         });
 
         return $otp;
     }
-
     public function validate(string $target, string $otp, OtpType $type = OtpType::EMAIL_OTP): bool
     {
         if ($type === OtpType::EMAIL_OTP) {
-            $record = Otp::where('email', $target)
+            $record = Otp::query()->where('email', $target)
                 ->where('otp', $otp)
                 ->where('used', false)
                 ->where('expires_at', '>', now())
                 ->first();
         } elseif ($type === OtpType::SMS_OTP) {
-            $record = Otp::where('phone', $target)
+            $record = Otp::query()->where('phone', $target)
                 ->where('otp', $otp)
                 ->where('used', false)
                 ->where('expires_at', '>', now())

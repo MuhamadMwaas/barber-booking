@@ -25,6 +25,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'verified.otp' => \App\Http\Middleware\EnsureEmailIsVerifiedViaOtp::class,
+            'verified.customer' => \App\Http\Middleware\EnsureEmailIsVerifiedViaOtp::class,
 
         ]);
     })

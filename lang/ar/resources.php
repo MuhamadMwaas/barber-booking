@@ -1058,6 +1058,8 @@ return [
         'is_active' => 'نشط',
         'status_helper' => 'الموظفون غير النشطين لا يمكنهم تسجيل الدخول',
         'notes' => 'ملاحظات',
+        'cannot_delete_title' => 'لا يمكن حذف الموظف',
+        'cannot_delete_has_appointments' => 'لهذا الموظف مواعيد مسجلة ولا يمكن حذفه. قم بإلغاء تفعيل الحساب بدلاً من ذلك.',
         'view_complete_profile' => 'عرض الملف الشخصي الكامل للموظف',
         'email_verified' => 'البريد محقق',
         'not_verified' => 'غير محقق',

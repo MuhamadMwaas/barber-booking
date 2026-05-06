@@ -50,4 +50,12 @@ return [
         'rest_api_key' => env('ONESIGNAL_REST_API_KEY'),
         'base_url' => env('ONESIGNAL_API_BASE_URL', 'https://onesignal.com'),
     ],
+
+    'vonage' => [
+        'enabled' => env('VONAGE_SMS_ENABLED', false),
+        'key' => env('VONAGE_KEY'),
+        'secret' => env('VONAGE_SECRET'),
+        'from' => env('VONAGE_FROM'),
+        'base_url' => env('VONAGE_BASE_URL', 'https://rest.nexmo.com'),
+    ],
 ];

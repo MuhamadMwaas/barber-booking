@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use App\Enum\RegistrationMethod;
 use App\Models\User;
 use App\Models\Branch;
 use Illuminate\Support\Facades\Hash;
@@ -27,6 +28,7 @@ class UserSeeder extends Seeder
             'city' => 'Dubai',
             'locale' => 'en',
             'is_active' => true,
+            'registration_method' => RegistrationMethod::EMAIL,
             'email_verified_at' => now(),
             'branch_id' => $branches->first()->id,
         ]);
@@ -46,6 +48,7 @@ class UserSeeder extends Seeder
             'city' => 'Dubai',
             'locale' => 'ar',
             'is_active' => true,
+            'registration_method' => RegistrationMethod::EMAIL,
             'email_verified_at' => now(),
             'branch_id' => $branches->first()->id,
         ]);
@@ -126,6 +129,7 @@ class UserSeeder extends Seeder
                 'notes' => 'Specialization: ' . $provider['specialization'],
                 'locale' => 'en',
                 'is_active' => true,
+                'registration_method' => RegistrationMethod::EMAIL,
                 'email_verified_at' => now(),
                 'branch_id' => $branches->random()->id,
             ]);
@@ -255,6 +259,7 @@ class UserSeeder extends Seeder
                 'city' => $customer['city'],
                 'locale' => 'en',
                 'is_active' => true,
+                'registration_method' => RegistrationMethod::EMAIL,
                 'email_verified_at' => now(),
                 'branch_id' => $branches->random()->id,
             ]);

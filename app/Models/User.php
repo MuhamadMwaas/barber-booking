@@ -5,6 +5,8 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 
 use App\Enum\AppointmentStatus;
+use App\Enum\OtpType;
+use App\Enum\RegistrationMethod;
 use Filament\Models\Contracts\FilamentUser;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -19,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Filament\Panel;
 use Filament\Models\Contracts\HasName;
 
@@ -43,8 +46,10 @@ class User extends Authenticatable implements FilamentUser, HasName
         'locale',
         'is_active',
         'branch_id',
+        'registration_method',
         'email_verified_via_otp_at',
-        'email_verified_at'
+        'email_verified_at',
+        'phone_verified_at',
     ];
 
 
@@ -55,7 +60,9 @@ class User extends Authenticatable implements FilamentUser, HasName
 
     protected $appends = [
         'profile_image_url',
-        'full_name'
+        'full_name',
+        'is_account_verified',
+        'requires_otp_verification',
     ];
     public function canAccessPanel(Panel $panel): bool
     {
@@ -68,7 +75,56 @@ class User extends Authenticatable implements FilamentUser, HasName
             'password' => 'hashed',
             'is_active' => 'boolean',
             'email_verified_via_otp_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
+            'registration_method' => RegistrationMethod::class,
         ];
+    }
+
+    public function getIsAccountVerifiedAttribute(): bool
+    {
+        return $this->isAccountVerified();
+    }
+
+    public function getRequiresOtpVerificationAttribute(): bool
+    {
+        return $this->requiresOtpVerification();
+    }
+
+    public function isAccountVerified(): bool
+    {
+        return $this->email_verified_at !== null || $this->phone_verified_at !== null;
+    }
+
+    public function isStaffAccount(): bool
+    {
+        return $this->hasAnyRole(['admin', 'provider', 'manager']);
+    }
+
+    public function requiresOtpVerification(): bool
+    {
+        return !$this->isStaffAccount() && !$this->isAccountVerified();
+    }
+
+    public function getRegistrationMethodEnum(): RegistrationMethod
+    {
+        if ($this->registration_method instanceof RegistrationMethod) {
+            return $this->registration_method;
+        }
+
+        if (is_string($this->registration_method) && $this->registration_method !== '') {
+            return RegistrationMethod::from($this->registration_method);
+        }
+
+        return $this->phone && !$this->email
+            ? RegistrationMethod::PHONE
+            : RegistrationMethod::EMAIL;
+    }
+
+    public function getVerificationOtpType(): OtpType
+    {
+        return $this->getRegistrationMethodEnum() === RegistrationMethod::PHONE
+            ? OtpType::SMS_OTP
+            : OtpType::EMAIL_OTP;
     }
 
     public function refreshTokens()
@@ -135,7 +191,13 @@ class User extends Authenticatable implements FilamentUser, HasName
     public function getProfileImageUrlAttribute(): ?string
     {
         if ($this->profile_image) {
-            return $this->profile_image->urlFile();
+            $url = $this->profile_image->urlFile();
+
+            if ($this->profile_image->updated_at) {
+                return $url . '?v=' . $this->profile_image->updated_at->timestamp;
+            }
+
+            return $url;
         }
         return null;
     }
@@ -146,14 +208,16 @@ class User extends Authenticatable implements FilamentUser, HasName
      */
     public function updateProfileImage(UploadedFile $image): File
     {
-        if ($this->profile_image) {
-            $this->profile_image->delete();
+        $existingProfileImage = $this->profile_image()->first();
+
+        if ($existingProfileImage) {
+            $existingProfileImage->delete();
         }
 
-        $name = str_replace(' ', '_', trim($this->first_name));
-        $extension = $image->getClientOriginalExtension();
+        $name = Str::slug(trim($this->first_name ?: 'user'), '_');
+        $extension = $image->extension() ?: $image->getClientOriginalExtension();
         $dir = "users/profile_images/{$this->id}";
-        $fileName = "{$name}_{$this->id}.{$extension}";
+        $fileName = "{$name}_{$this->id}_" . Str::uuid() . ".{$extension}";
         $path = "{$dir}/{$fileName}";
 
         Storage::disk('public')->makeDirectory($dir);
@@ -164,7 +228,7 @@ class User extends Authenticatable implements FilamentUser, HasName
 
         $image->storeAs($dir, $fileName, 'public');
 
-        return $this->profile_image()->create([
+        $file = $this->profile_image()->create([
             'name'      => $name . '_' . $this->id,
             'path'      => $path,
             'disk'      => 'public',
@@ -173,6 +237,10 @@ class User extends Authenticatable implements FilamentUser, HasName
             'group'     => 'avatar',
             'key'       => 'profile',
         ]);
+
+        $this->setRelation('profile_image', $file);
+
+        return $file;
     }
 
 

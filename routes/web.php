@@ -22,7 +22,6 @@ Route::get('/test', function () {
 
     $LineTypeRegistry= app(\App\Services\InvoiceTemplate\LineTypeRegistry::class);
     dd($LineTypeRegistry->getGroupedOptionsForSelect());
-    dd(Invoice::find(2));
 
 
     $TaxCalculatorService = app(TaxCalculatorService::class);

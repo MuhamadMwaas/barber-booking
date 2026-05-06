@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Enum\RegistrationMethod;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class LoginRequest extends FormRequest
 {
@@ -22,8 +24,27 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => 'required|email',
+            'registration_method' => ['required', Rule::enum(RegistrationMethod::class)],
+            'email' => [
+                Rule::requiredIf(fn () => $this->input('registration_method') === RegistrationMethod::EMAIL->value),
+                'nullable',
+                'email',
+            ],
+            'phone' => [
+                Rule::requiredIf(fn () => $this->input('registration_method') === RegistrationMethod::PHONE->value),
+                'nullable',
+                'string',
+            ],
             'password' => 'required|string',
-            ];
+        ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('registration_method')) {
+            $this->merge([
+                'registration_method' => strtolower((string) $this->input('registration_method')),
+            ]);
+        }
     }
 }

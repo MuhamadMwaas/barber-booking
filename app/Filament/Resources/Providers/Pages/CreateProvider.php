@@ -17,19 +17,63 @@ class CreateProvider extends CreateRecord
         // Assign provider role
         $record->assignRole('provider');
 
-        // Handle profile image upload
-        if (isset($data['profile_image_file']) && !empty($data['profile_image_file'])) {
-            $file = $data['profile_image_file'][0] ?? null;
-            if ($file) {
-                $uploadedFile = new \Illuminate\Http\UploadedFile(
-                    storage_path('app/public/' . $file),
-                    basename($file)
-                );
-                $record->updateProfileImage($uploadedFile);
-            }
-        }
-
         return $record;
+    }
+
+    protected function afterCreate(): void
+    {
+        $this->handleProfileImageUpload();
+    }
+
+    protected function handleProfileImageUpload(): void
+    {
+        try {
+            // Use getRawState() because the field has dehydrated(false)
+            $formState = $this->form->getRawState();
+            $profileImageFile = $formState['profile_image_file'] ?? null;
+
+            if (!$profileImageFile) {
+                return;
+            }
+
+            if (is_array($profileImageFile)) {
+                $profileImageFile = array_shift($profileImageFile);
+            }
+
+            if (!$profileImageFile || !is_string($profileImageFile)) {
+                return;
+            }
+
+            $tempPath = storage_path('app/public/' . $profileImageFile);
+
+            if (!file_exists($tempPath)) {
+                logger()->warning("Provider profile image file not found at: {$tempPath}");
+                return;
+            }
+
+            $mimeType = mime_content_type($tempPath);
+
+            // test=true bypasses is_uploaded_file() check for files already on disk
+            $uploadedFile = new \Illuminate\Http\UploadedFile(
+                $tempPath,
+                basename($profileImageFile),
+                $mimeType,
+                null,
+                true
+            );
+
+            $this->record->updateProfileImage($uploadedFile);
+
+            @unlink($tempPath);
+
+            logger()->info("Provider profile image uploaded for user {$this->record->id}");
+
+        } catch (\Exception $e) {
+            logger()->error('Failed to upload provider profile image: ' . $e->getMessage(), [
+                'provider_id' => $this->record->id ?? null,
+                'trace'       => $e->getTraceAsString(),
+            ]);
+        }
     }
 
     protected function getRedirectUrl(): string

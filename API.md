@@ -42,9 +42,10 @@ http://localhost:8000
 
 ### كيف يعمل؟
 
-1. أرسل طلب **Login** مع email + password
-2. ستحصل في الـ response على `access_token`
-3. أرسل هذا الـ token مع كل طلب محمي في الـ Header كالتالي:
+1. أرسل طلب **Login** مع `registration_method` + credential المناسبة + `password`
+2. إذا كان الحساب `verified` ستحصل في الـ response على `access_token`
+3. إذا كان الحساب `unverified` ستحصل على `verification challenge` ويجب إكمال `verify-otp`
+4. بعد الحصول على `access_token` أرسله مع كل طلب محمي في الـ Header كالتالي:
 
 ```
 Authorization: Bearer YOUR_ACCESS_TOKEN
@@ -64,6 +65,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
+  "registration_method": "email",
   "email": "hala.alhashimi@gmail.com",
   "password": "password"
 }
@@ -86,17 +88,17 @@ Accept: application/json
 
 ### Token Types
 
-| Token | الوصف | المدة |
-|-------|-------|-------|
-| `access_token` | للوصول إلى API | قصيرة المدة |
+| Token           | الوصف               | المدة       |
+| --------------- | ------------------- | ----------- |
+| `access_token`  | للوصول إلى API      | قصيرة المدة |
 | `refresh_token` | لتجديد access_token | طويلة المدة |
 
 ### بيانات الدخول الافتراضية (من الـ Seeder)
 
-| الدور | Email | Password |
-|-------|-------|----------|
+| الدور            | Email                      | Password   |
+| ---------------- | -------------------------- | ---------- |
 | Customer (مُتحقق) | `hala.alhashimi@gmail.com` | `password` |
-| Admin | `admin@elitebeauty.ae` | `password` |
+| Admin            | `admin@elitebeauty.ae`     | `password` |
 
 ---
 
@@ -134,7 +136,10 @@ Content-Type: multipart/form-data
 POST /api/auth/login
 ```
 
-**الوصف:** تسجيل دخول المستخدم والحصول على access_token.
+**الوصف:** تسجيل دخول المستخدم باستخدام `email` أو `phone` حسب `registration_method`.
+
+- إذا كان الحساب **مفعّلاً**: يُعاد `access_token` و`refresh_token` بشكل طبيعي.
+- إذا كان الحساب **غير مفعّل**: لا يتم إرجاع tokens، بل يتم إرسال OTP جديد إلى وسيلة التحقق المسجلة وإرجاع response يحتوي `requires_otp_verification=true`.
 
 **Authentication:** ❌ لا يتطلب
 
@@ -146,14 +151,17 @@ Content-Type: application/json
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `email` | string | ✅ | البريد الإلكتروني |
-| `password` | string | ✅ | كلمة المرور |
+| Field                 | Type   | Required | Description                                      |
+| --------------------- | ------ | -------- | ------------------------------------------------ |
+| `registration_method` | string | ✅        | `email` أو `phone`                               |
+| `email`               | string | ✅ إذا كانت الطريقة email | البريد الإلكتروني                        |
+| `phone`               | string | ✅ إذا كانت الطريقة phone | رقم الهاتف                               |
+| `password`            | string | ✅        | كلمة المرور                                      |
 
 **Example Request:**
 ```json
 {
+  "registration_method": "email",
   "email": "hala.alhashimi@gmail.com",
   "password": "password"
 }
@@ -173,7 +181,35 @@ Content-Type: application/json
   "access_expires_at": "2026-03-28T10:00:00.000000Z",
   "refresh_token": "def456...",
   "refresh_expires_at": "2026-04-28T10:00:00.000000Z",
-  "token_type": "bearer"
+  "token_type": "bearer",
+  "registration_method": "email",
+  "verification_channel": "email",
+  "email_verified": true,
+  "phone_verified": false,
+  "is_account_verified": true,
+  "requires_otp_verification": false
+}
+```
+
+**Verification Challenge Response — 403:**
+```json
+{
+  "user": {
+    "id": 20,
+    "first_name": "Test",
+    "last_name": "User",
+    "email": "testuser@example.com",
+    "phone": null
+  },
+  "message": "Your account is not verified. A new OTP has been sent to your registered contact.",
+  "registration_method": "email",
+  "verification_channel": "email",
+  "masked_destination": "te******@example.com",
+  "email_verified": false,
+  "phone_verified": false,
+  "is_account_verified": false,
+  "requires_otp_verification": true,
+  "otp": "123456"
 }
 ```
 
@@ -192,7 +228,10 @@ Content-Type: application/json
 POST /api/auth/register
 ```
 
-**الوصف:** تسجيل مستخدم جديد. يُرسل OTP للبريد الإلكتروني للتحقق.
+**الوصف:** تسجيل مستخدم جديد باستخدام `email` أو `phone` حسب `registration_method`.
+
+- التسجيل **لم يعد** يسجل المستخدم دخولاً تلقائياً.
+- النظام ينشئ الحساب، يرسل OTP إلى القناة المختارة، ويعيد response يحتوي حالة التفعيل فقط بدون tokens.
 
 **Authentication:** ❌ لا يتطلب
 
@@ -204,14 +243,15 @@ Content-Type: application/json
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `first_name` | string | ✅ | الاسم الأول (max: 255) |
-| `last_name` | string | ✅ | الاسم الأخير (max: 255) |
-| `email` | string | ✅ | البريد الإلكتروني — يجب أن يكون فريداً |
-| `phone` | string | ❌ | رقم الهاتف — يجب أن يكون فريداً إن وُجد |
-| `password` | string | ✅ | min: 8، يشترط: أحرف كبيرة وصغيرة + أرقام + رموز |
-| `password_confirmation` | string | ✅ | يجب أن يطابق `password` |
+| Field                   | Type   | Required | Description                                     |
+| ----------------------- | ------ | -------- | ----------------------------------------------- |
+| `first_name`            | string | ✅        | الاسم الأول (max: 255)                          |
+| `last_name`             | string | ✅        | الاسم الأخير (max: 255)                         |
+| `registration_method`   | string | ✅        | `email` أو `phone`                              |
+| `email`                 | string | ✅ إذا كانت الطريقة email | البريد الإلكتروني — يجب أن يكون فريداً |
+| `phone`                 | string | ✅ إذا كانت الطريقة phone | رقم الهاتف — يجب أن يكون فريداً       |
+| `password`              | string | ✅        | min: 8، يشترط: أحرف كبيرة وصغيرة + أرقام + رموز |
+| `password_confirmation` | string | ✅        | يجب أن يطابق `password`                         |
 
 **متطلبات كلمة المرور:**
 - الحد الأدنى: 8 أحرف
@@ -224,7 +264,19 @@ Content-Type: application/json
 {
   "first_name": "Test",
   "last_name": "User",
+  "registration_method": "email",
   "email": "testuser@example.com",
+  "password": "Password1@",
+  "password_confirmation": "Password1@"
+}
+```
+
+**Example Request (Phone Registration):**
+```json
+{
+  "first_name": "Test",
+  "last_name": "User",
+  "registration_method": "phone",
   "phone": "+971501234567",
   "password": "Password1@",
   "password_confirmation": "Password1@"
@@ -240,16 +292,19 @@ Content-Type: application/json
     "last_name": "User",
     "email": "testuser@example.com"
   },
-  "access_token": "2|xyz789...",
-  "access_expires_at": "2026-03-28T10:00:00.000000Z",
-  "refresh_token": "abc456...",
-  "refresh_expires_at": "2026-04-28T10:00:00.000000Z",
-  "token_type": "bearer",
+  "message": "Registration successful. Please verify your email using the OTP sent to your email.",
+  "registration_method": "email",
+  "verification_channel": "email",
+  "masked_destination": "te******@example.com",
+  "email_verified": false,
+  "phone_verified": false,
+  "is_account_verified": false,
+  "requires_otp_verification": true,
   "otp": "123456"
 }
 ```
 
-> **ملاحظة:** `otp` يظهر في الـ response في بيئة التطوير فقط. في الإنتاج يُرسل للبريد فقط.
+> **ملاحظة:** `otp` يظهر في الـ response في بيئة التطوير فقط. في الإنتاج يُرسل إلى البريد أو الهاتف حسب `registration_method`.
 
 **Validation Error — 422:**
 ```json
@@ -298,7 +353,7 @@ Authorization: Bearer {token}
 POST /api/auth/refresh
 ```
 
-**الوصف:** الحصول على access_token جديد باستخدام refresh_token.
+**الوصف:** الحصول على access_token جديد باستخدام refresh_token إذا كان الحساب مفعّلاً.
 
 **Authentication:** ❌ لا يتطلب (يكتفي بالـ refresh_token)
 
@@ -310,9 +365,9 @@ Content-Type: application/json
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `refresh_token` | string | ✅ | الـ refresh_token من Login |
+| Field           | Type   | Required | Description                |
+| --------------- | ------ | -------- | -------------------------- |
+| `refresh_token` | string | ✅        | الـ refresh_token من Login |
 
 **Example Request:**
 ```json
@@ -325,7 +380,22 @@ Content-Type: application/json
 ```json
 {
   "access_token": "3|newtoken...",
-  "access_expires_at": "2026-03-28T12:00:00.000000Z"
+  "access_expires_at": "2026-03-28T12:00:00.000000Z",
+  "requires_otp_verification": false
+}
+```
+
+**Verification Challenge Response — 403:**
+```json
+{
+  "message": "Your account is not verified. A new OTP has been sent to your registered contact.",
+  "registration_method": "email",
+  "verification_channel": "email",
+  "masked_destination": "te******@example.com",
+  "email_verified": false,
+  "phone_verified": false,
+  "is_account_verified": false,
+  "requires_otp_verification": true
 }
 ```
 
@@ -350,9 +420,9 @@ POST /api/auth/forgot-password
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `email` | string | ✅ | البريد الإلكتروني المسجل |
+| Field   | Type   | Required | Description              |
+| ------- | ------ | -------- | ------------------------ |
+| `email` | string | ✅        | البريد الإلكتروني المسجل |
 
 **Example Request:**
 ```json
@@ -385,12 +455,12 @@ POST /api/auth/reset-password
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `email` | string | ✅ | البريد الإلكتروني |
-| `otp` | string | ✅ | الكود المُرسل (6 أرقام) |
-| `password` | string | ✅ | كلمة المرور الجديدة |
-| `password_confirmation` | string | ✅ | تأكيد كلمة المرور |
+| Field                   | Type   | Required | Description            |
+| ----------------------- | ------ | -------- | ---------------------- |
+| `email`                 | string | ✅        | البريد الإلكتروني      |
+| `otp`                   | string | ✅        | الكود المُرسل (6 أرقام) |
+| `password`              | string | ✅        | كلمة المرور الجديدة    |
+| `password_confirmation` | string | ✅        | تأكيد كلمة المرور      |
 
 **Example Request:**
 ```json
@@ -424,22 +494,23 @@ POST /api/auth/reset-password
 POST /api/auth/request-otp
 ```
 
-**الوصف:** طلب إرسال OTP عبر البريد الإلكتروني أو SMS.
+**الوصف:** طلب إرسال OTP عبر القناة المحددة. الحقل canonical هو `registration_method`، مع بقاء `type` مدعوماً مؤقتاً للتوافق الخلفي.
 
 **Authentication:** ❌ لا يتطلب
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | ✅ | `email_otp` أو `sms_otp` |
-| `email` | string | ✅ إذا type=email_otp | البريد الإلكتروني |
-| `phone` | string | ✅ إذا type=sms_otp | رقم الهاتف |
+| Field                 | Type   | Required | Description                                      |
+| --------------------- | ------ | -------- | ------------------------------------------------ |
+| `registration_method` | string | ✅ يوصى به | `email` أو `phone`                           |
+| `type`                | integer | ❌ للتوافق الخلفي | `1` للبريد و`2` للهاتف                |
+| `email`               | string | ✅ إذا كانت الطريقة email | البريد الإلكتروني                |
+| `phone`               | string | ✅ إذا كانت الطريقة phone | رقم الهاتف                       |
 
 **Example Request (Email):**
 ```json
 {
-  "type": "email_otp",
+  "registration_method": "email",
   "email": "hala.alhashimi@gmail.com"
 }
 ```
@@ -447,7 +518,7 @@ POST /api/auth/request-otp
 **Example Request (SMS):**
 ```json
 {
-  "type": "sms_otp",
+  "registration_method": "phone",
   "phone": "+971501111111"
 }
 ```
@@ -455,7 +526,10 @@ POST /api/auth/request-otp
 **Success Response — 200:**
 ```json
 {
-  "message": "OTP sent to hala.alhashimi@gmail.com"
+  "message": "OTP sent successfully.",
+  "registration_method": "email",
+  "verification_channel": "email",
+  "masked_destination": "ha**************@gmail.com"
 }
 ```
 
@@ -467,23 +541,24 @@ POST /api/auth/request-otp
 POST /api/auth/verify-otp
 ```
 
-**الوصف:** التحقق من صحة OTP.
+**الوصف:** التحقق من OTP وتفعيل الحساب ثم إرجاع `access_token` و`refresh_token` مباشرة.
 
 **Authentication:** ❌ لا يتطلب
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | ✅ | `email_otp` أو `sms_otp` |
-| `email` | string | ✅ إذا type=email_otp | البريد الإلكتروني |
-| `phone` | string | ✅ إذا type=sms_otp | رقم الهاتف |
-| `otp` | string | ✅ | رمز الـ OTP |
+| Field                 | Type   | Required | Description                                      |
+| --------------------- | ------ | -------- | ------------------------------------------------ |
+| `registration_method` | string | ✅ يوصى به | `email` أو `phone`                           |
+| `type`                | integer | ❌ للتوافق الخلفي | `1` للبريد و`2` للهاتف                |
+| `email`               | string | ✅ إذا كانت الطريقة email | البريد الإلكتروني                |
+| `phone`               | string | ✅ إذا كانت الطريقة phone | رقم الهاتف                       |
+| `otp`                 | string | ✅        | رمز الـ OTP                                      |
 
 **Example Request:**
 ```json
 {
-  "type": "email_otp",
+  "registration_method": "email",
   "email": "hala.alhashimi@gmail.com",
   "otp": "123456"
 }
@@ -492,7 +567,25 @@ POST /api/auth/verify-otp
 **Success Response — 200:**
 ```json
 {
-  "message": "OTP verified"
+  "message": "Email verified successfully.",
+  "user": {
+    "id": 20,
+    "first_name": "Test",
+    "last_name": "User",
+    "email": "testuser@example.com"
+  },
+  "access_token": "1|abc123xyz...",
+  "access_expires_at": "2026-03-28T10:00:00.000000Z",
+  "refresh_token": "def456...",
+  "refresh_expires_at": "2026-04-28T10:00:00.000000Z",
+  "token_type": "bearer",
+  "registration_method": "email",
+  "verification_channel": "email",
+  "masked_destination": "te******@example.com",
+  "email_verified": true,
+  "phone_verified": false,
+  "is_account_verified": true,
+  "requires_otp_verification": false
 }
 ```
 
@@ -511,16 +604,16 @@ POST /api/auth/verify-otp
 POST /api/auth/verify-email-otp
 ```
 
-**الوصف:** التحقق من البريد الإلكتروني بعد التسجيل باستخدام OTP مكون من 6 أرقام.
+**الوصف:** Wrapper متوافق مع النسخة القديمة لمسار تفعيل البريد. داخلياً ينفّذ نفس سلوك `verify-otp` لقناة `email` ويعيد tokens بعد نجاح التحقق.
 
 **Authentication:** ❌ لا يتطلب
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `email` | string | ✅ | البريد الإلكتروني |
-| `otp` | string | ✅ | OTP مكون من 6 أرقام بالضبط |
+| Field   | Type   | Required | Description                |
+| ------- | ------ | -------- | -------------------------- |
+| `email` | string | ✅        | البريد الإلكتروني          |
+| `otp`   | string | ✅        | OTP مكون من 6 أرقام بالضبط |
 
 **Example Request:**
 ```json
@@ -533,8 +626,11 @@ POST /api/auth/verify-email-otp
 **Success Response — 200:**
 ```json
 {
-  "message": "Email verified successfully",
-  "email_verified": true
+  "message": "Email verified successfully.",
+  "access_token": "1|abc123xyz...",
+  "refresh_token": "def456...",
+  "email_verified": true,
+  "requires_otp_verification": false
 }
 ```
 
@@ -546,19 +642,22 @@ POST /api/auth/verify-email-otp
 POST /api/auth/resend-verification-otp
 ```
 
-**الوصف:** إعادة إرسال OTP للتحقق من البريد الإلكتروني.
+**الوصف:** إعادة إرسال OTP للتحقق من الحساب غير المفعّل. يدعم البريد أو الهاتف حسب `registration_method`.
 
 **Authentication:** ❌ لا يتطلب
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `email` | string | ✅ | بريد مسجل وغير مُتحقق منه |
+| Field                 | Type   | Required | Description                                      |
+| --------------------- | ------ | -------- | ------------------------------------------------ |
+| `registration_method` | string | ✅        | `email` أو `phone`                               |
+| `email`               | string | ✅ إذا كانت الطريقة email | بريد مسجل وغير مُتحقق منه        |
+| `phone`               | string | ✅ إذا كانت الطريقة phone | هاتف مسجل وغير مُتحقق منه        |
 
 **Example Request:**
 ```json
 {
+  "registration_method": "email",
   "email": "testuser@example.com"
 }
 ```
@@ -566,15 +665,19 @@ POST /api/auth/resend-verification-otp
 **Success Response — 200:**
 ```json
 {
-  "message": "OTP sent to your email",
+  "message": "OTP sent to your email.",
+  "registration_method": "email",
+  "verification_channel": "email",
+  "masked_destination": "te******@example.com",
+  "requires_otp_verification": true,
   "otp": "654321"
 }
 ```
 
-**Error Response — 400 (البريد مُتحقق منه مسبقاً):**
+**Error Response — 400 (الحساب مُفعّل مسبقاً):**
 ```json
 {
-  "message": "Email already verified"
+  "message": "Account already verified."
 }
 ```
 
@@ -643,14 +746,14 @@ Content-Type: multipart/form-data
 
 **Request Body (Form Data):**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `first_name` | string | ❌ | الاسم الأول (max: 255) |
-| `last_name` | string | ❌ | الاسم الأخير (max: 255) |
-| `phone` | string | ❌ | رقم الهاتف (max: 20) |
-| `address` | string | ❌ | العنوان (max: 500) |
-| `city` | string | ❌ | المدينة (max: 255) |
-| `image` | file | ❌ | صورة الملف الشخصي (max: 2MB، صور فقط) |
+| Field        | Type   | Required | Description                           |
+| ------------ | ------ | -------- | ------------------------------------- |
+| `first_name` | string | ❌        | الاسم الأول (max: 255)                |
+| `last_name`  | string | ❌        | الاسم الأخير (max: 255)               |
+| `phone`      | string | ❌        | رقم الهاتف (max: 20)                  |
+| `address`    | string | ❌        | العنوان (max: 500)                    |
+| `city`       | string | ❌        | المدينة (max: 255)                    |
+| `image`      | file   | ❌        | صورة الملف الشخصي (max: 2MB، صور فقط) |
 
 **Example Request:**
 ```
@@ -701,11 +804,11 @@ Content-Type: application/json
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `current_password` | string | ✅ | كلمة المرور الحالية |
-| `password` | string | ✅ | كلمة المرور الجديدة — min: 8، mixed case + numbers |
-| `password_confirmation` | string | ✅ | تأكيد كلمة المرور الجديدة |
+| Field                   | Type   | Required | Description                                        |
+| ----------------------- | ------ | -------- | -------------------------------------------------- |
+| `current_password`      | string | ✅        | كلمة المرور الحالية                                |
+| `password`              | string | ✅        | كلمة المرور الجديدة — min: 8، mixed case + numbers |
+| `password_confirmation` | string | ✅        | تأكيد كلمة المرور الجديدة                          |
 
 **Example Request:**
 ```json
@@ -752,14 +855,14 @@ GET /api/providers
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `per_page` | integer | ❌ | 15 | عدد النتائج في الصفحة |
-| `sort_by` | string | ❌ | `first_name` | حقل الترتيب |
-| `sort_direction` | string | ❌ | `asc` | `asc` أو `desc` |
-| `search` | string | ❌ | — | البحث بالاسم |
-| `branch_id` | integer | ❌ | — | فلترة حسب الفرع |
-| `service_id` | integer | ❌ | — | فلترة من يقدم خدمة معينة |
+| Parameter        | Type    | Required | Default      | Description              |
+| ---------------- | ------- | -------- | ------------ | ------------------------ |
+| `per_page`       | integer | ❌        | 15           | عدد النتائج في الصفحة    |
+| `sort_by`        | string  | ❌        | `first_name` | حقل الترتيب              |
+| `sort_direction` | string  | ❌        | `asc`        | `asc` أو `desc`          |
+| `search`         | string  | ❌        | —            | البحث بالاسم             |
+| `branch_id`      | integer | ❌        | —            | فلترة حسب الفرع          |
+| `service_id`     | integer | ❌        | —            | فلترة من يقدم خدمة معينة |
 
 **Example Request:**
 ```
@@ -806,15 +909,15 @@ GET /api/providers/{id}
 
 **Path Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | integer | ✅ | معرف مقدم الخدمة |
+| Parameter | Type    | Required | Description      |
+| --------- | ------- | -------- | ---------------- |
+| `id`      | integer | ✅        | معرف مقدم الخدمة |
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `locale` | string | ❌ | لغة الاستجابة: `en`, `ar`, `de` |
+| Parameter | Type   | Required | Description                     |
+| --------- | ------ | -------- | ------------------------------- |
+| `locale`  | string | ❌        | لغة الاستجابة: `en`, `ar`, `de` |
 
 **Example Request:**
 ```
@@ -872,14 +975,14 @@ GET /api/services
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `per_page` | integer | ❌ | 15 | عدد النتائج في الصفحة |
-| `sort_by` | string | ❌ | `sort_order` | حقل الترتيب |
-| `sort_direction` | string | ❌ | `asc` | `asc` أو `desc` |
-| `category_id` | integer | ❌ | — | فلترة حسب الفئة |
-| `featured` | any | ❌ | — | عرض الخدمات المميزة فقط |
-| `search` | string | ❌ | — | البحث في الاسم والوصف |
+| Parameter        | Type    | Required | Default      | Description             |
+| ---------------- | ------- | -------- | ------------ | ----------------------- |
+| `per_page`       | integer | ❌        | 15           | عدد النتائج في الصفحة   |
+| `sort_by`        | string  | ❌        | `sort_order` | حقل الترتيب             |
+| `sort_direction` | string  | ❌        | `asc`        | `asc` أو `desc`         |
+| `category_id`    | integer | ❌        | —            | فلترة حسب الفئة         |
+| `featured`       | any     | ❌        | —            | عرض الخدمات المميزة فقط |
+| `search`         | string  | ❌        | —            | البحث في الاسم والوصف   |
 
 **Example Request:**
 ```
@@ -937,9 +1040,9 @@ GET /api/services/{id}
 
 **Path Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | integer | ✅ | معرف الخدمة (أرقام فقط) |
+| Parameter | Type    | Required | Description             |
+| --------- | ------- | -------- | ----------------------- |
+| `id`      | integer | ✅        | معرف الخدمة (أرقام فقط) |
 
 **Example Request:**
 ```
@@ -998,12 +1101,12 @@ GET /api/availability/provider
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `service_id` | integer | ✅ | معرف الخدمة |
-| `provider_id` | integer | ✅ | معرف مقدم الخدمة |
-| `date` | string | ✅ | التاريخ بصيغة `Y-m-d` — اليوم أو مستقبلاً |
-| `branch_id` | integer | ❌ | معرف الفرع |
+| Parameter     | Type    | Required | Description                              |
+| ------------- | ------- | -------- | ---------------------------------------- |
+| `service_id`  | integer | ✅        | معرف الخدمة                              |
+| `provider_id` | integer | ✅        | معرف مقدم الخدمة                         |
+| `date`        | string  | ✅        | التاريخ بصيغة `Y-m-d` — اليوم أو مستقبلاً |
+| `branch_id`   | integer | ❌        | معرف الفرع                               |
 
 **Example Request:**
 ```
@@ -1057,13 +1160,13 @@ GET /api/availability/calendar
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `service_id` | integer | ✅ | معرف الخدمة |
-| `provider_id` | integer | ❌ | معرف مقدم الخدمة |
-| `start_date` | string | ✅ | تاريخ البداية `Y-m-d` — اليوم أو مستقبلاً |
-| `end_date` | string | ✅ | تاريخ النهاية `Y-m-d` — يجب أن يكون بعد start_date |
-| `branch_id` | integer | ❌ | معرف الفرع |
+| Parameter     | Type    | Required | Description                                        |
+| ------------- | ------- | -------- | -------------------------------------------------- |
+| `service_id`  | integer | ✅        | معرف الخدمة                                        |
+| `provider_id` | integer | ❌        | معرف مقدم الخدمة                                   |
+| `start_date`  | string  | ✅        | تاريخ البداية `Y-m-d` — اليوم أو مستقبلاً           |
+| `end_date`    | string  | ✅        | تاريخ النهاية `Y-m-d` — يجب أن يكون بعد start_date |
+| `branch_id`   | integer | ❌        | معرف الفرع                                         |
 
 **Example Request:**
 ```
@@ -1121,16 +1224,16 @@ GET /api/appointments
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `per_page` | integer | ❌ | عدد النتائج (1-100، افتراضي: 15) |
-| `status` | string | ❌ | `PENDING` \| `COMPLETED` \| `USER_CANCELLED` \| `ADMIN_CANCELLED` \| `ALL` |
-| `payment_status` | string | ❌ | `PENDING` \| `PAID_ONLINE` \| `PAID_ONSTIE_CASH` \| `PAID_ONSTIE_CARD` \| `FAILED` \| `REFUNDED` \| `PARTIALLY_REFUNDED` |
-| `date_from` | string | ❌ | تاريخ البداية `Y-m-d` |
-| `date_to` | string | ❌ | تاريخ النهاية `Y-m-d` |
-| `type` | string | ❌ | `upcoming` أو `past` |
-| `sort_by` | string | ❌ | `appointment_date` \| `created_at` \| `total_amount` |
-| `sort_direction` | string | ❌ | `asc` أو `desc` |
+| Parameter        | Type    | Required | Description                                                                                                              |
+| ---------------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `per_page`       | integer | ❌        | عدد النتائج (1-100، افتراضي: 15)                                                                                         |
+| `status`         | string  | ❌        | `PENDING` \| `COMPLETED` \| `USER_CANCELLED` \| `ADMIN_CANCELLED` \| `ALL`                                               |
+| `payment_status` | string  | ❌        | `PENDING` \| `PAID_ONLINE` \| `PAID_ONSTIE_CASH` \| `PAID_ONSTIE_CARD` \| `FAILED` \| `REFUNDED` \| `PARTIALLY_REFUNDED` |
+| `date_from`      | string  | ❌        | تاريخ البداية `Y-m-d`                                                                                                    |
+| `date_to`        | string  | ❌        | تاريخ النهاية `Y-m-d`                                                                                                    |
+| `type`           | string  | ❌        | `upcoming` أو `past`                                                                                                     |
+| `sort_by`        | string  | ❌        | `appointment_date` \| `created_at` \| `total_amount`                                                                     |
+| `sort_direction` | string  | ❌        | `asc` أو `desc`                                                                                                          |
 
 **Example Request:**
 ```
@@ -1170,13 +1273,13 @@ GET {{base_url}}/api/appointments?per_page=15&status=PENDING
 
 **قيم AppointmentStatus:**
 
-| القيمة | الاسم | الوصف |
-|--------|-------|-------|
-| `0` | `PENDING` | قيد الانتظار |
-| `1` | `COMPLETED` | مكتمل |
-| `-1` | `USER_CANCELLED` | ألغاه العميل |
-| `-2` | `ADMIN_CANCELLED` | ألغاه الإدارة |
-| `-3` | `NO_SHOW` | لم يحضر |
+| القيمة | الاسم             | الوصف         |
+| ------ | ----------------- | ------------- |
+| `0`    | `PENDING`         | قيد الانتظار  |
+| `1`    | `COMPLETED`       | مكتمل         |
+| `-1`   | `USER_CANCELLED`  | ألغاه العميل  |
+| `-2`   | `ADMIN_CANCELLED` | ألغاه الإدارة |
+| `-3`   | `NO_SHOW`         | لم يحضر       |
 
 ---
 
@@ -1192,9 +1295,9 @@ GET /api/appointments/{id}
 
 **Path Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | integer | ✅ | معرف الحجز (أرقام فقط) |
+| Parameter | Type    | Required | Description            |
+| --------- | ------- | -------- | ---------------------- |
+| `id`      | integer | ✅        | معرف الحجز (أرقام فقط) |
 
 **Example Request:**
 ```
@@ -1291,9 +1394,9 @@ GET /api/appointments/upcoming
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `days` | integer | ❌ | 7 | عدد الأيام القادمة (1-90) |
+| Parameter | Type    | Required | Default | Description               |
+| --------- | ------- | -------- | ------- | ------------------------- |
+| `days`    | integer | ❌        | 7       | عدد الأيام القادمة (1-90) |
 
 **Example Request:**
 ```
@@ -1324,9 +1427,9 @@ GET /api/appointments/past
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `limit` | integer | ❌ | 10 | عدد النتائج (1-50) |
+| Parameter | Type    | Required | Default | Description        |
+| --------- | ------- | -------- | ------- | ------------------ |
+| `limit`   | integer | ❌        | 10      | عدد النتائج (1-50) |
 
 **Example Request:**
 ```
@@ -1390,9 +1493,9 @@ GET /api/appointments/search
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `query` | string | ✅ | نص البحث — الحد الأدنى حرفان |
+| Parameter | Type   | Required | Description                  |
+| --------- | ------ | -------- | ---------------------------- |
+| `query`   | string | ✅        | نص البحث — الحد الأدنى حرفان |
 
 **Example Request:**
 ```
@@ -1431,15 +1534,15 @@ POST /api/appointments/{id}/cancel
 
 **Path Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | integer | ✅ | معرف الحجز |
+| Parameter | Type    | Required | Description |
+| --------- | ------- | -------- | ----------- |
+| `id`      | integer | ✅        | معرف الحجز  |
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `reason` | string | ❌ | سبب الإلغاء (max: 500) |
+| Field    | Type   | Required | Description            |
+| -------- | ------ | -------- | ---------------------- |
+| `reason` | string | ❌        | سبب الإلغاء (max: 500) |
 
 **Example Request:**
 ```json
@@ -1486,10 +1589,10 @@ POST /api/appointments/reminders
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `appointment_id` | integer | ✅ | معرف الحجز — يجب أن يكون ملك المستخدم |
-| `remind_at` | datetime | ✅ | وقت التذكير — بعد الآن وقبل بداية الحجز |
+| Field            | Type     | Required | Description                             |
+| ---------------- | -------- | -------- | --------------------------------------- |
+| `appointment_id` | integer  | ✅        | معرف الحجز — يجب أن يكون ملك المستخدم   |
+| `remind_at`      | datetime | ✅        | وقت التذكير — بعد الآن وقبل بداية الحجز |
 
 **Example Request:**
 ```json
@@ -1538,9 +1641,9 @@ POST /api/appointments/reminders
 
 ## Bookings API
 
-> جميع endpoints تتطلب **Authentication + Email Verification**
+> جميع endpoints تتطلب **Authentication + Account Verification**
 
-> ⚠️ **مهم:** يجب التحقق من البريد الإلكتروني (`email_verified_at`) لاستخدام هذه الـ endpoints. بدونه ستحصل على `403 Forbidden`.
+> ⚠️ **مهم:** يجب أن يكون الحساب **مفعّلاً** لاستخدام هذه الـ endpoints. التفعيل قد يتم عبر `email_verified_at` أو `phone_verified_at` حسب `registration_method`. بدون ذلك ستحصل على `403 Forbidden`.
 
 ---
 
@@ -1556,9 +1659,9 @@ GET /api/bookings
 
 **Query Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `status` | integer | ❌ | قيمة رقمية: `0`=PENDING، `1`=COMPLETED، `-1`=USER_CANCELLED |
+| Parameter | Type    | Required | Description                                                 |
+| --------- | ------- | -------- | ----------------------------------------------------------- |
+| `status`  | integer | ❌        | قيمة رقمية: `0`=PENDING، `1`=COMPLETED، `-1`=USER_CANCELLED |
 
 **Example Request:**
 ```
@@ -1599,15 +1702,15 @@ POST /api/bookings
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `date` | string | ✅ | تاريخ الحجز `Y-m-d` — اليوم أو مستقبلاً |
-| `payment_method` | string | ✅ | `cash` أو `online` |
-| `notes` | string | ❌ | ملاحظات (max: 1000) |
-| `services` | array | ✅ | قائمة الخدمات (1-10 خدمات، بدون تكرار) |
-| `services[].service_id` | integer | ✅ | معرف الخدمة — يجب أن يكون موجوداً في DB |
-| `services[].provider_id` | integer | ✅ | معرف مقدم الخدمة — يجب أن يقدم الخدمة المحددة |
-| `services[].start_time` | string | ✅ | وقت البدء بصيغة `H:i` مثال: `10:00` |
+| Field                    | Type    | Required | Description                                   |
+| ------------------------ | ------- | -------- | --------------------------------------------- |
+| `date`                   | string  | ✅        | تاريخ الحجز `Y-m-d` — اليوم أو مستقبلاً        |
+| `payment_method`         | string  | ✅        | `cash` أو `online`                            |
+| `notes`                  | string  | ❌        | ملاحظات (max: 1000)                           |
+| `services`               | array   | ✅        | قائمة الخدمات (1-10 خدمات، بدون تكرار)        |
+| `services[].service_id`  | integer | ✅        | معرف الخدمة — يجب أن يكون موجوداً في DB        |
+| `services[].provider_id` | integer | ✅        | معرف مقدم الخدمة — يجب أن يقدم الخدمة المحددة |
+| `services[].start_time`  | string  | ✅        | وقت البدء بصيغة `H:i` مثال: `10:00`           |
 
 **قواعد الـ Validation:**
 - الخدمات يجب أن تكون متتالية (لا تداخل في الأوقات)
@@ -1708,16 +1811,16 @@ POST /api/bookings
 
 **أنواع أخطاء الـ Business Logic الشائعة:**
 
-| الرسالة | السبب |
-|---------|-------|
-| `Provider 'X' does not offer service 'Y'` | المزود لا يقدم الخدمة المحددة |
-| `Provider 'X' does not work on Sunday` | لا جدول عمل في هذا اليوم |
-| `Time slot is outside working hours (09:00 - 17:00)` | الوقت خارج ساعات العمل |
-| `Provider has time off during the requested time slot` | المزود في إجازة |
-| `Time slot is already booked` | الوقت محجوز مسبقاً |
-| `Booking must be at least X minutes in advance` | الحجز قريب جداً من الوقت الحالي |
-| `Cannot book more than X days in advance` | التاريخ بعيد جداً |
-| `You already have a booking for the same time and services` | حجز مكرر |
+| الرسالة                                                     | السبب                          |
+| ----------------------------------------------------------- | ------------------------------ |
+| `Provider 'X' does not offer service 'Y'`                   | المزود لا يقدم الخدمة المحددة  |
+| `Provider 'X' does not work on Sunday`                      | لا جدول عمل في هذا اليوم       |
+| `Time slot is outside working hours (09:00 - 17:00)`        | الوقت خارج ساعات العمل         |
+| `Provider has time off during the requested time slot`      | المزود في إجازة                |
+| `Time slot is already booked`                               | الوقت محجوز مسبقاً              |
+| `Booking must be at least X minutes in advance`             | الحجز قريب جداً من الوقت الحالي |
+| `Cannot book more than X days in advance`                   | التاريخ بعيد جداً               |
+| `You already have a booking for the same time and services` | حجز مكرر                       |
 
 ---
 
@@ -1733,9 +1836,9 @@ GET /api/bookings/{id}
 
 **Path Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | integer | ✅ | معرف الحجز |
+| Parameter | Type    | Required | Description |
+| --------- | ------- | -------- | ----------- |
+| `id`      | integer | ✅        | معرف الحجز  |
 
 **Example Request:**
 ```
@@ -1776,15 +1879,15 @@ POST /api/bookings/{id}/cancel
 
 **Path Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | integer | ✅ | معرف الحجز |
+| Parameter | Type    | Required | Description |
+| --------- | ------- | -------- | ----------- |
+| `id`      | integer | ✅        | معرف الحجز  |
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `cancellation_reason` | string | ❌ | سبب الإلغاء |
+| Field                 | Type   | Required | Description |
+| --------------------- | ------ | -------- | ----------- |
+| `cancellation_reason` | string | ❌        | سبب الإلغاء |
 
 **Example Request:**
 ```json
@@ -1835,14 +1938,14 @@ POST /api/register-device
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `device_id` | string | ✅ | معرف الجهاز الفريد |
-| `device_token` | string | ❌ | FCM/APNs push token |
-| `platform` | string | ❌ | `android` أو `ios` |
-| `os_version` | string | ❌ | إصدار نظام التشغيل |
-| `app_version` | string | ❌ | إصدار التطبيق |
-| `meta` | object | ❌ | بيانات إضافية بأي شكل |
+| Field          | Type   | Required | Description           |
+| -------------- | ------ | -------- | --------------------- |
+| `device_id`    | string | ✅        | معرف الجهاز الفريد    |
+| `device_token` | string | ❌        | FCM/APNs push token   |
+| `platform`     | string | ❌        | `android` أو `ios`    |
+| `os_version`   | string | ❌        | إصدار نظام التشغيل    |
+| `app_version`  | string | ❌        | إصدار التطبيق         |
+| `meta`         | object | ❌        | بيانات إضافية بأي شكل |
 
 **Example Request:**
 ```json
@@ -1888,9 +1991,9 @@ POST /api/deregister-device
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `device_id` | string | ✅ | معرف الجهاز المراد إلغاء تسجيله |
+| Field       | Type   | Required | Description                     |
+| ----------- | ------ | -------- | ------------------------------- |
+| `device_id` | string | ✅        | معرف الجهاز المراد إلغاء تسجيله |
 
 **Example Request:**
 ```json
@@ -1933,9 +2036,9 @@ POST /api/invoice/{invoice}/print
 
 **Path Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `invoice` | integer | ✅ | معرف الفاتورة |
+| Parameter | Type    | Required | Description   |
+| --------- | ------- | -------- | ------------- |
+| `invoice` | integer | ✅        | معرف الفاتورة |
 
 **Example Request:**
 ```
@@ -1956,9 +2059,9 @@ POST /api/invoices/print-batch
 
 **Request Body:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `invoice_ids` | array | ✅ | مصفوفة معرفات الفواتير |
+| Field         | Type  | Required | Description            |
+| ------------- | ----- | -------- | ---------------------- |
+| `invoice_ids` | array | ✅        | مصفوفة معرفات الفواتير |
 
 **Example Request:**
 ```json
@@ -1981,9 +2084,9 @@ GET /api/invoice/{invoice}/print-url
 
 **Path Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `invoice` | integer | ✅ | معرف الفاتورة |
+| Parameter | Type    | Required | Description   |
+| --------- | ------- | -------- | ------------- |
+| `invoice` | integer | ✅        | معرف الفاتورة |
 
 **Example Request:**
 ```
@@ -2004,9 +2107,9 @@ POST /api/printer/{printer}/test
 
 **Path Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `printer` | integer | ✅ | معرف الطابعة |
+| Parameter | Type    | Required | Description  |
+| --------- | ------- | -------- | ------------ |
+| `printer` | integer | ✅        | معرف الطابعة |
 
 **Example Request:**
 ```
@@ -2051,13 +2154,13 @@ GET {{base_url}}/api/print/logs
 
 ## ملخص الـ Errors الشائعة
 
-| Status Code | الوصف | السبب الشائع |
-|-------------|-------|-------------|
-| `401` | Unauthorized | لم تُرسل token أو انتهت صلاحيتها |
-| `403` | Forbidden | محاولة الوصول لبيانات مستخدم آخر |
-| `404` | Not Found | المورد غير موجود |
-| `422` | Unprocessable Entity | خطأ في الـ Validation أو قواعد العمل |
-| `500` | Server Error | خطأ في السيرفر |
+| Status Code | الوصف                | السبب الشائع                         |
+| ----------- | -------------------- | ------------------------------------ |
+| `401`       | Unauthorized         | لم تُرسل token أو انتهت صلاحيتها      |
+| `403`       | Forbidden            | محاولة الوصول لبيانات مستخدم آخر     |
+| `404`       | Not Found            | المورد غير موجود                     |
+| `422`       | Unprocessable Entity | خطأ في الـ Validation أو قواعد العمل |
+| `500`       | Server Error         | خطأ في السيرفر                       |
 
 ## شكل الـ Error Response العام
 

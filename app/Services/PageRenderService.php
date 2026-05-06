@@ -7,6 +7,8 @@ use App\Exceptions\PageTranslationMissingException;
 use App\Models\SamplePage;
 use Illuminate\Contracts\View\View;
 
+use function Termwind\render;
+
 class PageRenderService
 {
 
@@ -44,6 +46,7 @@ class PageRenderService
                 'title' => is_array($meta) ? ($meta['title'] ?? null) : null,
                 'description' => is_array($meta) ? ($meta['description'] ?? null) : null,
             ];
+
 
             return view($page->template, [
                 'page' => $page,

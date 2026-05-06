@@ -29,7 +29,7 @@ class PageController extends Controller
 
         try {
 
-            return $service->render('terms', $lang);
+            return $service->render('privacy', $lang);
         } catch (\Throwable $e) {
             logger()->error('Error rendering privacy page: ' . $e->getMessage());
             throw $e;

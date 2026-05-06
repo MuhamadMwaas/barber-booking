@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Enum\RegistrationMethod;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 class RegisterRequest extends FormRequest
@@ -25,8 +27,21 @@ class RegisterRequest extends FormRequest
         return [
             'first_name' => 'required|string|max:255',
             'last_name'=> 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'phone' => 'nullable|string|max:255|unique:users,phone',
+            'registration_method' => ['required', Rule::enum(RegistrationMethod::class)],
+            'email' => [
+                Rule::requiredIf(fn () => $this->input('registration_method') === RegistrationMethod::EMAIL->value),
+                'nullable',
+                'email',
+                'max:255',
+                'unique:users,email',
+            ],
+            'phone' => [
+                Rule::requiredIf(fn () => $this->input('registration_method') === RegistrationMethod::PHONE->value),
+                'nullable',
+                'string',
+                'max:255',
+                'unique:users,phone',
+            ],
             'password' => [
                 'required',
                 'string',
@@ -36,5 +51,14 @@ class RegisterRequest extends FormRequest
                     ->mixedCase()->letters()->numbers()->symbols()
             ],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('registration_method')) {
+            $this->merge([
+                'registration_method' => strtolower((string) $this->input('registration_method')),
+            ]);
+        }
     }
 }

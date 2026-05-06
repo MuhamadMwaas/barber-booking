@@ -44,7 +44,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"first_name\": \"أحمد\",\n  \"last_name\": \"الرشيدي\",\n  \"email\": \"ahmed@example.com\",\n  \"phone\": \"+966501234567\",\n  \"password\": \"Password@123\",\n  \"password_confirmation\": \"Password@123\"\n}",
+							"raw": "{\n  \"first_name\": \"أحمد\",\n  \"last_name\": \"الرشيدي\",\n  \"registration_method\": \"email\",\n  \"email\": \"ahmed@example.com\",\n  \"password\": \"Password@123\",\n  \"password_confirmation\": \"Password@123\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -52,7 +52,7 @@
 							}
 						},
 						"url": "{{base_url}}/api/auth/register",
-						"description": "يسجل مستخدماً جديداً ويعيد access token و refresh token.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- first_name: نص\n- last_name: نص\n- email: بريد إلكتروني فريد\n- password: نص قوي\n- password_confirmation: تأكيد كلمة المرور\n\nالحقول الاختيارية:\n- phone: نص فريد"
+						"description": "يسجل مستخدماً جديداً ويبدأ مسار التفعيل الإجباري عبر OTP.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- first_name: نص\n- last_name: نص\n- registration_method: email أو phone\n- password: نص قوي\n- password_confirmation: تأكيد كلمة المرور\n\nالحقول الشرطية:\n- email: مطلوب إذا كانت registration_method = email\n- phone: مطلوب إذا كانت registration_method = phone\n\nملاحظة: لا يتم إرجاع access token أو refresh token من register بعد الآن."
 					},
 					"event": [
 						{
@@ -85,7 +85,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"ahmed@example.com\",\n  \"password\": \"Password@123\"\n}",
+							"raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"ahmed@example.com\",\n  \"password\": \"Password@123\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -93,7 +93,7 @@
 							}
 						},
 						"url": "{{base_url}}/api/auth/login",
-						"description": "يسجل دخول المستخدم ويعيد access token و refresh token.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- email: بريد إلكتروني\n- password: نص"
+						"description": "يسجل دخول المستخدم عبر email أو phone حسب registration_method.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- registration_method: email أو phone\n- password: نص\n\nالحقول الشرطية:\n- email: مطلوب إذا كانت registration_method = email\n- phone: مطلوب إذا كانت registration_method = phone\n\nملاحظة: إذا كان الحساب غير مفعّل فسيعود 403 مع requires_otp_verification=true ولن يعيد tokens."
 					},
 					"event": [
 						{
@@ -101,8 +101,8 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.test(\"الحالة ناجحة\", function () {",
-									"    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+									"pm.test(\"الحالة المتوقعة\", function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([200, 201, 403]);",
 									"});",
 									"",
 									"pm.test(\"الرد بصيغة JSON\", function () {",
@@ -300,7 +300,7 @@
 							}
 						},
 						"url": "{{base_url}}/api/auth/verify-email-otp",
-						"description": "يؤكد البريد الإلكتروني عبر OTP.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- email: بريد إلكتروني\n- otp: نص بطول 6"
+						"description": "Wrapper متوافق مع المسار القديم لتفعيل البريد عبر OTP. بعد النجاح يعيد access token و refresh token لأن التفعيل يكتمل داخل هذا المسار.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- email: بريد إلكتروني\n- otp: نص بطول 6"
 					},
 					"event": [
 						{
@@ -333,7 +333,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"ahmed@example.com\"\n}",
+							"raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"ahmed@example.com\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -341,7 +341,7 @@
 							}
 						},
 						"url": "{{base_url}}/api/auth/resend-verification-otp",
-						"description": "يعيد إرسال OTP لتأكيد البريد الإلكتروني.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- email: بريد إلكتروني موجود في جدول المستخدمين"
+						"description": "يعيد إرسال OTP لتأكيد الحساب غير المفعّل.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- registration_method: email أو phone\n\nالحقول الشرطية:\n- email: مطلوب إذا كانت registration_method = email\n- phone: مطلوب إذا كانت registration_method = phone"
 					},
 					"event": [
 						{
@@ -374,7 +374,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"type\": 0,\n  \"email\": \"ahmed@example.com\"\n}",
+							"raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"ahmed@example.com\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -382,7 +382,7 @@
 							}
 						},
 						"url": "{{base_url}}/api/auth/request-otp",
-						"description": "يرسل OTP بحسب النوع.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- type: رقم، 0 للبريد و1 للهاتف\n\nالحقول الشرطية:\n- email: مطلوب عندما يكون type = 0\n- phone: مطلوب عندما يكون type = 1"
+						"description": "يرسل OTP حسب registration_method. الحقل type ما زال مدعوماً للتوافق الخلفي فقط.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- registration_method: email أو phone\n\nالحقول الشرطية:\n- email: مطلوب إذا كانت registration_method = email\n- phone: مطلوب إذا كانت registration_method = phone"
 					},
 					"event": [
 						{
@@ -415,7 +415,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"type\": 0,\n  \"email\": \"ahmed@example.com\",\n  \"otp\": \"123456\"\n}",
+							"raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"ahmed@example.com\",\n  \"otp\": \"123456\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -423,7 +423,7 @@
 							}
 						},
 						"url": "{{base_url}}/api/auth/verify-otp",
-						"description": "يتحقق من صحة OTP للبريد أو الهاتف.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- type: رقم، 0 للبريد و1 للهاتف\n- otp: نص\n\nالحقول الشرطية:\n- email: مطلوب عندما يكون type = 0\n- phone: مطلوب عندما يكون type = 1"
+						"description": "يتحقق من OTP ويكمل تفعيل الحساب ثم يعيد access token و refresh token.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- registration_method: email أو phone\n- otp: نص\n\nالحقول الشرطية:\n- email: مطلوب إذا كانت registration_method = email\n- phone: مطلوب إذا كانت registration_method = phone"
 					},
 					"event": [
 						{
@@ -456,7 +456,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"type\": 0,\n  \"email\": \"ahmed@example.com\",\n  \"otp\": \"123456\",\n  \"password\": \"Password@123\",\n  \"password_confirmation\": \"Password@123\"\n}",
+							"raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"ahmed@example.com\",\n  \"otp\": \"123456\",\n  \"password\": \"Password@123\",\n  \"password_confirmation\": \"Password@123\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -464,7 +464,7 @@
 							}
 						},
 						"url": "{{base_url}}/api/auth/reset-password",
-						"description": "يعيد تعيين كلمة المرور حسب السلوك الحالي الفعلي للمشروع عبر OtpController.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- type: رقم، 0 للبريد و1 للهاتف\n- otp: نص\n- password: نص\n- password_confirmation: نص\n\nالحقول الشرطية:\n- email: مطلوب عندما يكون type = 0\n- phone: مطلوب عندما يكون type = 1"
+						"description": "يعيد تعيين كلمة المرور عبر OTP. الحقل registration_method هو المسار الموصى به، مع بقاء type مدعوماً للتوافق الخلفي.\n\nالمصادقة: لا يتطلب مصادقة.\n\nالحقول المطلوبة:\n- registration_method: email أو phone\n- otp: نص\n- password: نص\n- password_confirmation: نص\n\nالحقول الشرطية:\n- email: مطلوب إذا كانت registration_method = email\n- phone: مطلوب إذا كانت registration_method = phone"
 					},
 					"event": [
 						{

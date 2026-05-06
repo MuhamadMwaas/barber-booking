@@ -1253,6 +1253,8 @@ return [
         'is_active' => 'Active',
         'status_helper' => 'Inactive providers cannot login',
         'notes' => 'Notes',
+        'cannot_delete_title' => 'Cannot Delete Provider',
+        'cannot_delete_has_appointments' => 'This provider has existing appointments and cannot be deleted. Deactivate the account instead.',
 
         // View/Infolist
         'view_complete_profile' => 'View complete provider profile',

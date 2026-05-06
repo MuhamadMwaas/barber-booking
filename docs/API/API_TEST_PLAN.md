@@ -247,7 +247,7 @@ Expected: حالة 401.
 Priority: P0
 Severity: Critical
 Preconditions: Email وPhone غير مستخدمين مسبقاً.
-Expected: حالة 201 وإرجاع `user`, `access_token`, `refresh_token`, `token_type`, `otp`.
+Expected: حالة 201 وإرجاع `user`, `registration_method`, `verification_channel`, `masked_destination`, `requires_otp_verification`, و`otp` في بيئة التطوير الحالية بدون `access_token` و`refresh_token`.
 
 2. TC-AUTH-REG-002: رفض التسجيل عند تكرار البريد الإلكتروني
 Priority: P0
@@ -279,7 +279,7 @@ Expected: حالة 422.
 Priority: P0
 Severity: Critical
 Preconditions: حساب seeded صالح.
-Expected: حالة 200 وإرجاع `user`, `access_token`, `refresh_token`, `token_type`.
+Expected: حالة 200 وإرجاع `user`, `access_token`, `refresh_token`, `token_type`, وحقول حالة التفعيل إذا كان الحساب مفعّلاً.
 
 2. TC-AUTH-LOGIN-002: رفض كلمة مرور خاطئة
 Priority: P0
@@ -293,13 +293,19 @@ Severity: High
 Preconditions: بريد غير موجود.
 Expected: حالة 401.
 
+4. TC-AUTH-LOGIN-004: إرجاع verification challenge للحساب غير المفعّل
+Priority: P0
+Severity: Critical
+Preconditions: حساب customer صحيح بكلمة مرور صحيحة لكنه غير مفعّل.
+Expected: حالة 403 وإرجاع `requires_otp_verification=true` و`masked_destination` بدون tokens.
+
 ### POST /api/auth/refresh
 
 1. TC-AUTH-REFRESH-001: تحديث access token بنجاح
 Priority: P0
 Severity: Critical
 Preconditions: Refresh token صالح.
-Expected: حالة 200 وإرجاع `access_token`, `access_expires_at`.
+Expected: حالة 200 وإرجاع `access_token`, `access_expires_at`, و`requires_otp_verification=false` للحسابات المفعّلة.
 
 2. TC-AUTH-REFRESH-002: رفض refresh token غير صالح
 Priority: P0
@@ -312,6 +318,12 @@ Priority: P1
 Severity: High
 Preconditions: لا يوجد.
 Expected: حالة 422.
+
+4. TC-AUTH-REFRESH-004: إرجاع verification challenge عند محاولة refresh لحساب غير مفعّل
+Priority: P0
+Severity: Critical
+Preconditions: Refresh token صالح مرتبط بحساب customer غير مفعّل.
+Expected: حالة 403 مع `requires_otp_verification=true` بدون access token جديد.
 
 ### POST /api/auth/logout
 
@@ -399,7 +411,7 @@ Expected: خطأ 4xx مناسب.
 Priority: P1
 Severity: High
 Preconditions: OTP صالح لحساب جديد.
-Expected: حالة 200 مع `email_verified: true` أو نتيجة نجاح مكافئة.
+Expected: حالة 200 مع `email_verified: true`, `requires_otp_verification=false`, وإرجاع `access_token` و`refresh_token`.
 
 2. TC-AUTH-VEMAIL-002: رفض OTP خاطئ
 Priority: P1
@@ -413,7 +425,7 @@ Expected: 422 أو خطأ business/validation مناسب.
 Priority: P1
 Severity: Medium
 Preconditions: حساب غير محقق وجاهز للاختبار عند الحاجة.
-Expected: 200 ورسالة نجاح.
+Expected: 200 ورسالة نجاح مع `registration_method`, `masked_destination`, و`requires_otp_verification=true`.
 
 2. TC-AUTH-RESEND-002: رفض إعادة الإرسال لحالة غير مناسبة
 Priority: P2
@@ -427,9 +439,15 @@ Expected: خطأ مناسب حسب السلوك الفعلي.
 Priority: P1
 Severity: Medium
 Preconditions: Email موجود أو صالح حسب سلوك التنفيذ.
-Expected: 200 ورسالة نجاح.
+Expected: 200 ورسالة نجاح مع `registration_method` و`masked_destination`.
 
-2. TC-AUTH-REQOTP-002: رفض نوع OTP غير صحيح
+2. TC-AUTH-REQOTP-002: طلب OTP هاتف بنجاح
+Priority: P1
+Severity: Medium
+Preconditions: Phone موجود أو صالح حسب سلوك التنفيذ.
+Expected: 200 ورسالة نجاح مع `registration_method=phone` و`masked_destination`.
+
+3. TC-AUTH-REQOTP-003: رفض نوع OTP غير صحيح
 Priority: P1
 Severity: Medium
 Preconditions: `type` غير مدعوم.

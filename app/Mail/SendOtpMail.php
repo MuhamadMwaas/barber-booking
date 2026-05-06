@@ -14,7 +14,7 @@ class SendOtpMail extends Mailable
     public function __construct(
         public string $otp,
         public string $userName,
-        public CarbonInterface $expiresAt,
+        public CarbonInterface $expiresAt
     ) {
     }
 

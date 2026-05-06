@@ -26,7 +26,9 @@ Route::prefix('auth')->group(function () {
     Route::post('refresh', [AuthController::class, 'refresh']);
     Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
     Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('request-otp', [OtpController::class, 'requestOtp']);
+    Route::post('verify-otp', [OtpController::class, 'verifyOtp']);
+    Route::post('reset-password', [OtpController::class, 'resetPassword']);
     Route::post('google', [SocialAuthController::class, 'google']);
 
     // Google Authentication
@@ -38,11 +40,9 @@ Route::prefix('auth')->group(function () {
 
 
     Route::post('verify-email-otp', [OtpController::class, 'verifyEmailViaOtp']);
-    Route::post('resend-verification-otp', [OtpController::class, 'resendOtpForEmailVerification']);
+    Route::post('resend-verification-otp', [OtpController::class, 'resendVerificationOtp']);
 });
-Route::post('/auth/request-otp', [OtpController::class, 'requestOtp']);
-Route::post('/auth/verify-otp', [OtpController::class, 'verifyOtp']);
-Route::post('/auth/reset-password', [OtpController::class, 'resetPassword']);
+
 
 
 
@@ -66,7 +66,7 @@ Route::prefix('services')->name('services.')->group(function () {
 });
 
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
     Route::get('profile', [ProfileController::class, 'show']);
     Route::post('profile', [ProfileController::class, 'update']);
     Route::post('profile/change-password', [ProfileController::class, 'changePassword']);
@@ -126,9 +126,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Appointment Reminders
     Route::post('/appointments/reminders', [\App\Http\Controllers\Api\AppointmentReminderController::class, 'store'])
         ->name('appointments.reminders.store');
-
-
-    Route::middleware([ 'verified'])->prefix('bookings')->group(function () {
+    Route::prefix('bookings')->group(function () {
         Route::get('/', [BookingController::class, 'index'])->name('bookings.index');
         Route::post('/', [BookingController::class, 'store'])->name('bookings.store');
         Route::get('/{id}', [BookingController::class, 'show'])->name('bookings.show');
@@ -141,7 +139,7 @@ Route::middleware('auth:sanctum')->group(function () {
 | Print API Routes
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth:sanctum'])->group(function () {
+Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
 
     // Print endpoints
     Route::post('/invoice/{invoice}/print', [PrintController::class, 'apiPrint'])

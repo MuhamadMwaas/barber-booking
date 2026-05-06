@@ -17,16 +17,15 @@ class EnsureEmailIsVerifiedViaOtp
     {
         $user = $request->user();
 
-        if ($user) {
-
-
-            if (!$user->email_verified_via_otp_at) {
-                return response()->json([
-                    'message' => 'Your email address is not verified. Please verify your email using OTP.',
-                    'email_verified' => false,
-                    'requires_otp_verification' => true
-                ], 403);
-            }
+        if ($user && $user->requiresOtpVerification()) {
+            return response()->json([
+                'message' => 'Your account is not verified. Please verify it using the OTP sent to your registered contact.',
+                'registration_method' => $user->registration_method?->value ?? $user->registration_method,
+                'email_verified' => (bool) $user->email_verified_at,
+                'phone_verified' => (bool) $user->phone_verified_at,
+                'is_account_verified' => false,
+                'requires_otp_verification' => true,
+            ], 403);
         }
 
         return $next($request);

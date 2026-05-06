@@ -132,13 +132,21 @@
                     {{ __('dashboard.team') }}</h3>
                 <div class="space-y-1">
                     @foreach ($allProviders as $provider)
+                        @php
+                            $isProviderSelectable = $provider['is_work_day'] && !$provider['has_day_off'];
+                            $isProviderSelected = in_array($provider['id'], $selectedProviderIds, true);
+                        @endphp
                         <label
-                            class="provider-check flex items-center space-x-2 px-2 py-1.5 rounded-md hover:bg-gray-50 cursor-pointer {{ in_array($provider['id'], $selectedProviderIds) ? '' : 'opacity-50' }}">
-                            <input type="checkbox" wire:click="toggleProvider({{ $provider['id'] }})"
-                                {{ in_array($provider['id'], $selectedProviderIds) ? 'checked' : '' }}
+                            class="provider-check flex items-center space-x-2 px-2 py-1.5 rounded-md {{ $isProviderSelectable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-not-allowed bg-gray-50 opacity-60' }} {{ $isProviderSelectable && !$isProviderSelected ? 'opacity-50' : '' }}"
+                            @if (!$isProviderSelectable)
+                                style="background-image: repeating-linear-gradient(-45deg, rgba(156, 163, 175, 0.14), rgba(156, 163, 175, 0.14) 8px, transparent 8px, transparent 16px);"
+                            @endif>
+                            <input type="checkbox" @if ($isProviderSelectable) wire:click="toggleProvider({{ $provider['id'] }})" @endif
+                                {{ $isProviderSelected ? 'checked' : '' }} {{ $isProviderSelectable ? '' : 'disabled' }}
                                 class="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500">
                             <div class="flex-1 min-w-0">
-                                <span class="text-sm text-gray-700 block truncate">{{ $provider['name'] }}</span>
+                                <span
+                                    class="block truncate text-sm {{ $isProviderSelectable ? 'text-gray-700' : 'text-gray-400 line-through decoration-gray-300' }}">{{ $provider['name'] }}</span>
                                 @if ($provider['has_day_off'])
                                     <span
                                         class="text-[10px] text-red-500 font-medium">{{ __('dashboard.on_leave') }}</span>

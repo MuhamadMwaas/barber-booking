@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Users\Pages;
 use App\Filament\Resources\Users\UserResource;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
 class EditUser extends EditRecord
@@ -15,7 +16,28 @@ class EditUser extends EditRecord
     {
         return [
             ViewAction::make(),
-            DeleteAction::make(),
+            DeleteAction::make()
+                ->before(function (DeleteAction $action) {
+                    $user = $this->getRecord();
+
+                    if ($user->appointmentsAsProvider()->exists()) {
+                        Notification::make()
+                            ->danger()
+                            ->title(__('resources.provider_resource.cannot_delete_title'))
+                            ->body(__('resources.provider_resource.cannot_delete_has_appointments'))
+                            ->persistent()
+                            ->send();
+
+                        $action->halt();
+                        return;
+                    }
+
+                    // Clean up operational data that would block the delete
+                    $user->scheduledWorks()->delete();
+                    $user->timeOffs()->delete();
+                    $user->services()->detach();
+                    $user->serviceReviews()->delete();
+                }),
         ];
     }
 
@@ -45,6 +67,13 @@ class EditUser extends EditRecord
 
         // Handle profile image upload
         $this->handleProfileImageUpload();
+
+        // Sync FileUpload component state to current permanent image path.
+        // Without this, Livewire re-renders with the deleted temp path → upload box appears empty.
+        $this->record->unsetRelation('profile_image');
+        $this->data['profile_image_file'] = $this->record->profile_image
+            ? [$this->record->profile_image->path]
+            : null;
     }
 
     protected function handleProfileImageUpload(): void
