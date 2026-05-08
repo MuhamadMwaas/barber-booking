@@ -19,6 +19,7 @@ use App\Services\ServiceAvailabilityService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 
 class StaffDashboard extends Component {
@@ -63,6 +64,21 @@ class StaffDashboard extends Component {
         $this->dashboardService = $dashboardService;
     }
 
+    #[Computed]
+    public function allProviders()
+    {
+        return $this->dashboardService->getProvidersWithStatus($this->selectedDate);
+    }
+
+    #[Computed]
+    public function selectedAppointment(): ?Appointment
+    {
+        if (!$this->selectedAppointmentId) {
+            return null;
+        }
+        return $this->dashboardService->getAppointmentDetails($this->selectedAppointmentId);
+    }
+
     public function mount() {
         $this->selectedDate = Carbon::today()->format('Y-m-d');
         $this->calendarYear = (int) Carbon::today()->format('Y');
@@ -101,7 +117,7 @@ class StaffDashboard extends Component {
 
     public function toggleProvider(int $providerId) {
         $selectableProviderIds = $this->getSelectableProviderIdsFromProviders(
-            $this->dashboardService->getProvidersWithStatus($this->selectedDate)
+            $this->allProviders
         );
 
         if (!in_array($providerId, $selectableProviderIds, true)) {
@@ -133,7 +149,7 @@ class StaffDashboard extends Component {
 
     public function openAppointmentModal(int $appointmentId) {
         $this->selectedAppointmentId = $appointmentId;
-        $appointment = $this->dashboardService->getAppointmentDetails($appointmentId);
+        $appointment = $this->selectedAppointment;
         if ($appointment) {
             $this->editStartTime = $appointment->start_time->format('H:i');
             $this->editDuration = $appointment->duration_minutes;
@@ -148,7 +164,7 @@ class StaffDashboard extends Component {
 
     public function openPaymentModal(int $appointmentId) {
         $this->selectedAppointmentId = $appointmentId;
-        $appointment = $this->dashboardService->getAppointmentDetails($appointmentId);
+        $appointment = $this->selectedAppointment;
         if ($appointment) {
             $this->paymentAmount = (float) $appointment->total_amount;
             $this->paymentType = '2';
@@ -166,6 +182,17 @@ class StaffDashboard extends Component {
         $this->resetTimeOffForm();
         $this->timeOffStartDate = $this->selectedDate;
         $this->timeOffEndDate = $this->selectedDate;
+        $this->showTimeOffModal = true;
+    }
+
+    public function openTimeOffModalFromTimeline(int $providerId, string $startTime, string $endTime) {
+        $this->resetTimeOffForm();
+        $this->timeOffProviderId = $providerId;
+        $this->timeOffType = '0'; // Hourly
+        $this->timeOffStartDate = $this->selectedDate;
+        $this->timeOffEndDate = $this->selectedDate;
+        $this->timeOffStartTime = $startTime;
+        $this->timeOffEndTime = $endTime;
         $this->showTimeOffModal = true;
     }
 
@@ -540,8 +567,38 @@ class StaffDashboard extends Component {
         }
     }
 
+    public function saveTimeOffFromAlpine(array $data) {
+        $providerId = $data['providerId'] ?? null;
+        if (!$providerId) {
+            $this->dispatch('notify', type: 'error', message: 'Please select a provider');
+            return;
+        }
+
+        try {
+            $timeOffData = [
+                'user_id' => (int) $providerId,
+                'type' => (int) ($data['type'] ?? 1),
+                'start_date' => $data['startDate'] ?? now()->format('Y-m-d'),
+                'end_date' => !empty($data['endDate']) ? $data['endDate'] : ($data['startDate'] ?? now()->format('Y-m-d')),
+                'reason_id' => !empty($data['reasonId']) ? (int) $data['reasonId'] : null,
+            ];
+
+            if ((int) ($data['type'] ?? 1) === ProviderTimeOff::TYPE_HOURLY) {
+                $timeOffData['start_time'] = $data['startTime'] ?? '';
+                $timeOffData['end_time'] = $data['endTime'] ?? '';
+            }
+
+            ProviderTimeOff::create($timeOffData);
+
+            $this->dispatch('timeoff-saved');
+            $this->dispatch('notify', type: 'success', message: 'Time off added');
+        } catch (\Exception $e) {
+            $this->dispatch('notify', type: 'error', message: $e->getMessage());
+        }
+    }
+
     public function getTimelineData(): array {
-        $allProviders = $this->dashboardService->getProvidersWithStatus($this->selectedDate);
+        $allProviders = $this->allProviders;
         return $this->getTimelineDataFromProviders($allProviders);
     }
 
@@ -660,7 +717,7 @@ class StaffDashboard extends Component {
 
     private function syncSelectedProvidersForSelectedDate(): void {
         $this->selectedProviderIds = $this->getSelectableProviderIdsFromProviders(
-            $this->dashboardService->getProvidersWithStatus($this->selectedDate)
+            $this->allProviders
         );
     }
 
@@ -700,7 +757,7 @@ class StaffDashboard extends Component {
     }
 
     public function render() {
-        $allProviders = $this->dashboardService->getProvidersWithStatus($this->selectedDate);
+        $allProviders = $this->allProviders;
         $this->selectedProviderIds = array_values(array_intersect(
             $this->selectedProviderIds,
             $this->getSelectableProviderIdsFromProviders($allProviders)
@@ -708,17 +765,12 @@ class StaffDashboard extends Component {
         $timelineData = $this->getTimelineDataFromProviders($allProviders);
         $calendarCounts = $this->getCalendarData();
 
-        $selectedAppointment = null;
-        if ($this->selectedAppointmentId) {
-            $selectedAppointment = $this->dashboardService->getAppointmentDetails($this->selectedAppointmentId);
-        }
-
         return view('livewire.staff-dashboard', [
             'timelineData' => $timelineData,
             'calendarCounts' => $calendarCounts,
             'allProviders' => $allProviders,
             'activeLanguages' => $this->getActiveLanguages(),
-            'selectedAppointment' => $selectedAppointment,
+            'selectedAppointment' => $this->selectedAppointment,
             'preloadedData' => $this->getPreloadedData(),
         ])->layout('layouts.dashboard');
     }

@@ -1,7 +1,8 @@
 <div class="h-screen flex flex-col" x-data="dashboardApp()"
-    @if (!$showAppointmentModal && !$showPaymentModal && !$showTimeOffModal) x-effect="if (!showBookingModal) { clearInterval(_pollTimer); _pollTimer = setInterval(() => $wire.$refresh(), 3000); } else { clearInterval(_pollTimer); }" x-init="_pollTimer = setInterval(() => $wire.$refresh(), 3000)" @endif
+    wire:poll.5s
     x-on:booking-saved.window="showBookingModal = false; bookingSaving = false"
-    x-on:booking-error.window="bookingSaving = false">
+    x-on:booking-error.window="bookingSaving = false"
+    x-on:timeoff-saved.window="showTimeOffModal = false; timeOffSaving = false">
     {{-- Top Navigation --}}
     <header class="bg-white border-b border-gray-200 flex items-center justify-between px-4 py-2 flex-shrink-0">
         <div class="flex items-center space-x-6">
@@ -173,7 +174,7 @@
                     </svg>
                     <span>{{ __('dashboard.add_booking') }}</span>
                 </button>
-                <button wire:click="openTimeOffModal"
+                <button @click="openTimeOffModalLocal()"
                     class="w-full py-2 px-3 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition flex items-center justify-center space-x-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -259,6 +260,7 @@
                         x-show="dragging"
                         x-cloak
                         class="drag-selection pointer-events-none fixed z-[70] box-border"
+                        :class="{ 'is-timeoff': isDragTimeOff() }"
                         :style="dragSelectionOverlayStyle()"
                     ></div>
                     <div class="flex min-h-full">
@@ -835,111 +837,110 @@
         </div>
     @endif
 
-    {{-- Time Off Modal --}}
-    @if ($showTimeOffModal)
-        <div class="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4"
-            wire:click.self="closeTimeOffModal">
-            <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm" @click.stop>
-                <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                    <h3 class="text-lg font-semibold text-gray-800">{{ __('dashboard.time_off_modal.title') }}</h3>
-                    <button wire:click="closeTimeOffModal" class="text-gray-400 hover:text-gray-600">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
+    {{-- Time Off Modal (Alpine-controlled) --}}
+    <div x-show="showTimeOffModal" x-cloak
+        class="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4"
+        @click.self="showTimeOffModal = false">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm" @click.stop>
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 class="text-lg font-semibold text-gray-800">{{ __('dashboard.time_off_modal.title') }}</h3>
+                <button @click="showTimeOffModal = false" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div>
+                    <label
+                        class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.select_provider') }}</label>
+                    <select x-model="timeOff.providerId"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                        <option value="">-- {{ __('dashboard.time_off_modal.select_provider') }} --
+                        </option>
+                        @foreach ($allProviders as $p)
+                            <option value="{{ $p['id'] }}">{{ $p['name'] }}</option>
+                        @endforeach
+                    </select>
                 </div>
-                <div class="p-5 space-y-4">
+                <div>
+                    <label
+                        class="block text-xs font-medium text-gray-500 mb-2">{{ __('dashboard.time_off_modal.type') }}</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label
+                            class="flex items-center justify-center px-3 py-2 rounded-lg border cursor-pointer"
+                            :class="timeOff.type === '1' ? 'border-amber-500 bg-amber-50' : 'border-gray-200'">
+                            <input type="radio" x-model="timeOff.type" value="1" class="sr-only">
+                            <span
+                                class="text-sm font-medium">{{ __('dashboard.time_off_modal.full_day') }}</span>
+                        </label>
+                        <label
+                            class="flex items-center justify-center px-3 py-2 rounded-lg border cursor-pointer"
+                            :class="timeOff.type === '0' ? 'border-amber-500 bg-amber-50' : 'border-gray-200'">
+                            <input type="radio" x-model="timeOff.type" value="0" class="sr-only">
+                            <span class="text-sm font-medium">{{ __('dashboard.time_off_modal.hourly') }}</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label
-                            class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.select_provider') }}</label>
-                        <select wire:model="timeOffProviderId"
+                            class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.start_date') }}</label>
+                        <input type="date" x-model="timeOff.startDate"
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
-                            <option value="">-- {{ __('dashboard.time_off_modal.select_provider') }} --
-                            </option>
-                            @foreach ($allProviders as $p)
-                                <option value="{{ $p['id'] }}">{{ $p['name'] }}</option>
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.end_date') }}</label>
+                        <input type="date" x-model="timeOff.endDate"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                    </div>
+                </div>
+                <div x-show="timeOff.type === '0'" class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label
+                            class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.start_time') }}</label>
+                        <input type="time" x-model="timeOff.startTime"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.end_time') }}</label>
+                        <input type="time" x-model="timeOff.endTime"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                    </div>
+                </div>
+                @if ($this->reasonLeaves && $this->reasonLeaves->count() > 0)
+                    <div>
+                        <label
+                            class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.reason') }}</label>
+                        <select x-model="timeOff.reasonId"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                            <option value="">-- {{ __('dashboard.time_off_modal.reason') }} --</option>
+                            @foreach ($this->reasonLeaves as $reason)
+                                <option value="{{ $reason->id }}">
+                                    {{ $reason->getNameIn(app()->getLocale()) }}</option>
                             @endforeach
                         </select>
                     </div>
-                    <div>
-                        <label
-                            class="block text-xs font-medium text-gray-500 mb-2">{{ __('dashboard.time_off_modal.type') }}</label>
-                        <div class="grid grid-cols-2 gap-2">
-                            <label
-                                class="flex items-center justify-center px-3 py-2 rounded-lg border cursor-pointer {{ $timeOffType === '1' ? 'border-amber-500 bg-amber-50' : 'border-gray-200' }}">
-                                <input type="radio" wire:model.live="timeOffType" value="1" class="sr-only">
-                                <span
-                                    class="text-sm font-medium">{{ __('dashboard.time_off_modal.full_day') }}</span>
-                            </label>
-                            <label
-                                class="flex items-center justify-center px-3 py-2 rounded-lg border cursor-pointer {{ $timeOffType === '0' ? 'border-amber-500 bg-amber-50' : 'border-gray-200' }}">
-                                <input type="radio" wire:model.live="timeOffType" value="0" class="sr-only">
-                                <span class="text-sm font-medium">{{ __('dashboard.time_off_modal.hourly') }}</span>
-                            </label>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label
-                                class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.start_date') }}</label>
-                            <input type="date" wire:model="timeOffStartDate"
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
-                        </div>
-                        <div>
-                            <label
-                                class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.end_date') }}</label>
-                            <input type="date" wire:model="timeOffEndDate"
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
-                        </div>
-                    </div>
-                    @if ($timeOffType === '0')
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label
-                                    class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.start_time') }}</label>
-                                <input type="time" wire:model="timeOffStartTime"
-                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
-                            </div>
-                            <div>
-                                <label
-                                    class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.end_time') }}</label>
-                                <input type="time" wire:model="timeOffEndTime"
-                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
-                            </div>
-                        </div>
-                    @endif
-                    @if ($this->reasonLeaves && $this->reasonLeaves->count() > 0)
-                        <div>
-                            <label
-                                class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.reason') }}</label>
-                            <select wire:model="timeOffReasonId"
-                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
-                                <option value="">-- {{ __('dashboard.time_off_modal.reason') }} --</option>
-                                @foreach ($this->reasonLeaves as $reason)
-                                    <option value="{{ $reason->id }}">
-                                        {{ $reason->getNameIn(app()->getLocale()) }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                    @endif
-                </div>
-                <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex justify-end space-x-2">
-                    <button wire:click="closeTimeOffModal"
-                        class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{{ __('dashboard.time_off_modal.cancel') }}</button>
-                    <button wire:click="saveTimeOff"
-                        class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg">
-                        {{ __('dashboard.time_off_modal.save') }}
-                    </button>
-                </div>
+                @endif
+            </div>
+            <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex justify-end space-x-2">
+                <button @click="showTimeOffModal = false"
+                    class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{{ __('dashboard.time_off_modal.cancel') }}</button>
+                <button @click="submitTimeOff()" :disabled="timeOffSaving"
+                    class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg">
+                    <span x-show="!timeOffSaving">{{ __('dashboard.time_off_modal.save') }}</span>
+                    <span x-show="timeOffSaving">...</span>
+                </button>
             </div>
         </div>
-    @endif
+    </div>
 
     <script>
         function dashboardApp() {
             return {
-                _pollTimer: null,
                 dragging: false,
                 dragProviderId: null,
                 dragStartY: 0,
@@ -952,6 +953,18 @@
 
                 showBookingModal: false,
                 bookingSaving: false,
+
+                showTimeOffModal: false,
+                timeOffSaving: false,
+                timeOff: {
+                    providerId: '',
+                    type: '1',
+                    startDate: '',
+                    endDate: '',
+                    startTime: '',
+                    endTime: '',
+                    reasonId: '',
+                },
                 timelineScaleStorageKey: 'staff-dashboard-timeline-scale',
                 timelineBaseSlotHeight: 45,
                 timelineScaleOptions: [{
@@ -1012,6 +1025,54 @@
                         notes: '',
                     };
                     this.bookingSaving = false;
+                },
+
+                resetTimeOff() {
+                    this.timeOff = {
+                        providerId: '',
+                        type: '1',
+                        startDate: '',
+                        endDate: '',
+                        startTime: '',
+                        endTime: '',
+                        reasonId: '',
+                    };
+                    this.timeOffSaving = false;
+                },
+
+                openTimeOffModalLocal() {
+                    this.resetTimeOff();
+                    this.timeOff.startDate = this.$wire.selectedDate;
+                    this.timeOff.endDate = this.$wire.selectedDate;
+                    this.showTimeOffModal = true;
+                },
+
+                openTimeOffModalFromTimelineLocal(providerId, startTime, endTime) {
+                    this.resetTimeOff();
+                    this.timeOff.providerId = String(providerId);
+                    this.timeOff.type = '0';
+                    this.timeOff.startDate = this.$wire.selectedDate;
+                    this.timeOff.endDate = this.$wire.selectedDate;
+                    this.timeOff.startTime = startTime;
+                    this.timeOff.endTime = endTime;
+                    this.showTimeOffModal = true;
+                },
+
+                async submitTimeOff() {
+                    this.timeOffSaving = true;
+                    try {
+                        await this.$wire.saveTimeOffFromAlpine({
+                            providerId: this.timeOff.providerId,
+                            type: this.timeOff.type,
+                            startDate: this.timeOff.startDate,
+                            endDate: this.timeOff.endDate,
+                            startTime: this.timeOff.startTime,
+                            endTime: this.timeOff.endTime,
+                            reasonId: this.timeOff.reasonId,
+                        });
+                    } catch (e) {
+                        this.timeOffSaving = false;
+                    }
                 },
 
                 init() {
@@ -1260,6 +1321,17 @@
                     }
                 },
 
+                dragDurationMinutes() {
+                    if (!this.dragging || !this._dragTimelineEl) return 0;
+                    const diff = Math.abs(this.dragCurrentY - this.dragStartY);
+                    const ppm = this.pixelsPerMinute();
+                    return diff / ppm;
+                },
+
+                isDragTimeOff() {
+                    return this.dragDurationMinutes() > 15;
+                },
+
                 dragSelectionOverlayStyle() {
                     if (!this.dragging || !this._dragTimelineEl) {
                         return 'display:none;';
@@ -1319,8 +1391,9 @@
 
                     const diff = Math.abs(this.dragCurrentY - this.dragStartY);
                     const isClick = diff < 10;
-
                     const pixelsPerMinute = this.pixelsPerMinute();
+                    const draggedMinutes = diff / pixelsPerMinute;
+
                     const topY = isClick ? this.dragStartY : Math.min(this.dragStartY, this.dragCurrentY);
                     const minutesFromStart = Math.round(topY / pixelsPerMinute / this.timelineScale) * this.timelineScale;
 
@@ -1334,7 +1407,19 @@
                     this.dragging = false;
                     this.dragProviderId = null;
 
-                    this.openBookingModalLocal(providerId, startTime);
+                    if (!isClick && draggedMinutes > 15) {
+                        // Drag > 15 min → open time off modal
+                        const bottomY = Math.max(this.dragStartY, this.dragCurrentY);
+                        const endMinutesFromStart = Math.round(bottomY / pixelsPerMinute / this.timelineScale) * this.timelineScale;
+                        const totalEndMinutes = startH * 60 + startM + endMinutesFromStart;
+                        const endHours = String(Math.floor(totalEndMinutes / 60)).padStart(2, '0');
+                        const endMins = String(totalEndMinutes % 60).padStart(2, '0');
+                        const endTime = endHours + ':' + endMins;
+                        this.openTimeOffModalFromTimelineLocal(providerId, startTime, endTime);
+                    } else {
+                        // Click or short drag → open booking modal
+                        this.openBookingModalLocal(providerId, startTime);
+                    }
                 },
             }
         }

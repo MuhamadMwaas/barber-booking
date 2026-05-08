@@ -33,6 +33,7 @@
         .status-cancelled { border-left: 4px solid #ef4444; }
         .status-no-show { border-left: 4px solid #6b7280; }
         .drag-selection { background: rgba(59, 130, 246, 0.15); border: 2px dashed #3b82f6; border-radius: 4px; pointer-events: none; }
+        .drag-selection.is-timeoff { background: rgba(245, 158, 11, 0.18); border-color: #f59e0b; }
         .toast-notification { animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s; }
         @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
