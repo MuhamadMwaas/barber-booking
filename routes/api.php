@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AboutUsPageController;
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AvailabilityController;
@@ -47,6 +48,9 @@ Route::prefix('auth')->group(function () {
 
 
 
+
+// ── Static Pages ──────────────────────────────────────────────────────────────
+Route::get('/about-us', [AboutUsPageController::class, 'show'])->name('api.about-us.show');
 
 Route::get('/providers', [ProvidersController::class, 'index']);
 Route::get('/providers/{id}', [ProvidersController::class, 'show']);

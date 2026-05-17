@@ -14,7 +14,11 @@
       "Bash(})",
       "Bash(php:*)",
       "Bash(xargs grep:*)",
-      "Bash(grep -n \"class InvoiceService\" \"d:/Coding/BarberBooking/app/Services\"/*.php)"
+      "Bash(grep -n \"class InvoiceService\" \"d:/Coding/BarberBooking/app/Services\"/*.php)",
+      "Bash(findstr -i filament)",
+      "Bash(findstr /r \"navigation\\\\.\" lang\\\\de\\\\navigation.php)",
+      "Bash(type lang\\\\de\\\\navigation.php)",
+      "Bash(findstr /i \"about_us\\\\|sort_order_to_files\")"
     ],
     "deny": [],
     "ask": []
