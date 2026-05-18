@@ -17,4 +17,8 @@ return [
     'password' => 'The provided password is incorrect.',
     'throttle' => 'Too many login attempts. Please try again in :seconds seconds.',
 
+    'account_disabled_title' => 'Account Disabled',
+    'account_disabled_body'  => 'Your account has been disabled. Please contact the administration for assistance.',
+    'account_disabled'       => 'Your account has been disabled. Please contact the administration for assistance.',
+
 ];

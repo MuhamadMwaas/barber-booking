@@ -18,7 +18,8 @@
       "Bash(findstr -i filament)",
       "Bash(findstr /r \"navigation\\\\.\" lang\\\\de\\\\navigation.php)",
       "Bash(type lang\\\\de\\\\navigation.php)",
-      "Bash(findstr /i \"about_us\\\\|sort_order_to_files\")"
+      "Bash(findstr /i \"about_us\\\\|sort_order_to_files\")",
+      "Bash(grep -v \"//\")"
     ],
     "deny": [],
     "ask": []

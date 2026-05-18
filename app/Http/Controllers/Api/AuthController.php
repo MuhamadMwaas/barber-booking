@@ -72,7 +72,12 @@ class AuthController extends Controller
         }
 
         if (!$user->is_active) {
-            return response()->json(['message' => 'This account is inactive.'], 403);
+            $this->applyRequestLocale($request);
+
+            return response()->json([
+                'success' => false,
+                'message' => __('auth.account_disabled'),
+            ], 403);
         }
 
         if ($user->requiresOtpVerification()) {
@@ -173,6 +178,25 @@ class AuthController extends Controller
             'refresh_expires_at' => $refresh['expires_at'],
             'token_type' => 'bearer',
         ], $this->verificationService->buildVerificationPayload($user));
+    }
+
+    private function applyRequestLocale(Request $request): void
+    {
+        $supported = ['de', 'ar', 'en'];
+
+        // 1. Explicit query / body param
+        $locale = $request->input('locale');
+
+        // 2. Accept-Language header  (e.g. "ar-SA,ar;q=0.9,en;q=0.8")
+        if (!$locale) {
+            $header = $request->header('Accept-Language', '');
+            $primary = strtolower(substr(trim(explode(',', $header)[0]), 0, 2));
+            $locale = $primary ?: null;
+        }
+
+        if ($locale && in_array($locale, $supported, true)) {
+            app()->setLocale($locale);
+        }
     }
 
     private function buildVerificationChallengeResponse(User $user, Request $request, int $status, string $message)
