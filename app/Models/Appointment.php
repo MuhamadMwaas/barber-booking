@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enum\AppointmentStatus;
+use App\Enum\BookingSource;
 use App\Enum\PaymentStatus;
 use App\Services\AppointmentReminderService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -38,7 +39,8 @@ class Appointment extends Model
         'cancelled_at',
         'notes',
         'payment_status',
-        'created_status'
+        'created_status',
+        'booking_source',
     ];
 
 
@@ -53,6 +55,7 @@ class Appointment extends Model
         'status' => AppointmentStatus::class,
         'payment_status' => PaymentStatus::class,
         'duration_minutes' => 'integer',
+        'booking_source' => BookingSource::class,
     ];
 
 

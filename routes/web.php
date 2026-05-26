@@ -34,6 +34,12 @@ Route::get('/test', function () {
     //   ->update(['available_at' => now()->timestamp]);
 });
 
+// CMS Page preview (admin only)
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::get('/admin/cms-preview/{page}', [\App\Http\Controllers\Admin\CmsPagePreviewController::class, 'show'])
+        ->name('admin.cms-preview');
+});
+
 // Salon Schedule API routes (protected by Filament auth)
 Route::middleware(['web', 'auth'])->prefix('admin/api')->group(function () {
     Route::get('salon-schedules/{branchId}', [SalonScheduleController::class, 'show']);

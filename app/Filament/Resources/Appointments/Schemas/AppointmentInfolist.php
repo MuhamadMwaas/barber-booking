@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Appointments\Schemas;
 
 use App\Enum\AppointmentStatus;
+use App\Enum\BookingSource;
 use App\Enum\PaymentStatus;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Section;
@@ -20,7 +21,7 @@ class AppointmentInfolist
                 // Header - Booking Overview
                 Section::make('')
                     ->schema([
-                        Grid::make(3)
+                        Grid::make(4)
                             ->schema([
                                 TextEntry::make('number')
                                     ->label(__('resources.appointment.number'))
@@ -53,6 +54,14 @@ class AppointmentInfolist
                                         PaymentStatus::FAILED => 'danger',
                                         default => 'gray',
                                     }),
+
+                                TextEntry::make('booking_source')
+                                    ->label('Booking Source')
+                                    ->badge()
+                                    ->size('lg')
+                                    ->formatStateUsing(fn (?BookingSource $state): string => $state?->label() ?? 'N/A')
+                                    ->icon(fn (?BookingSource $state): string => $state?->heroicon() ?? 'heroicon-o-question-mark-circle')
+                                    ->color(fn (?BookingSource $state): string => $state?->badgeColor() ?? 'gray'),
                             ]),
 
                         Grid::make(3)

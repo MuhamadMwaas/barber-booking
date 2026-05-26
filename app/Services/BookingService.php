@@ -86,6 +86,7 @@ class BookingService
                 'payment_status' => $paymentStatus,
                 'notes' => $notes,
                 'created_status' => $createdStatus,
+                'booking_source' => $bookingData['booking_source'] ?? 'in_person',
                 'customer_name' => $customerName,
                 'customer_email' => $customerEmail,
                 'customer_phone' => $customerPhone,

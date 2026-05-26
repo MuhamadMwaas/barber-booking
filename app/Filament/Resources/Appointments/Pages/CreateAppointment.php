@@ -85,6 +85,9 @@ class CreateAppointment extends CreateRecord
      */
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        // الحجوزات المنشأة من Filament Admin هي دائماً In-Person
+        $data['booking_source'] = 'in_person';
+
         // Get services from the Repeater component
         $services = $this->getServicesFromRepeater();
 

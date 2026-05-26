@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Appointments\Tables;
 
 use App\Enum\AppointmentStatus;
+use App\Enum\BookingSource;
 use App\Enum\PaymentStatus;
 use App\Models\Appointment;
 use App\Services\InvoiceService;
@@ -180,6 +181,15 @@ class AppointmentsTable
                     })
                     ->sortable(),
 
+                // مصدر الحجز (Online / In-Person)
+                TextColumn::make('booking_source')
+                    ->label('Source')
+                    ->badge()
+                    ->color(fn (?BookingSource $state): string => $state?->badgeColor() ?? 'gray')
+                    ->formatStateUsing(fn (?BookingSource $state): string => $state?->label() ?? 'N/A')
+                    ->icon(fn (?BookingSource $state): string => $state?->heroicon() ?? 'heroicon-o-question-mark-circle')
+                    ->sortable(),
+
                 // حالة الدفع
                 TextColumn::make('payment_status')
                     ->label(__('resources.appointment.payment_status'))
@@ -247,6 +257,14 @@ class AppointmentsTable
                         PaymentStatus::FAILED->value => __('resources.appointment.payment_failed'),
                     ])
                     ->multiple(),
+
+                // فلتر حسب مصدر الحجز
+                SelectFilter::make('booking_source')
+                    ->label('Booking Source')
+                    ->options([
+                        BookingSource::ONLINE->value    => BookingSource::ONLINE->label(),
+                        BookingSource::IN_PERSON->value => BookingSource::IN_PERSON->label(),
+                    ]),
 
                 // فلتر حسب المزود
                 SelectFilter::make('provider_id')

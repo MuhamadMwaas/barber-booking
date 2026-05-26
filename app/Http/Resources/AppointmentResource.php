@@ -70,6 +70,7 @@ class AppointmentResource extends JsonResource
                 AppointmentServiceResource::collection($this->services_record)
             ),
 
+            'booking_source' => $this->booking_source?->value,
             'notes' => $this->notes,
             'created_at' => $this->created_at->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at->format('Y-m-d H:i:s'),

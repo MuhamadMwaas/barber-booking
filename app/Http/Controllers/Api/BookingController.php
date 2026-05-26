@@ -31,7 +31,11 @@ class BookingController extends Controller
         try {
             $customer = request()->user();
 
-            $appointment = $this->bookingService->createBooking($customer, $request->validated());
+            // الحجوزات عبر API دائماً Online بغض النظر عن طريقة الدفع
+            $bookingData = $request->validated();
+            $bookingData['booking_source'] = 'online';
+
+            $appointment = $this->bookingService->createBooking($customer, $bookingData);
 
             return response()->json([
                 'success' => true,

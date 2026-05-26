@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AboutUsPageController;
+use App\Http\Controllers\Api\CmsPageController;
 use App\Http\Controllers\Api\AppointmentController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AvailabilityController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProvidersController;
 use App\Http\Controllers\Api\ServicesController;
+use App\Http\Controllers\Api\SliderController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\PrintController;
 use Illuminate\Http\Request;
@@ -19,6 +21,14 @@ use Illuminate\Support\Facades\Route;
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+/*
+|--------------------------------------------------------------------------
+| CMS Pages (public — no auth required)
+|--------------------------------------------------------------------------
+*/
+Route::get('/pages/{slug}', [CmsPageController::class, 'show'])
+    ->name('api.cms-pages.show');
 
 
 Route::prefix('auth')->group(function () {
@@ -51,6 +61,13 @@ Route::prefix('auth')->group(function () {
 
 // ── Static Pages ──────────────────────────────────────────────────────────────
 Route::get('/about-us', [AboutUsPageController::class, 'show'])->name('api.about-us.show');
+
+// ── Sliders ───────────────────────────────────────────────────────────────────
+// GET /api/sliders/{key}?locale=ar|en|de
+// مثال: /api/sliders/home?locale=ar
+Route::get('/sliders/{key}', [SliderController::class, 'show'])
+    ->name('api.sliders.show')
+    ->where('key', '[a-z0-9_\-]+');
 
 Route::get('/providers', [ProvidersController::class, 'index']);
 Route::get('/providers/{id}', [ProvidersController::class, 'show']);

@@ -19,9 +19,21 @@
       "Bash(findstr /r \"navigation\\\\.\" lang\\\\de\\\\navigation.php)",
       "Bash(type lang\\\\de\\\\navigation.php)",
       "Bash(findstr /i \"about_us\\\\|sort_order_to_files\")",
-      "Bash(grep -v \"//\")"
+      "Bash(grep -v \"//\")",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []
-  }
+
+  },
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "php",
+            "args": [
+                "artisan",
+                "boost:mcp:serve"
+            ],
+            "cwd": "d:\\Coding\\BarberBooking"
+        }
+    }
 }

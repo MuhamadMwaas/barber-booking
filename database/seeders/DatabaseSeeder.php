@@ -17,7 +17,7 @@ class DatabaseSeeder extends Seeder
             BranchSeeder::class,
             SalonSettingSeeder::class,
             PermissionsSeeder::class,
-            RoleSeeder::class,        
+            RoleSeeder::class,
             UserSeeder::class,
             PrinterSeeder::class,
             InvoiceTemplateSeeder::class,
@@ -32,6 +32,10 @@ class DatabaseSeeder extends Seeder
             AppointmentSeeder::class,
             StaticPagesSeeder::class,
             AboutUsPageSeeder::class,
+            SliderSeeder::class,
+            PrivacyPolicyPageSeeder::class,
+            TermsConditionsPageSeeder::class,
+            ImpressumPageSeeder::class,
         ]);
 
 
