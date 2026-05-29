@@ -344,6 +344,7 @@ class TemplateBuilderService
             'items.itemable',
             'payment',
             'appointment.customer',
+            'appointment.colorRecords.color', // ← colors used in the appointment
         ]);
     }
 

@@ -1514,6 +1514,33 @@ return [
         'protected_role' => 'This role is protected and cannot be modified',
     ],
 
+    // ─────────────────────────────────────────────────────────────
+    // Color (Product/Hair Color Catalog)
+    // ─────────────────────────────────────────────────────────────
+    'color' => [
+        'label'               => 'Color',
+        'plural'              => 'Colors',
+        'navigation_label'    => 'Colors',
+
+        // Section
+        'section_info'        => 'Color Information',
+
+        // Fields
+        'name'                => 'Color Name',
+        'brand'               => 'Brand',
+        'hex_code'            => 'Hex Color',
+        'unit'                => 'Unit',
+        'unit_piece'          => 'piece (Unit)',
+        'stock_quantity'      => 'Stock Quantity',
+        'stock_quantity_hint' => 'Reference quantity only — not tracked as live inventory',
+        'is_active'           => 'Active',
+        'created_at'          => 'Created At',
+
+        // Filters
+        'active_only'         => 'Active Only',
+        'inactive_only'       => 'Inactive Only',
+    ],
+
     'printer_setting' => [
         'label' => 'Printer',
         'plural_label' => 'Printers',

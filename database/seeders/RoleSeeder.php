@@ -69,6 +69,9 @@ class RoleSeeder extends Seeder
             'ManageProviderLeaves:access',
             'ViewProviderScheduleTimeline:access',
             'StaffDashboard:access',
+
+            // CMS Pages — can manage content pages
+            'CmsPage:access', 'CmsPage:view', 'CmsPage:create', 'CmsPage:edit',
         ],
 
         // ── Provider (Staff) ───────────────────────────────────────────────

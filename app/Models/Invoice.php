@@ -200,4 +200,38 @@ class Invoice extends Model
 
         return $template;
     }
+
+    /**
+     * All appointments covered by this invoice = parent + every child.
+     * Used by InvoiceService::rebuildAggregatedInvoice and PrintController
+     * to render the unified receipt.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, Appointment>
+     */
+    public function getCoveredAppointments()
+    {
+        if (! $this->appointment) {
+            return collect();
+        }
+
+        // The invoice always lives on the PARENT (or standalone).
+        // So $this->appointment is the root of the linked group.
+        return $this->appointment
+            ->linkedGroup()
+            ->with(['services_record.service', 'provider'])
+            ->orderByRaw('COALESCE(parent_appointment_id, id) ASC') // parent first (null), then children
+            ->orderBy('start_time', 'asc')
+            ->get();
+    }
+
+    /**
+     * True if this invoice covers more than one appointment (parent + children).
+     */
+    public function isAggregated(): bool
+    {
+        if (! $this->appointment) {
+            return false;
+        }
+        return $this->appointment->children()->exists();
+    }
 }

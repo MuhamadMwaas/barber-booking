@@ -17,7 +17,7 @@ use Filament\Tables\Table;
 
 class CmsPageResource extends Resource
 {
-    // use NavigationDefaultAccess;
+    use NavigationDefaultAccess;
 
     protected static ?string $model = CmsPage::class;
 

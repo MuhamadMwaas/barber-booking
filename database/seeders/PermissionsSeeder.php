@@ -41,7 +41,6 @@ class PermissionsSeeder extends Seeder
         'ManageProviderLeaves'          => ['access'],
         'ViewProviderScheduleTimeline'  => ['access'],
         'StaffDashboard'                => ['access'],
-        'CmsPageResource'              => ['access', 'edit'],
     ];
 
 

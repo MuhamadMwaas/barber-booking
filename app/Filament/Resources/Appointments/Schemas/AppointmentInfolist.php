@@ -302,9 +302,18 @@ class AppointmentInfolist
                 Section::make(__('resources.appointment.additional_info'))
                     ->icon('heroicon-o-information-circle')
                     ->schema([
+                        // Customer notes (read-only in admin)
                         TextEntry::make('notes')
                             ->label(__('resources.appointment.notes'))
                             ->default(__('No notes'))
+                            ->columnSpanFull(),
+
+                        // Provider professional notes
+                        TextEntry::make('provider_notes')
+                            ->label(__('resources.appointment.provider_notes'))
+                            ->default(__('No provider notes'))
+                            ->icon('heroicon-o-pencil-square')
+                            ->color('warning')
                             ->columnSpanFull(),
 
                         Grid::make(2)
@@ -324,6 +333,52 @@ class AppointmentInfolist
                     ->compact()
                     ->collapsible()
                     ->collapsed(true),
+
+                // Colors Used
+                Section::make(__('resources.appointment.colors_used'))
+                    ->icon('heroicon-o-swatch')
+                    ->schema([
+                        TextEntry::make('colors_summary')
+                            ->label('')
+                            ->state(function ($record) {
+                                $colors = $record->relationLoaded('colors')
+                                    ? $record->colors
+                                    : $record->colors()->get();
+
+                                if ($colors->isEmpty()) {
+                                    return new HtmlString(
+                                        '<p style="color:#94a3b8;font-style:italic;">'
+                                        . __('resources.appointment.no_colors')
+                                        . '</p>'
+                                    );
+                                }
+
+                                $html = $colors->map(function ($color) {
+                                    $hex      = e($color->hex_code);
+                                    $name     = e($color->name);
+                                    $brand    = $color->brand ? ' <span style="color:#64748b;font-size:0.8em;">(' . e($color->brand) . ')</span>' : '';
+                                    $qty      = number_format($color->pivot->quantity, 2);
+                                    $unit     = e($color->unit);
+
+                                    return "
+                                        <div style='display:flex;align-items:center;gap:10px;padding:0.5rem 0.75rem;
+                                                    background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:6px;'>
+                                            <span style='width:22px;height:22px;border-radius:4px;background:{$hex};
+                                                         border:1px solid #e2e8f0;flex-shrink:0;display:inline-block;'></span>
+                                            <span style='flex:1;font-weight:600;color:#1e293b;'>{$name}{$brand}</span>
+                                            <span style='font-size:0.85rem;color:#64748b;'>{$qty} {$unit}</span>
+                                        </div>
+                                    ";
+                                })->join('');
+
+                                return new HtmlString($html);
+                            })
+                            ->columnSpanFull(),
+                    ])
+                    ->compact()
+                    ->collapsible()
+                    ->collapsed(false)
+                    ->visible(fn ($record) => $record->colors()->exists()),
             ]);
     }
 }

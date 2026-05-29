@@ -6,6 +6,7 @@ use App\Enum\AppointmentStatus;
 use App\Enum\PaymentStatus;
 use App\Models\Appointment;
 use App\Models\Branch;
+use App\Models\Color;
 use App\Models\ProviderScheduledWork;
 use App\Models\ProviderTimeOff;
 use App\Models\ReasonLeave;
@@ -79,7 +80,16 @@ class DashboardService {
     }
 
     public function getAppointmentsForDate(string $date, array $providerIds = []): Collection {
-        $query = Appointment::with(['services', 'services_record.service', 'customer', 'provider', 'invoice'])
+        // Eager-load parent + children for the linked-bookings UI (badge + connector line).
+        $query = Appointment::with([
+                'services',
+                'services_record.service',
+                'customer',
+                'provider',
+                'invoice',
+                'parent',
+                'children',
+            ])
             ->whereDate('appointment_date', $date)
             ->where('created_status', 1)
             ->whereNotIn('status', [
@@ -311,6 +321,31 @@ class DashboardService {
             'provider',
             'invoice',
             'invoice.items',
+            'parent',
+            'parent.invoice',
+            'children',
+            'children.provider',
+            'children.services_record',
+            'colorRecords.color',   // ← load colors used in this appointment
         ])->find($appointmentId);
+    }
+
+    /**
+     * All active colors for the dashboard preload (color picker in appointment modal).
+     */
+    public function getAllColors(): array {
+        return Color::active()
+            ->orderBy('name')
+            ->get(['id', 'name', 'hex_code', 'brand', 'unit', 'stock_quantity'])
+            ->map(fn ($c) => [
+                'id'             => $c->id,
+                'name'           => $c->name,
+                'display_name'   => $c->display_name,
+                'hex_code'       => $c->hex_code,
+                'brand'          => $c->brand,
+                'unit'           => $c->unit,
+                'stock_quantity' => $c->stock_quantity ? (float) $c->stock_quantity : null,
+            ])
+            ->toArray();
     }
 }

@@ -7,6 +7,7 @@ use App\Enum\PaymentStatus;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
+use App\Models\Service;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -378,6 +379,13 @@ class InvoiceService
         ?int $adjustedDuration = null,
         bool $amountIncludesTax = true
     ): Invoice {
+        // Invoice must always live on a parent or standalone appointment.
+        // Children are invoice-less; their items are included in the parent's invoice.
+        if ($appointment->is_child_booking) {
+            throw new \InvalidArgumentException(
+                'Cannot create an invoice for a child appointment. Invoice lives on the parent.'
+            );
+        }
         try {
             DB::beginTransaction();
 
@@ -419,6 +427,125 @@ class InvoiceService
 
             throw $e;
         }
+    }
+
+    /**
+     * Rebuild the DRAFT invoice on the parent (or standalone) appointment by
+     * aggregating ALL services from the parent + every child. This is the
+     * single source of truth for the unified invoice items.
+     *
+     * Steps:
+     *   1) Locate the draft invoice (create one if missing).
+     *   2) Delete current InvoiceItems.
+     *   3) For each appointment in the linked group, in chronological order,
+     *      create one InvoiceItem per service with the provider's name in
+     *      the description ("Haircut — by Ahmed").
+     *   4) Recalculate subtotal/tax/total with bcmath; reconcile rounding.
+     *
+     * Called after addServiceToBooking() and (defensively) right before
+     * finalize/payment to ensure TSE signs the correct totals.
+     *
+     * @throws \InvalidArgumentException when called on a child or a non-draft invoice
+     */
+    public function rebuildAggregatedInvoice(Appointment $parent): Invoice
+    {
+        if ($parent->is_child_booking) {
+            throw new \InvalidArgumentException(
+                'rebuildAggregatedInvoice must be called on a parent or standalone appointment.'
+            );
+        }
+
+        return DB::transaction(function () use ($parent) {
+            // 1) Ensure draft invoice exists
+            $invoice = $parent->invoice()->first();
+            if (! $invoice) {
+                $invoice = $this->createDraftInvoice($parent);
+            }
+            if ($invoice->status !== InvoiceStatus::DRAFT) {
+                throw new \InvalidArgumentException(
+                    'Cannot rebuild a non-draft invoice (status=' . $invoice->status->getLabel() . ').'
+                );
+            }
+
+            // 2) Wipe current items
+            $invoice->items()->delete();
+
+            // 3) Collect parent + children
+            $allAppointments = $parent->linkedGroup()
+                ->with(['services_record.service', 'provider'])
+                ->orderByRaw('COALESCE(parent_appointment_id, id) ASC') // parent first (null parent_id)
+                ->orderBy('start_time', 'asc')
+                ->get();
+
+            $taxRate = (float) get_setting('tax_rate', 19);
+            /** @var TaxCalculatorService $tax */
+            $tax = app(TaxCalculatorService::class);
+
+            $subtotalSum = '0';
+            $taxSum      = '0';
+            $totalSum    = '0';
+
+            // 4) Build items (without events to avoid recursive observer updates)
+            InvoiceItem::withoutEvents(function () use (
+                $allAppointments, $invoice, $taxRate, $tax,
+                &$subtotalSum, &$taxSum, &$totalSum
+            ) {
+                foreach ($allAppointments as $appt) {
+                    $providerName = $appt->provider?->full_name ?? 'Provider';
+                    $services = $appt->services_record->sortBy('sequence_order');
+
+                    foreach ($services as $svc) {
+                        $result = $tax->extractTax($svc->price, $taxRate);
+
+                        InvoiceItem::create([
+                            'invoice_id' => $invoice->id,
+                            'description' => "{$svc->service_name} — by {$providerName}",
+                            'quantity' => 1,
+                            'unit_price' => $result['net'],
+                            'tax_rate' => $taxRate,
+                            'tax_amount' => $result['tax'],
+                            'total_amount' => $result['gross'],
+                            'itemable_id' => $svc->service_id,
+                            'itemable_type' => Service::class,
+                        ]);
+
+                        $subtotalSum = bcadd($subtotalSum, (string) $result['net'], 2);
+                        $taxSum      = bcadd($taxSum, (string) $result['tax'], 2);
+                        $totalSum    = bcadd($totalSum, (string) $result['gross'], 2);
+                    }
+                }
+            });
+
+            // 5) Reconcile rounding (subtotal + tax must equal total)
+            $sumCheck = bcadd($subtotalSum, $taxSum, 2);
+            $diff = bcsub($totalSum, $sumCheck, 2);
+            if (bccomp($diff, '0.00', 2) !== 0) {
+                $taxSum = bcadd($taxSum, $diff, 2);
+            }
+
+            // 6) Update invoice totals + audit metadata
+            $invoice->update([
+                'subtotal' => $subtotalSum,
+                'tax_amount' => $taxSum,
+                'tax_rate' => $taxRate,
+                'total_amount' => $totalSum,
+                'invoice_data' => array_merge($invoice->invoice_data ?? [], [
+                    'aggregated' => $allAppointments->count() > 1,
+                    'appointment_ids' => $allAppointments->pluck('id')->all(),
+                    'last_rebuilt_at' => now()->toISOString(),
+                ]),
+            ]);
+
+            Log::info('Aggregated invoice rebuilt', [
+                'invoice_id' => $invoice->id,
+                'parent_appointment_id' => $parent->id,
+                'covered_appointment_ids' => $allAppointments->pluck('id')->all(),
+                'items_count' => $invoice->items()->count(),
+                'total' => $totalSum,
+            ]);
+
+            return $invoice->fresh(['items', 'appointment']);
+        });
     }
 
     /**

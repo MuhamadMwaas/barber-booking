@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\SalonScheduleController;
 use App\Http\Controllers\Api\SocialApiAuthController;
+use App\Http\Controllers\AppointmentPrintController;
 use App\Http\Middleware\EnsureStaffDashboardAccess;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\GoogleAuthController;
@@ -69,11 +70,17 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/invoices/print-batch', [PrintController::class, 'printBatch'])
         ->name('invoices.print-batch');
+
+    Route::get('/appointment/{appointment}/print', [AppointmentPrintController::class, 'print'])
+        ->name('appointment.print');
 });
 
 Route::middleware(['web', EnsureStaffDashboardAccess::class])->group(function () {
     Route::livewire('/dashboard', \App\Livewire\StaffDashboard::class)
         ->name('staff.dashboard');
+
+    Route::livewire('/dashboard/customers', \App\Livewire\CustomerLookup::class)
+        ->name('staff.dashboard.customers');
 
     Route::get('/dashboard/language/{code}', function (string $code) {
         $language = Language::query()

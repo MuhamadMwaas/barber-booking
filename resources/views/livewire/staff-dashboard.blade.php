@@ -3,68 +3,8 @@
     x-on:booking-saved.window="showBookingModal = false; bookingSaving = false"
     x-on:booking-error.window="bookingSaving = false"
     x-on:timeoff-saved.window="showTimeOffModal = false; timeOffSaving = false">
-    {{-- Top Navigation --}}
-    <header class="bg-white border-b border-gray-200 flex items-center justify-between px-4 py-2 flex-shrink-0">
-        <div class="flex items-center space-x-6">
-            <h1 class="text-lg font-bold text-gray-800 tracking-tight">{{ config('app.name') }}</h1>
-            <nav class="flex space-x-1">
-                <a href="/dashboard"
-                    class="px-4 py-2 text-sm font-medium text-amber-600 border-b-2 border-amber-500">{{ __('dashboard.calendar') }}</a>
-                {{-- <a href="#" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">{{ __('dashboard.checkout') }}</a> --}}
-                {{-- <a href="#" class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">{{ __('dashboard.customers') }}</a> --}}
-                <a href="/admin"
-                    class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">{{ __('dashboard.admin') }}</a>
-            </nav>
-        </div>
-        <div class="flex items-center space-x-4">
-            <div class="relative" x-data="{ languageOpen: false }">
-                <button @click="languageOpen = !languageOpen"
-                    class="flex items-center space-x-2 rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-700">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.5 21m3.548-6.5A18.021 18.021 0 0017.5 21M12 11a9 9 0 100-18 9 9 0 000 18zm0 0c2.485 0 4.5 4.03 4.5 9s-2.015 9-4.5 9-4.5-4.03-4.5-9 2.015-9 4.5-9z">
-                        </path>
-                    </svg>
-                    <span class="font-medium uppercase">{{ app()->getLocale() }}</span>
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                    </svg>
-                </button>
-                <div x-show="languageOpen" x-cloak @click.outside="languageOpen = false" x-transition
-                    class="absolute {{ app()->getLocale() === 'ar' ? 'left-0' : 'right-0' }} mt-2 w-52 rounded-lg border bg-white py-1 shadow-xl z-50">
-                    @foreach ($activeLanguages as $language)
-                        <a href="{{ url('/dashboard/language/' . $language['code']) }}"
-                            class="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 {{ app()->getLocale() === $language['code'] ? 'font-semibold text-amber-600' : 'text-gray-700' }}">
-                            <span>{{ $language['native_name'] ?: $language['name'] }}</span>
-                            <span class="text-xs uppercase text-gray-400">{{ $language['code'] }}</span>
-                        </a>
-                    @endforeach
-                </div>
-            </div>
-            {{-- Notifications --}}
-            <div class="relative" x-data="{ notifOpen: false }">
-                <button @click="notifOpen = !notifOpen"
-                    class="relative p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9">
-                        </path>
-                    </svg>
-                </button>
-                <div x-show="notifOpen" @click.outside="notifOpen = false" x-transition
-                    class="absolute right-0 mt-2 w-72 bg-white rounded-lg shadow-xl border z-50 p-4">
-                    <h3 class="font-semibold text-sm text-gray-700 mb-2">{{ __('dashboard.notifications') }}</h3>
-                    <p class="text-sm text-gray-400">{{ __('dashboard.no_notifications') }}</p>
-                </div>
-            </div>
-            <div class="flex items-center space-x-2">
-                <div
-                    class="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                    {{ substr(auth()->user()->first_name ?? 'S', 0, 1) }}
-                </div>
-            </div>
-        </div>
-    </header>
+    {{-- Top Navigation (shared partial) --}}
+    @include('partials.staff-nav', ['active' => 'calendar'])
 
     <div class="flex flex-1 overflow-hidden">
         {{-- Sidebar --}}
@@ -254,7 +194,7 @@
                 <div
                     class="relative flex-1 overflow-auto"
                     id="timeline-container"
-                    @scroll.passive="onTimelineContainerScroll()"
+                    @scroll.passive="onTimelineContainerScroll(); scheduleLinkedLineRedraw()"
                 >
                     <div
                         x-show="dragging"
@@ -263,6 +203,16 @@
                         :class="{ 'is-timeoff': isDragTimeOff() }"
                         :style="dragSelectionOverlayStyle()"
                     ></div>
+
+                    {{--
+                        Linked-group connector lines — direct DOM manipulation.
+                        Alpine x-for inside SVG evaluates bindings before scope is ready → crash.
+                        Fix: write SVG children as innerHTML from drawLinkedLines() JS instead.
+                    --}}
+                    <svg id="linked-lines-svg"
+                         class="pointer-events-none fixed inset-0 z-[60]"
+                         x-effect="void timelineScale; scheduleLinkedLineRedraw()">
+                    </svg>
                     <div class="flex min-h-full">
                         {{-- Time Labels Column: flex-col حتى يطابق رأس h-10 + الجدول أعمدة الموظفين --}}
                         <div class="flex w-16 flex-shrink-0 flex-col bg-white border-r border-gray-200 sticky left-0 z-10">
@@ -373,7 +323,11 @@
                                                         default => 'bg-white hover:bg-gray-50',
                                                     };
                                                 @endphp
-                                                <div class="appointment-card absolute left-1 right-1 rounded-md border border-gray-200 {{ $bgClass }} {{ $statusClass }} overflow-hidden z-10 px-1.5 py-1"
+                                                <div class="appointment-card absolute left-1 right-1 rounded-md border border-gray-200 {{ $bgClass }} {{ $statusClass }} {{ $apt['was_pushed'] ? 'ring-1 ring-amber-300' : '' }} overflow-hidden z-10 px-1.5 py-1"
+                                                    data-appointment-id="{{ $apt['id'] }}"
+                                                    data-provider-id="{{ $provider['id'] }}"
+                                                    data-linked-root="{{ $apt['linked_group_root_id'] }}"
+                                                    data-is-child="{{ $apt['is_child_booking'] ? '1' : '0' }}"
                                                     :style="timelineBlockStyle({{ $aptOffsetMinutes }},
                                                         {{ $aptDurationMinutes }})"
                                                     wire:click="openAppointmentModal({{ $apt['id'] }})"
@@ -392,6 +346,23 @@
                                                     <div x-show="blockVisible({{ $aptDurationMinutes }}, 50)"
                                                         class="text-[9px] text-gray-400 truncate">
                                                         #{{ $apt['number'] }}</div>
+
+                                                    {{-- Linked badge: child booking ↔ another appointment (parent or sibling) --}}
+                                                    @if ($apt['is_child_booking'])
+                                                        <span class="absolute top-0.5 right-0.5 inline-flex items-center rounded-full bg-purple-100 text-purple-700 text-[8px] font-semibold px-1 py-px leading-none"
+                                                              title="{{ __('dashboard.linked.child_of') }} #{{ $apt['linked_group_root_id'] }}">
+                                                            ↳
+                                                        </span>
+                                                    @endif
+
+                                                    {{-- Pushed badge --}}
+                                                    @if ($apt['was_pushed'])
+                                                        <span class="absolute bottom-1.5 right-0.5 inline-flex items-center rounded-full bg-amber-100 text-amber-700 text-[8px] font-semibold px-1 py-px leading-none"
+                                                              title="{{ __('dashboard.linked.was_pushed_from', ['time' => $apt['original_start_time'] ?? '']) }}">
+                                                            ⚠
+                                                        </span>
+                                                    @endif
+
                                                     @if (!empty($apt['service_color_code']))
                                                         <div class="absolute inset-x-0 bottom-0 h-1"
                                                             style="background-color: {{ $apt['service_color_code'] }};">
@@ -699,10 +670,23 @@
                                 {{ $selectedAppointment->customer?->full_name ?: $selectedAppointment->getRawOriginal('customer_name') ?: 'Guest' }}
                             </span>
                         </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500">{{ __('dashboard.appointment_modal.service') }}</span>
-                            <span
-                                class="font-medium">{{ $selectedAppointment->services_record->map(fn($s) => $s->service_name)->implode(', ') }}</span>
+                        <div class="space-y-2">
+                            <div class="flex justify-between">
+                                <span class="text-gray-500">{{ __('dashboard.appointment_modal.service') }}</span>
+                                <span class="font-medium">{{ $selectedAppointment->services_record->count() }}</span>
+                            </div>
+                            <div class="space-y-1.5">
+                                @foreach ($selectedAppointment->services_record->sortBy('sequence_order') as $serviceRecord)
+                                    <div class="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                                        <span class="min-w-0 truncate font-medium text-gray-700">{{ $serviceRecord->service_name }}</span>
+                                        <span class="flex shrink-0 items-center gap-2 text-xs text-gray-500">
+                                            <span>{{ $serviceRecord->duration_minutes }} {{ __('dashboard.appointment_modal.minutes_short') }}</span>
+                                            <span class="text-gray-300">|</span>
+                                            <span>{{ number_format((float) $serviceRecord->price, 2) }} €</span>
+                                        </span>
+                                    </div>
+                                @endforeach
+                            </div>
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-500">{{ __('dashboard.appointment_modal.provider') }}</span>
@@ -728,28 +712,258 @@
 
                     <hr class="border-gray-100">
 
+                    {{-- Linked group info --}}
+                    @if ($selectedAppointment->is_child_booking && $selectedAppointment->parent)
+                        <div class="rounded-lg border border-purple-200 bg-purple-50 p-3 text-xs text-purple-800">
+                            <div class="font-semibold mb-1">↳ {{ __('dashboard.linked.linked_booking') }}</div>
+                            <div>{{ __('dashboard.linked.child_of') }} <span class="font-medium">#{{ $selectedAppointment->parent->number }}</span></div>
+                            <div class="mt-1 text-purple-600">{{ __('dashboard.linked.invoice_on_parent') }}</div>
+                        </div>
+                    @elseif ($selectedAppointment->children->isNotEmpty())
+                        <div class="rounded-lg border border-purple-200 bg-purple-50 p-3 text-xs text-purple-800">
+                            <div class="font-semibold mb-1">{{ __('dashboard.linked.has_children') }}</div>
+                            <ul class="list-disc list-inside space-y-0.5">
+                                @foreach ($selectedAppointment->children as $childAppt)
+                                    <li>
+                                        #{{ $childAppt->number }} —
+                                        {{ $childAppt->services_record->pluck('service_name')->implode(', ') }}
+                                        ({{ $childAppt->provider?->full_name }})
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
+
+                    {{-- Push history --}}
+                    @if ($selectedAppointment->was_pushed && $selectedAppointment->original_start_time)
+                        <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                            <span class="font-semibold">⚠ {{ __('dashboard.linked.was_pushed_label') }}</span>
+                            {{ __('dashboard.linked.was_pushed_from', ['time' => $selectedAppointment->original_start_time->format('H:i')]) }}
+                        </div>
+                    @endif
+
+                    {{-- Customer Notes Accordion --}}
+                    <div x-data="{ notesOpen: false }">
+                        <button
+                            type="button"
+                            @click="notesOpen = !notesOpen"
+                            class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-700 transition-colors">
+                            <span class="flex items-center gap-2">
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                                </svg>
+                                <span>{{ __('dashboard.appointment_modal.notes') }}</span>
+                                @if ($selectedAppointment->notes)
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                                        {{ __('dashboard.appointment_modal.has_notes') }}
+                                    </span>
+                                @endif
+                            </span>
+                            <svg class="w-4 h-4 text-gray-400 transition-transform duration-200"
+                                :class="notesOpen ? 'rotate-180' : ''"
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div
+                            x-show="notesOpen"
+                            x-transition:enter="transition ease-out duration-150"
+                            x-transition:enter-start="opacity-0 -translate-y-1"
+                            x-transition:enter-end="opacity-100 translate-y-0"
+                            x-transition:leave="transition ease-in duration-100"
+                            x-transition:leave-start="opacity-100 translate-y-0"
+                            x-transition:leave-end="opacity-0 -translate-y-1"
+                            class="mt-2">
+                            <textarea
+                                wire:model="editNotes"
+                                rows="3"
+                                placeholder="{{ __('dashboard.appointment_modal.notes_placeholder') }}"
+                                class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:ring-amber-500 focus:border-amber-500 resize-none"></textarea>
+                            <button
+                                wire:click="updateNotes"
+                                class="mt-1.5 w-full px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium rounded-lg border border-amber-200 transition-colors">
+                                {{ __('dashboard.appointment_modal.save_notes') }}
+                            </button>
+                        </div>
+                    </div>
+
+                    {{-- Provider Notes Accordion --}}
+                    <div x-data="{ providerNotesOpen: false }">
+                        <button
+                            type="button"
+                            @click="providerNotesOpen = !providerNotesOpen"
+                            class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-sm font-medium text-blue-700 transition-colors">
+                            <span class="flex items-center gap-2">
+                                <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <span>{{ __('dashboard.appointment_modal.provider_notes') }}</span>
+                                @if ($selectedAppointment->provider_notes)
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                                        {{ __('dashboard.appointment_modal.has_notes') }}
+                                    </span>
+                                @endif
+                            </span>
+                            <svg class="w-4 h-4 text-blue-400 transition-transform duration-200"
+                                :class="providerNotesOpen ? 'rotate-180' : ''"
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div
+                            x-show="providerNotesOpen"
+                            x-transition:enter="transition ease-out duration-150"
+                            x-transition:enter-start="opacity-0 -translate-y-1"
+                            x-transition:enter-end="opacity-100 translate-y-0"
+                            x-transition:leave="transition ease-in duration-100"
+                            x-transition:leave-start="opacity-100 translate-y-0"
+                            x-transition:leave-end="opacity-0 -translate-y-1"
+                            class="mt-2">
+                            <textarea
+                                wire:model="editProviderNotes"
+                                rows="3"
+                                placeholder="{{ __('dashboard.appointment_modal.provider_notes_placeholder') }}"
+                                class="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 resize-none"></textarea>
+                            <button
+                                wire:click="updateProviderNotes"
+                                class="mt-1.5 w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-medium rounded-lg border border-blue-200 transition-colors">
+                                {{ __('dashboard.appointment_modal.save_provider_notes') }}
+                            </button>
+                        </div>
+                    </div>
+
+                    {{-- Colors Used Accordion --}}
+                    <div x-data="{
+                        colorsOpen: false,
+                        newColorId: '',
+                        newColorQty: '',
+                        addingColor: false,
+                        async submitColor() {
+                            if (!this.newColorId || !this.newColorQty) return;
+                            this.addingColor = true;
+                            await $wire.addColorToAppointment(parseInt(this.newColorId), parseFloat(this.newColorQty));
+                            this.newColorId = '';
+                            this.newColorQty = '';
+                            this.addingColor = false;
+                        }
+                    }"
+                    @color-added.window="addingColor = false"
+                    @color-removed.window="addingColor = false">
+                        <button
+                            type="button"
+                            @click="colorsOpen = !colorsOpen"
+                            class="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-sm font-medium text-purple-700 transition-colors">
+                            <span class="flex items-center gap-2">
+                                <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path>
+                                </svg>
+                                <span>{{ __('dashboard.appointment_modal.colors_used') }}</span>
+                                @if ($selectedAppointment->colorRecords->isNotEmpty())
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                                        {{ $selectedAppointment->colorRecords->count() }}
+                                    </span>
+                                @endif
+                            </span>
+                            <svg class="w-4 h-4 text-purple-400 transition-transform duration-200"
+                                :class="colorsOpen ? 'rotate-180' : ''"
+                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            </svg>
+                        </button>
+                        <div
+                            x-show="colorsOpen"
+                            x-transition:enter="transition ease-out duration-150"
+                            x-transition:enter-start="opacity-0 -translate-y-1"
+                            x-transition:enter-end="opacity-100 translate-y-0"
+                            x-transition:leave="transition ease-in duration-100"
+                            x-transition:leave-start="opacity-100 translate-y-0"
+                            x-transition:leave-end="opacity-0 -translate-y-1"
+                            class="mt-2 space-y-2">
+
+                            {{-- Existing colors list --}}
+                            @forelse ($selectedAppointment->colorRecords as $colorRecord)
+                                <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg">
+                                    <span class="w-5 h-5 rounded flex-shrink-0 border border-gray-200"
+                                          style="background-color: {{ $colorRecord->color->hex_code ?? '#ccc' }}"></span>
+                                    <span class="flex-1 text-sm font-medium text-gray-700">
+                                        {{ $colorRecord->color->name ?? '—' }}
+                                        @if ($colorRecord->color?->brand)
+                                            <span class="text-xs text-gray-400">({{ $colorRecord->color->brand }})</span>
+                                        @endif
+                                    </span>
+                                    <span class="text-sm text-gray-500">
+                                        {{ number_format($colorRecord->quantity, 2) }} {{ $colorRecord->color->unit ?? '' }}
+                                    </span>
+                                    <button
+                                        wire:click="removeColorFromAppointment({{ $colorRecord->id }})"
+                                        wire:confirm="{{ __('dashboard.appointment_modal.confirm_remove_color') }}"
+                                        class="text-red-400 hover:text-red-600 p-1 rounded">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            @empty
+                                <p class="text-xs text-gray-400 italic px-1">{{ __('dashboard.appointment_modal.no_colors') }}</p>
+                            @endforelse
+
+                            {{-- Add color row --}}
+                            <div class="flex gap-2 pt-1">
+                                <select x-model="newColorId"
+                                    class="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-purple-500 focus:border-purple-500">
+                                    <option value="">-- {{ __('dashboard.appointment_modal.select_color') }} --</option>
+                                    @foreach ($preloadedData['colors'] as $color)
+                                        <option value="{{ $color['id'] }}">
+                                            {{ $color['display_name'] }} ({{ $color['unit'] }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <input type="number" x-model="newColorQty"
+                                    min="0.01" step="0.01"
+                                    placeholder="{{ __('dashboard.appointment_modal.qty') }}"
+                                    class="w-20 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-purple-500 focus:border-purple-500">
+                                <button
+                                    @click="submitColor()"
+                                    :disabled="!newColorId || !newColorQty || addingColor"
+                                    class="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg">
+                                    <span x-show="!addingColor">+</span>
+                                    <span x-show="addingColor">…</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     {{-- Edit Time --}}
                     <div>
                         <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
                             {{ __('dashboard.appointment_modal.edit_time') }}</h4>
-                        <div class="grid grid-cols-2 gap-3">
+                        <div class="grid grid-cols-3 gap-3">
                             <div>
                                 <label
                                     class="block text-xs text-gray-500 mb-1">{{ __('dashboard.appointment_modal.new_start_time') }}</label>
-                                <input type="time" wire:model="editStartTime" :step="timelineScale * 60"
+                                <input type="time" wire:model.live="editStartTime" :step="timelineScale * 60"
+                                    lang="en" dir="ltr"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                            </div>
+                            <div>
+                                <label
+                                    class="block text-xs text-gray-500 mb-1">{{ __('dashboard.appointment_modal.new_end_time') }}</label>
+                                <input type="time" wire:model.live="editEndTime" :step="timelineScale * 60"
+                                    lang="en" dir="ltr"
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
                             </div>
                             <div>
                                 <label
                                     class="block text-xs text-gray-500 mb-1">{{ __('dashboard.appointment_modal.new_duration') }}</label>
-                                <input type="number" wire:model="editDuration" min="5" step="5"
+                                <input type="number" wire:model.live="editDuration" min="5" step="5"
+                                    lang="en" dir="ltr"
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex items-center justify-between">
-                    <div class="flex space-x-2">
+                <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex flex-wrap gap-2">
                         @if (!in_array($selectedAppointment->payment_status->value, [1, 2, 3]) && $selectedAppointment->status->value !== 1)
                             <button wire:click="cancelAppointment"
                                 wire:confirm="{{ __('dashboard.appointment_modal.confirm_cancel') }}"
@@ -759,7 +973,42 @@
                                 class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">{{ __('dashboard.appointment_modal.delete') }}</button>
                         @endif
                     </div>
-                    <div class="flex space-x-2">
+                    <div class="flex flex-wrap gap-2">
+                        {{-- Add Service Button: only when booking can accept new services --}}
+                        @if ($selectedAppointment->canAcceptNewService())
+                            <button wire:click="openAddServiceModal({{ $selectedAppointment->id }})"
+                                class="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                <span>{{ __('dashboard.add_service.button') }}</span>
+                            </button>
+                        @endif
+
+                        {{-- Print Invoice Button: only when invoice is paid --}}
+                        @if ($selectedAppointment->canPrintInvoice())
+                            <button wire:click="printInvoiceForAppointment({{ $selectedAppointment->id }})"
+                                class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg inline-flex items-center gap-1"
+                                title="{{ $selectedAppointment->is_child_booking ? __('dashboard.print.combined_with_parent') : ($selectedAppointment->is_parent_booking ? __('dashboard.print.combined_invoice') : '') }}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                                <span>{{ __('dashboard.print.button') }}</span>
+                                @if ($selectedAppointment->is_child_booking || $selectedAppointment->is_parent_booking)
+                                    <span class="text-[10px] opacity-80">({{ __('dashboard.print.unified') }})</span>
+                                @endif
+                            </button>
+                        @endif
+
+                        {{-- Print Order Ticket Button: shown for all non-cancelled appointments --}}
+                        @if (! in_array($selectedAppointment->status, [\App\Enum\AppointmentStatus::USER_CANCELLED, \App\Enum\AppointmentStatus::ADMIN_CANCELLED], true))
+                            <button wire:click="printAppointmentTicket({{ $selectedAppointment->id }})"
+                                class="px-3 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded-lg inline-flex items-center gap-1 cursor-pointer transform transition-transform duration-150 ease-out hover:scale-105 hover:shadow-md active:scale-95"
+                                title="{{ ($selectedAppointment->is_child_booking || $selectedAppointment->is_parent_booking) ? __('dashboard.print.order_combined_group') : '' }}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m-6 0h6m-7 0H5a2 2 0 01-2-2v-5a2 2 0 012-2h14a2 2 0 012 2v5a2 2 0 01-2 2h-2M7 7V5a2 2 0 012-2h6a2 2 0 012 2v2"></path></svg>
+                                <span>{{ __('dashboard.print.order_button') }}</span>
+                                @if ($selectedAppointment->is_child_booking || $selectedAppointment->is_parent_booking)
+                                    <span class="text-[10px] opacity-80">({{ __('dashboard.print.unified') }})</span>
+                                @endif
+                            </button>
+                        @endif
+
                         @if ($selectedAppointment->status->value === 0)
                             <button wire:click="openPaymentModal({{ $selectedAppointment->id }})"
                                 class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg">
@@ -938,6 +1187,249 @@
         </div>
     </div>
 
+    {{-- ===== Add Service to Existing Booking Modal ===== --}}
+    @if ($showAddServiceModal && $addServiceToAppointmentId)
+        @php
+            $addAnchor = \App\Models\Appointment::with(['provider', 'parent'])->find($addServiceToAppointmentId);
+        @endphp
+        <div class="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4"
+             wire:click.self="closeAddServiceModal">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" @click.stop>
+                <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-gray-800">{{ __('dashboard.add_service.title') }}</h3>
+                        @if ($addAnchor)
+                            <p class="text-xs text-gray-500 mt-0.5">
+                                {{ __('dashboard.add_service.anchor_info', [
+                                    'number' => $addAnchor->number,
+                                    'start' => $addAnchor->start_time->format('H:i'),
+                                    'end' => $addAnchor->end_time->format('H:i'),
+                                ]) }}
+                            </p>
+                        @endif
+                    </div>
+                    <button wire:click="closeAddServiceModal" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="p-5 space-y-4">
+                    {{-- Placement: before / after --}}
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">
+                            {{ __('dashboard.add_service.placement') }}
+                        </label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="flex items-center justify-center px-3 py-2 rounded-lg border cursor-pointer"
+                                   :class="$wire.addServiceForm.placement === 'before' ? 'border-amber-500 bg-amber-50' : 'border-gray-200'">
+                                <input type="radio" wire:model.live="addServiceForm.placement" value="before" class="sr-only" @change="triggerAnalysis()">
+                                <span class="text-sm font-medium">{{ __('dashboard.add_service.placement_before') }}</span>
+                            </label>
+                            <label class="flex items-center justify-center px-3 py-2 rounded-lg border cursor-pointer"
+                                   :class="$wire.addServiceForm.placement === 'after' ? 'border-amber-500 bg-amber-50' : 'border-gray-200'">
+                                <input type="radio" wire:model.live="addServiceForm.placement" value="after" class="sr-only" @change="triggerAnalysis()">
+                                <span class="text-sm font-medium">{{ __('dashboard.add_service.placement_after') }}</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {{-- Category --}}
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.booking_modal.select_category') }}</label>
+                        <select wire:model.live="addServiceForm.category_id"
+                                @change="onAddServiceCategoryChange(); $nextTick(() => triggerAnalysis())"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                            <option value="">-- {{ __('dashboard.booking_modal.select_category') }} --</option>
+                            <template x-for="cat in preloaded.categories" :key="cat.id">
+                                <option :value="cat.id" x-text="cat.name"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    {{-- Service --}}
+                    <div x-show="$wire.addServiceForm.category_id">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.booking_modal.select_service') }}</label>
+                        <select wire:model.live="addServiceForm.service_id"
+                                @change="onAddServiceChange($event.target.value); $nextTick(() => triggerAnalysis())"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                            <option value="">-- {{ __('dashboard.booking_modal.select_service') }} --</option>
+                            <template x-for="s in servicesForAddCategory()" :key="s.id">
+                                <option :value="s.id" x-text="s.name + ' (' + s.duration_minutes + ' min - €' + (s.discount_price || s.price) + ')'"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    {{-- Duration --}}
+                    <div x-show="$wire.addServiceForm.service_id">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.add_service.duration_label') }}</label>
+                        <input type="number" wire:model.live.debounce.300ms="addServiceForm.duration_minutes" min="5" step="5"
+                               @change="triggerAnalysis()"
+                               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                    </div>
+
+                    {{-- Provider (defaults to same as anchor; user can change → child mode) --}}
+                    <div x-show="$wire.addServiceForm.service_id">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.add_service.provider_label') }}</label>
+                        <select wire:model.live="addServiceForm.provider_id"
+                                @change="triggerAnalysis()"
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                            @if ($addAnchor && $addAnchor->provider)
+                                <option value="{{ $addAnchor->provider_id }}">{{ $addAnchor->provider->full_name }} ({{ __('dashboard.add_service.same_provider') }})</option>
+                            @endif
+                            @foreach ($allProviders as $p)
+                                @if ($addAnchor && $p['id'] != $addAnchor->provider_id)
+                                    <option value="{{ $p['id'] }}">{{ $p['name'] }} ({{ __('dashboard.add_service.different_provider') }})</option>
+                                @endif
+                            @endforeach
+                        </select>
+                        <p class="text-[10px] text-gray-400 mt-1">{{ __('dashboard.add_service.provider_hint') }}</p>
+                    </div>
+
+                    {{-- Analysis Result Box --}}
+                    @php $analysis = $addServiceAnalysis; @endphp
+                    @if (!empty($analysis))
+                        @if ($analysis['is_possible'] ?? false)
+                            @if ($analysis['requires_push'] ?? false)
+                                <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                                    <div class="font-semibold mb-1">⚠ {{ __('dashboard.add_service.requires_push') }}</div>
+                                    <div class="text-xs">{{ __('dashboard.add_service.push_count_will', ['count' => count($analysis['push_plan'] ?? [])]) }}</div>
+                                    <div class="text-xs mt-1">{{ __('dashboard.add_service.start_at') }}: <span class="font-mono font-semibold">{{ $analysis['suggested_start_time'] ?? '' }}</span></div>
+                                </div>
+                            @else
+                                <div class="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                                    <div class="font-semibold mb-1">✓ {{ __('dashboard.add_service.fits_well') }}</div>
+                                    <div class="text-xs">{{ __('dashboard.add_service.start_at') }}: <span class="font-mono font-semibold">{{ $analysis['suggested_start_time'] ?? '' }}</span> → <span class="font-mono font-semibold">{{ $analysis['suggested_end_time'] ?? '' }}</span></div>
+                                    @if (($analysis['gap_minutes'] ?? 0) > 0)
+                                        <div class="text-xs mt-1">{{ __('dashboard.add_service.gap_info', ['minutes' => $analysis['gap_minutes']]) }}</div>
+                                    @endif
+                                </div>
+                            @endif
+                        @else
+                            <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                                <div class="font-semibold mb-1">✕ {{ __('dashboard.add_service.cannot_fit') }}</div>
+                                <div class="text-xs">
+                                    @switch($analysis['reason'] ?? '')
+                                        @case('insufficient_space')
+                                        @case('no_space_before')
+                                        @case('exceeds_work_hours')
+                                            {{ __('dashboard.add_service.reason_insufficient', ['max' => $analysis['max_duration_available'] ?? 0]) }}
+                                            @break
+                                        @case('gap_too_large')
+                                            {{ __('dashboard.add_service.reason_gap_too_large', ['gap' => $analysis['gap_minutes'] ?? 0]) }}
+                                            @break
+                                        @case('paid_booking_in_chain')
+                                            {{ __('dashboard.add_service.reason_paid_in_chain', ['number' => $analysis['blocking_appointment_number'] ?? '?', 'max' => $analysis['max_duration_available'] ?? 0]) }}
+                                            @break
+                                        @case('new_provider_busy')
+                                            {{ __('dashboard.add_service.reason_provider_busy') }}
+                                            @break
+                                        @case('provider_not_working')
+                                        @case('provider_full_day_off')
+                                        @case('provider_time_off_conflict')
+                                            {{ __('dashboard.add_service.reason_provider_unavailable') }}
+                                            @break
+                                        @default
+                                            {{ $analysis['reason'] ?? 'unknown' }}
+                                    @endswitch
+                                </div>
+                                @if (!empty($analysis['max_duration_available']))
+                                    <button wire:click="applyMaxDuration"
+                                            class="mt-2 px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700">
+                                        {{ __('dashboard.add_service.reduce_to_max', ['min' => $analysis['max_duration_available']]) }}
+                                    </button>
+                                @endif
+                            </div>
+                        @endif
+                    @endif
+                </div>
+
+                <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex justify-end space-x-2">
+                    <button wire:click="closeAddServiceModal"
+                            class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{{ __('dashboard.add_service.cancel') }}</button>
+                    @php
+                        $analysisPossible = ($addServiceAnalysis['is_possible'] ?? false) === true;
+                        $needsPush = ($addServiceAnalysis['requires_push'] ?? false) === true;
+                    @endphp
+                    <button wire:click="confirmAddService({{ $needsPush ? 'true' : 'false' }})"
+                            @disabled(!$analysisPossible)
+                            class="px-5 py-2 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg">
+                        @if ($needsPush)
+                            {{ __('dashboard.add_service.review_push') }}
+                        @else
+                            {{ __('dashboard.add_service.confirm') }}
+                        @endif
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- ===== Push Preview Modal ===== --}}
+    @if ($showPushPreviewModal && !empty($pushPreviewPlan))
+        <div class="fixed inset-0 modal-overlay z-[60] flex items-center justify-center p-4"
+             wire:click.self="cancelPushPreview">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto" @click.stop>
+                <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-800">{{ __('dashboard.push_preview.title') }}</h3>
+                    <button wire:click="cancelPushPreview" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="p-5 space-y-4">
+                    <p class="text-sm text-gray-700">{{ __('dashboard.push_preview.intro', ['count' => count($pushPreviewPlan)]) }}</p>
+                    <div class="overflow-x-auto rounded-lg border border-gray-200">
+                        <table class="w-full text-sm">
+                            <thead class="bg-gray-50 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">#</th>
+                                    <th class="px-3 py-2 text-left">{{ __('dashboard.push_preview.customer') }}</th>
+                                    <th class="px-3 py-2 text-left">{{ __('dashboard.push_preview.original') }}</th>
+                                    <th class="px-3 py-2 text-left">{{ __('dashboard.push_preview.new') }}</th>
+                                    <th class="px-3 py-2 text-left">{{ __('dashboard.push_preview.push_min') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 bg-white">
+                                @foreach ($pushPreviewPlan as $item)
+                                    <tr>
+                                        <td class="px-3 py-2 font-mono text-xs text-gray-700">#{{ $item['appointment_number'] }}</td>
+                                        <td class="px-3 py-2 text-gray-700">
+                                            @if (!empty($item['has_customer_account']))<span class="text-amber-600">@</span>@endif
+                                            {{ $item['customer_name'] }}
+                                        </td>
+                                        <td class="px-3 py-2 text-gray-500 line-through">
+                                            {{ $item['original_start'] }} → {{ $item['original_end'] }}
+                                        </td>
+                                        <td class="px-3 py-2 text-red-600 font-semibold">
+                                            {{ $item['new_start'] }} → {{ $item['new_end'] }}
+                                        </td>
+                                        <td class="px-3 py-2">
+                                            <span class="inline-block bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 text-xs font-semibold">
+                                                +{{ $item['push_minutes'] }}m
+                                            </span>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-xs text-gray-500">{{ __('dashboard.push_preview.notify_note') }}</p>
+                </div>
+                <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex justify-end space-x-2">
+                    <button wire:click="cancelPushPreview"
+                            class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{{ __('dashboard.push_preview.cancel') }}</button>
+                    <button wire:click="confirmPushAndAddService"
+                            class="px-5 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg">
+                        {{ __('dashboard.push_preview.confirm') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
     <script>
         function dashboardApp() {
             return {
@@ -950,6 +1442,10 @@
                 _onDocDragMove: null,
                 _onDocDragUp: null,
                 _dragLayoutVersion: 0,
+
+                // ---- Linked-group connector lines (parent ↔ children) ----
+                linkedLines: [],
+                _linkedRedrawHandle: null,
 
                 showBookingModal: false,
                 bookingSaving: false,
@@ -1079,6 +1575,111 @@
                     const savedScale = parseInt(window.localStorage.getItem(this.timelineScaleStorageKey), 10);
                     if (this.timelineScaleOptions.some(option => option.value === savedScale)) {
                         this.timelineScale = savedScale;
+                    }
+
+                    // Redraw linked-group connector lines after each Livewire update
+                    // (timeline data may have changed → cards moved → recalc).
+                    // Register the global listeners only ONCE: wire:navigate keeps the JS
+                    // runtime alive across pages, so re-registering on every component init
+                    // would leak hooks that also fire on OTHER pages (e.g. the Customers
+                    // search morph) and run against destroyed component instances.
+                    if (!window.__linkedLinesHooked) {
+                        window.__linkedLinesHooked = true;
+                        if (window.Livewire) {
+                            Livewire.hook('morph.updated', () => this.scheduleLinkedLineRedraw());
+                        }
+                        window.addEventListener('resize', () => this.scheduleLinkedLineRedraw());
+                    }
+                    this.scheduleLinkedLineRedraw();
+                },
+
+                // ---- Linked-group SVG connector lines ----
+                scheduleLinkedLineRedraw() {
+                    // No-op on any page without the timeline SVG (e.g. the Customers tab
+                    // reached via wire:navigate). Guards the global morph/resize hooks from
+                    // touching unrelated pages and corrupting their Livewire/Alpine runtime.
+                    if (!document.getElementById('linked-lines-svg')) return;
+                    // Coalesce rapid calls to a single rAF.
+                    if (this._linkedRedrawHandle) return;
+                    this._linkedRedrawHandle = requestAnimationFrame(() => {
+                        this._linkedRedrawHandle = null;
+                        this.drawLinkedLines();
+                    });
+                },
+
+                drawLinkedLines() {
+                    const cards = document.querySelectorAll('.appointment-card[data-linked-root]');
+                    const groups = new Map();
+                    cards.forEach(el => {
+                        const root = el.dataset.linkedRoot;
+                        if (!root) return;
+                        if (!groups.has(root)) groups.set(root, []);
+                        groups.get(root).push(el);
+                    });
+
+                    const lines = [];
+                    let lineIdx = 0;
+                    groups.forEach((items, rootId) => {
+                        if (items.length < 2) return;
+                        // Sort by start time stored on the card (best-effort: use rect.top instead)
+                        items.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+
+                        for (let i = 1; i < items.length; i++) {
+                            const a = items[i - 1].getBoundingClientRect();
+                            const b = items[i].getBoundingClientRect();
+                            // Mid-point on the right edge of the previous card → mid-point on the left edge of the next
+                            lines.push({
+                                id: `lk-${rootId}-${lineIdx++}`,
+                                x1: a.right,
+                                y1: a.top + a.height / 2,
+                                x2: b.left,
+                                y2: b.top + b.height / 2,
+                            });
+                        }
+                    });
+                    // Write directly to SVG DOM — avoids Alpine x-for/SVG scope bug
+                    const svg = document.getElementById('linked-lines-svg');
+                    if (!svg) return;
+                    svg.innerHTML = lines.map(l =>
+                        `<g>` +
+                        `<line x1="${l.x1}" y1="${l.y1}" x2="${l.x2}" y2="${l.y2}" stroke="#a855f7" stroke-width="2" stroke-dasharray="5 3" stroke-linecap="round"/>` +
+                        `<circle cx="${l.x1}" cy="${l.y1}" r="3" fill="#a855f7"/>` +
+                        `<circle cx="${l.x2}" cy="${l.y2}" r="3" fill="#a855f7"/>` +
+                        `</g>`
+                    ).join('');
+                },
+
+                // ---- Add Service Modal helpers (Alpine ↔ Livewire bridge) ----
+                addServiceModalAlpine() { /* placeholder, real method below */ },
+
+                onAddServiceCategoryChange() {
+                    // Reset downstream service id when category changes.
+                    this.$wire.set('addServiceForm.service_id', null);
+                    this.$wire.set('addServiceForm.duration_minutes', 0);
+                },
+
+                onAddServiceChange(serviceId = null) {
+                    const svcId = serviceId || this.$wire.get('addServiceForm.service_id');
+                    const svc = this.preloaded.services.find(s => s.id == svcId);
+                    if (svc) {
+                        this.$wire.set('addServiceForm.duration_minutes', svc.duration_minutes);
+                    } else {
+                        this.$wire.set('addServiceForm.duration_minutes', 0);
+                    }
+                },
+
+                servicesForAddCategory() {
+                    const catId = this.$wire.get('addServiceForm.category_id');
+                    if (!catId) return [];
+                    return this.preloaded.services.filter(s => s.category_id == catId);
+                },
+
+                async triggerAnalysis() {
+                    // Debounced server roundtrip — analyzeAddServiceGap() returns a snapshot.
+                    try {
+                        await this.$wire.analyzeAddServiceGap();
+                    } catch (e) {
+                        // swallow — UI will show stale or empty state
                     }
                 },
 
@@ -1376,6 +1977,9 @@
                     y = Math.max(0, Math.min(rect.height, y));
                     this.dragCurrentY = y;
                 },
+
+                // No-op: kept for backward compat if referenced elsewhere
+                _legacyAddServiceModalShim() {},
 
                 finishDragFromDocument() {
                     this.detachDocumentDragListeners();

@@ -61,6 +61,13 @@
                 window.open(`/invoice/${invoiceId}/print`, '_blank', 'width=400,height=600');
             }
         });
+
+        window.addEventListener('printAppointment', (e) => {
+            const appointmentId = e.detail.appointmentId;
+            if (appointmentId) {
+                window.open(`/appointment/${appointmentId}/print`, '_blank', 'width=400,height=600');
+            }
+        });
     </script>
 </body>
 </html>

@@ -1,5 +1,7 @@
 # StaffDashboard Documentation
 
+> **آخر تحديث:** 2026-05-29 — أُضيف تاب Customers + مكوّن CustomerLookup + خدمة CustomerLookupService + partial nav مشترك.
+
 > وثيقة مرجعية عميقة ومبنية على قراءة مباشرة للكود الحالي، هدفها أن تمنح أي AI أو مطور فهمًا دقيقًا جدًا لصفحة `StaffDashboard` بكل ما فيها: الواجهة، الحالة، تدفقات الحجز، الدفع، الإجازات، الـ timeline، القواعد التشغيلية، والقيود الحالية.
 
 ---
@@ -1494,3 +1496,58 @@ saveBookingFromAlpine()
 10. `Agent.md`
 
 هذه الوثيقة تصف السلوك الحالي كما هو موجود في الكود وقت إعدادها، وليس كما "يفترض" أن يكون نظريًا.
+
+---
+
+## 31. Customer Lookup Tab — التحديثات المضافة (2026-05-29)
+
+### 31.1 الملفات الجديدة
+
+| الملف | الدور |
+|-------|-------|
+| `app/Livewire/Concerns/ProvidesDashboardChrome.php` | Trait مشترك بين StaffDashboard وCustomerLookup — يوفّر `getActiveLanguages()` مع cache |
+| `app/Services/CustomerLookupService.php` | استعلامات البحث: مسجّلون (LIKE على User) + ضيوف (LIKE على أعمدة appointments الخام) + سجل حجوزات عميل |
+| `app/Livewire/CustomerLookup.php` | مكوّن Livewire 4 مستقل لتاب Customers. يستخدم `#[Computed]` للموعد المختار |
+| `resources/views/livewire/customer-lookup.blade.php` | واجهة التاب: بحث → نتائج → سجل عميل → مودال read-only |
+| `resources/views/partials/staff-nav.blade.php` | شريط التابات المشترك (Calendar / Customers / Admin) — يستقبل `$active` و`$activeLanguages`. يستخدم `wire:navigate` للـ SPA transitions |
+
+### 31.2 الملفات المعدّلة
+
+| الملف | التغيير |
+|-------|---------|
+| `app/Livewire/StaffDashboard.php` | أضيف `use ProvidesDashboardChrome;` + حُذف `getActiveLanguages()` المكرّر |
+| `resources/views/livewire/staff-dashboard.blade.php` | استُبدلت كتلة `<header>` (61 سطرًا) بـ `@include('partials.staff-nav', ['active' => 'calendar'])` |
+| `routes/web.php` | أضيف `Route::livewire('/dashboard/customers', CustomerLookup::class)->name('staff.dashboard.customers')` ضمن مجموعة `EnsureStaffDashboardAccess` |
+| `lang/en/dashboard.php` + `ar` + `de` | أضيف قسم `customer_lookup` بـ 30 مفتاح ترجمة لكل لغة |
+
+### 31.3 CustomerLookup — حالات المكوّن
+
+| الحالة | ما يُعرَض |
+|--------|-----------|
+| `!$searched` | Empty state: أيقونة + تعليمات |
+| `$searched && !$selectedCustomerId` | نتائج البحث: مسجّلون (grid) + ضيوف (list) |
+| `$selectedCustomerId` | سجل حجوزات العميل المختار + زر رجوع |
+| `$selectedAppointmentId` | مودال read-only كامل (خدمات + ملاحظات + ألوان) |
+
+### 31.4 قرارات معمارية حرجة
+
+1. **MySQL LIKE** (وليس ILIKE) — قاعدة البيانات هي MySQL وليس PostgreSQL كما يقول Agent.md.
+2. **بحث الضيوف على الأعمدة الخام** (`customer_name`/`customer_email`/`customer_phone`) وليس على الـ accessor الذي يرجع User data عند وجود `customer_id`.
+3. **Read-only بحت** — لا توجد أي دالة تعديل في CustomerLookup. الألوان والملاحظات تُعرَض فقط.
+4. **`wire:navigate`** على روابط Calendar وCustomers للـ SPA navigation السلس (Livewire 4).
+5. **`#[Computed]` مع `app(DashboardService::class)`** داخل computed property لتفادي أي مشكلة في injection lifecycle.
+6. **لا `wire:poll`** في CustomerLookup — شاشة بحث لا تحتاج تحديثًا دوريًا.
+
+### 31.5 تحذيرات للمطورين
+
+- الـ partial `staff-nav.blade.php` يعتمد على `$activeLanguages` — تأكّد أن كل component يمرّره عبر `render()`.
+- `getCustomers()` في DashboardService لا تزال مستخدمة في Alpine booking modal — **لا تحذفها**.
+- `CustomerLookupService::searchGuestAppointments()` تستعلم فقط على `customer_id = NULL` — لا تطبّق عليها فلترة `created_status`.
+- حد النتائج: 25 للعملاء المسجّلين، 50 لحجوزات الضيوف، 100 لسجل العميل الواحد.
+
+### 31.6 Route جديد
+
+```
+GET /dashboard/customers  →  App\Livewire\CustomerLookup  (name: staff.dashboard.customers)
+middleware: web + EnsureStaffDashboardAccess (نفس صلاحية Calendar)
+```

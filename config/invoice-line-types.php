@@ -284,6 +284,27 @@ return [
         // CUSTOM MESSAGES
         // ============================================================
 
+        // ============================================================
+        // COLORS / PRODUCTS USED
+        // ============================================================
+
+        'colors_used' => [
+            'label' => 'Colors Used (Client History)',
+            'icon' => 'heroicon-o-swatch',
+            'blade_view' => 'invoices.line-types.colors-used',
+            'sections' => ['body', 'footer'],
+            'unique' => true,
+            'properties' => [
+                'title'         => 'Colors Used',
+                'show_title'    => true,
+                'show_hex'      => true,     // show color swatch square
+                'show_brand'    => true,
+                'font_size'     => 9,
+                'margin_top'    => 5,
+                'margin_bottom' => 5,
+            ],
+        ],
+
         'thank_you_message' => [
             'label' => 'Thank You Message',
             'icon' => 'heroicon-o-heart',

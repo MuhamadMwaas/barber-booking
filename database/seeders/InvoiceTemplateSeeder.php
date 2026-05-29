@@ -387,13 +387,13 @@ class InvoiceTemplateSeeder extends Seeder
     }
 
     /**
-     * Create English template
+     * Create English template matching the German POS receipt layout
      */
     protected function createEnglishTemplate(): void
     {
         $template = InvoiceTemplate::create([
             'name' => 'English POS Receipt (80mm)',
-            'description' => 'Standard English receipt template',
+            'description' => 'English receipt template matching Look up Friseur style',
             'is_active' => true,
             'is_default' => false,
             'language' => 'en',
@@ -409,16 +409,16 @@ class InvoiceTemplateSeeder extends Seeder
                 'border_color' => '#cccccc',
             ],
             'company_info' => [
-                'name' => 'My Business',
-                'address' => "123 Main Street\nCity, Country",
-                'phone' => '+1 234 567 8900',
-                'tax_number' => 'TAX123456',
-                'email' => 'info@mybusiness.com',
+                'name' => 'Look up Friseur',
+                'address' => "Rupprechtstr. 33\nD-84034 Landshut",
+                'phone' => '0871-6877271',
+                'tax_number' => 'Tax No. 132/167/54659',
+                'email' => '',
                 'logo_path' => null,
             ],
         ]);
 
-        // Add default English lines
+        // Header Lines
         $template->lines()->create([
             'section' => 'header',
             'type' => 'text',
@@ -426,8 +426,50 @@ class InvoiceTemplateSeeder extends Seeder
             'properties' => [
                 'content_type' => 'dynamic',
                 'dynamic_field' => 'company.name',
-                'font_size' => 14,
+                'font_size' => 12,
                 'font_weight' => 'bold',
+                'alignment' => 'center',
+                'margin_bottom' => 2,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'header',
+            'type' => 'text',
+            'order' => 1,
+            'properties' => [
+                'content_type' => 'dynamic',
+                'dynamic_field' => 'company.address',
+                'font_size' => 9,
+                'font_weight' => 'normal',
+                'alignment' => 'center',
+                'margin_bottom' => 1,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'header',
+            'type' => 'text',
+            'order' => 2,
+            'properties' => [
+                'content_type' => 'dynamic',
+                'dynamic_field' => 'company.phone',
+                'font_size' => 9,
+                'font_weight' => 'normal',
+                'alignment' => 'center',
+                'margin_bottom' => 1,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'header',
+            'type' => 'text',
+            'order' => 3,
+            'properties' => [
+                'content_type' => 'dynamic',
+                'dynamic_field' => 'company.tax_number',
+                'font_size' => 9,
+                'font_weight' => 'normal',
                 'alignment' => 'center',
                 'margin_bottom' => 3,
             ],
@@ -436,72 +478,274 @@ class InvoiceTemplateSeeder extends Seeder
         $template->lines()->create([
             'section' => 'header',
             'type' => 'separator',
-            'order' => 1,
-            'properties' => ['style' => 'solid'],
+            'order' => 4,
+            'properties' => [
+                'style' => 'solid',
+                'width' => 1,
+                'margin_top' => 3,
+                'margin_bottom' => 3,
+            ],
+        ]);
+
+        // Invoice Number and Date
+        $template->lines()->create([
+            'section' => 'header',
+            'type' => 'text',
+            'order' => 5,
+            'properties' => [
+                'content_type' => 'static',
+                'static_value' => 'Invoice No. 8 (Copy)',
+                'font_size' => 11,
+                'font_weight' => 'bold',
+                'alignment' => 'left',
+                'margin_bottom' => 3,
+            ],
         ]);
 
         $template->lines()->create([
             'section' => 'header',
-            'type' => 'invoice_number',
-            'order' => 2,
-            'properties' => ['show_label' => true, 'label' => 'Invoice No:'],
+            'type' => 'two_column',
+            'order' => 6,
+            'properties' => [
+                'label' => 'Date:',
+                'label_width' => 30,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.date',
+                'font_size' => 9,
+                'label_bold' => false,
+                'alignment' => 'left',
+                'margin_bottom' => 3,
+            ],
         ]);
 
         $template->lines()->create([
             'section' => 'header',
-            'type' => 'invoice_date',
-            'order' => 3,
-            'properties' => ['show_label' => true, 'show_time' => true],
+            'type' => 'separator',
+            'order' => 7,
+            'properties' => [
+                'style' => 'dashed',
+                'width' => 1,
+                'margin_top' => 3,
+                'margin_bottom' => 3,
+            ],
         ]);
 
+        // Body - Items Table
         $template->lines()->create([
             'section' => 'body',
             'type' => 'items_table',
             'order' => 0,
             'properties' => [
                 'show_item_numbers' => true,
-                'show_quantity' => true,
+                'show_quantity' => false,
                 'show_unit_price' => true,
-                'show_tax_rate' => true,
+                'show_tax_rate' => false,
+                'show_tax_amount' => false,
                 'show_total' => true,
-                'table_border' => true,
+                'table_border' => false,
+                'header_background' => '#ffffff',
+                'header_text_color' => '#000000',
+                'row_separator' => true,
+                'font_size' => 9,
+                'margin_bottom' => 3,
             ],
         ]);
 
         $template->lines()->create([
             'section' => 'body',
-            'type' => 'totals_summary',
+            'type' => 'separator',
             'order' => 1,
             'properties' => [
-                'show_subtotal' => true,
-                'show_tax_breakdown' => true,
-                'show_total' => true,
-                'highlight_total' => true,
+                'style' => 'dashed',
+                'width' => 1,
+                'margin_top' => 2,
+                'margin_bottom' => 2,
+            ],
+        ]);
+
+        // Tax Breakdown (like in image with highlight box)
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'text',
+            'order' => 2,
+            'properties' => [
+                'content_type' => 'static',
+                'static_value' => 'Net(1)       Eur     21,01',
+                'font_size' => 9,
+                'font_weight' => 'normal',
+                'alignment' => 'left',
+                'margin_bottom' => 1,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'text',
+            'order' => 3,
+            'properties' => [
+                'content_type' => 'static',
+                'static_value' => '+ 19,0% VAT:       3,99',
+                'font_size' => 9,
+                'font_weight' => 'normal',
+                'alignment' => 'left',
+                'margin_bottom' => 3,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'separator',
+            'order' => 4,
+            'properties' => [
+                'style' => 'double',
+                'width' => 2,
+                'margin_top' => 2,
+                'margin_bottom' => 2,
+            ],
+        ]);
+
+        // Grand Total
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 5,
+            'properties' => [
+                'label' => 'Total Eur',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.total',
+                'font_size' => 11,
+                'label_bold' => true,
+                'alignment' => 'left',
+                'margin_bottom' => 3,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'separator',
+            'order' => 6,
+            'properties' => [
+                'style' => 'double',
+                'width' => 2,
+                'margin_top' => 2,
+                'margin_bottom' => 2,
+            ],
+        ]);
+
+        // Payment
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 7,
+            'properties' => [
+                'label' => 'Paid Eur',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'payment.amount',
+                'font_size' => 9,
+                'label_bold' => false,
+                'alignment' => 'left',
+                'margin_bottom' => 2,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'text',
+            'order' => 8,
+            'properties' => [
+                'content_type' => 'static',
+                'static_value' => 'Paid by Girocard',
+                'font_size' => 9,
+                'font_weight' => 'normal',
+                'alignment' => 'left',
+                'margin_bottom' => 3,
+            ],
+        ]);
+
+        // Footer
+        $template->lines()->create([
+            'section' => 'footer',
+            'type' => 'separator',
+            'order' => 0,
+            'properties' => [
+                'style' => 'dashed',
+                'width' => 1,
+                'margin_top' => 3,
+                'margin_bottom' => 3,
             ],
         ]);
 
         $template->lines()->create([
             'section' => 'footer',
-            'type' => 'separator',
-            'order' => 0,
-            'properties' => ['style' => 'dashed'],
-        ]);
-
-        $template->lines()->create([
-            'section' => 'footer',
-            'type' => 'payment_info',
-            'order' => 1,
-            'properties' => ['show_method' => true, 'show_amount' => true],
-        ]);
-
-        $template->lines()->create([
-            'section' => 'footer',
             'type' => 'thank_you_message',
+            'order' => 1,
+            'properties' => [
+                'message' => 'Thank you for your purchase',
+                'font_size' => 10,
+                'font_style' => 'normal',
+                'alignment' => 'center',
+                'margin_bottom' => 3,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'footer',
+            'type' => 'text',
             'order' => 2,
             'properties' => [
-                'message' => 'Thank you for your business!',
-                'font_style' => 'italic',
+                'content_type' => 'static',
+                'static_value' => 'Served by:',
+                'font_size' => 9,
+                'font_weight' => 'normal',
                 'alignment' => 'center',
+                'margin_bottom' => 1,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'footer',
+            'type' => 'text',
+            'order' => 3,
+            'properties' => [
+                'content_type' => 'static',
+                'static_value' => 'Luay',
+                'font_size' => 10,
+                'font_weight' => 'bold',
+                'alignment' => 'center',
+                'margin_bottom' => 5,
+            ],
+        ]);
+
+        // TSE/Fiskaly Info
+        $template->lines()->create([
+            'section' => 'footer',
+            'type' => 'tse_info',
+            'order' => 4,
+            'properties' => [
+                'show_tss_serial' => true,
+                'show_transaction_number' => true,
+                'show_signature_counter' => true,
+                'show_timestamp' => true,
+                'font_size' => 7,
+                'alignment' => 'center',
+                'margin_top' => 5,
+                'margin_bottom' => 5,
+            ],
+        ]);
+
+        // QR Code
+        $template->lines()->create([
+            'section' => 'footer',
+            'type' => 'qr_code',
+            'order' => 5,
+            'properties' => [
+                'size' => 120,
+                'alignment' => 'center',
+                'error_correction' => 'M',
+                'margin_top' => 5,
+                'margin_bottom' => 5,
             ],
         ]);
     }

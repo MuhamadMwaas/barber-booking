@@ -1,5 +1,6 @@
 <?php
 namespace App\Services;
+use App\Enum\AppointmentStatus;
 use App\Enum\InvoiceStatus;
 use App\Enum\PaymentStatus;
 use App\Models\Appointment;
@@ -201,7 +202,10 @@ class InvoiceFinalizationService
     }
 
     /**
-     * تحديث حالة الحجز
+     * Update status/payment for the appointment that owns the invoice AND
+     * every linked child appointment. This is the "atomic group finalization"
+     * step: when the unified invoice goes PAID, ALL linked bookings flip to
+     * COMPLETED + matching payment_status in one transaction.
      */
     private function updateAppointmentStatus(
         Appointment $appointment,
@@ -210,15 +214,34 @@ class InvoiceFinalizationService
     ): void {
 
         $paymentStatus = match($invoiceStatus) {
-            InvoiceStatus::PAID => PaymentStatus::from($paymentType),
+            InvoiceStatus::PAID => PaymentStatus::from((int) $paymentType),
             InvoiceStatus::PARTIALLY_PAID => PaymentStatus::PENDING,
             default => PaymentStatus::PENDING,
         };
 
-        // TODO: ربط بجدول payment_methods
-        $appointment->update([
+        // Whole linked group (parent + every child). Standalone returns just self.
+        $linkedAppointments = $appointment->linkedGroup()->get();
+
+        $appointmentUpdates = [
             'payment_status' => $paymentStatus,
-            'payment_method' => 'Cash',
+            'payment_method' => $paymentStatus->label(),
+        ];
+
+        // When the invoice is fully PAID, mark every appointment in the group
+        // as COMPLETED so the timeline reflects "service rendered".
+        if ($invoiceStatus === InvoiceStatus::PAID) {
+            $appointmentUpdates['status'] = AppointmentStatus::COMPLETED;
+        }
+
+        foreach ($linkedAppointments as $linked) {
+            $linked->update($appointmentUpdates);
+        }
+
+        Log::info('Linked appointments finalized together', [
+            'invoice_root_appointment_id' => $appointment->id,
+            'linked_count' => $linkedAppointments->count(),
+            'invoice_status' => $invoiceStatus->getLabel(),
+            'payment_status' => $paymentStatus->label(),
         ]);
     }
 

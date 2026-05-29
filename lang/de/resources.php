@@ -1232,6 +1232,33 @@ return [
         'preview_error' => 'Beim Anzeigen der Seite ist ein Fehler aufgetreten.',
         'default_translation_required' => 'Eine Uebersetzung in der Standardsprache ist erforderlich.',
     ],
+    // ─────────────────────────────────────────────────────────────
+    // Color (Farb-/Produktkatalog)
+    // ─────────────────────────────────────────────────────────────
+    'color' => [
+        'label'               => 'Farbe',
+        'plural'              => 'Farben',
+        'navigation_label'    => 'Farben',
+
+        // Section
+        'section_info'        => 'Farbinformationen',
+
+        // Fields
+        'name'                => 'Farbname',
+        'brand'               => 'Marke',
+        'hex_code'            => 'Hex-Farbcode',
+        'unit'                => 'Einheit',
+        'unit_piece'          => 'Stueck (Einheit)',
+        'stock_quantity'      => 'Lagerbestand',
+        'stock_quantity_hint' => 'Nur Referenzwert — wird nicht als Live-Inventar verfolgt',
+        'is_active'           => 'Aktiv',
+        'created_at'          => 'Erstellt am',
+
+        // Filters
+        'active_only'         => 'Nur aktive',
+        'inactive_only'       => 'Nur inaktive',
+    ],
+
     'printer_setting' => [
         'label' => 'Drucker',
         'plural_label' => 'Drucker',
