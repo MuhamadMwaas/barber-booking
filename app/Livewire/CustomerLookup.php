@@ -15,32 +15,39 @@ class CustomerLookup extends Component
     use ProvidesDashboardChrome;
 
     // ── Search State ─────────────────────────────────────────────────────────
-    public string $search     = '';
-    public bool   $searched   = false;
+    public string $search = '';
+
+    public bool $searched = false;
 
     // ── Results ───────────────────────────────────────────────────────────────
-    public array $registeredResults  = [];
-    public array $guestResults       = [];
-    public bool  $registeredCapped   = false;  // hit the 25-result limit
-    public bool  $guestCapped        = false;  // hit the 50-result limit
+    public array $registeredResults = [];
+
+    public array $guestResults = [];
+
+    public bool $registeredCapped = false;  // hit the 25-result limit
+
+    public bool $guestCapped = false;  // hit the 50-result limit
 
     // ── Navigation State ──────────────────────────────────────────────────────
-    public ?int   $selectedCustomerId    = null;
-    public ?array $selectedCustomerInfo  = null;
-    public array  $customerAppointments  = [];
+    public ?int $selectedCustomerId = null;
+
+    public ?array $selectedCustomerInfo = null;
+
+    public array $customerAppointments = [];
 
     // ── Detail Modal ──────────────────────────────────────────────────────────
     public ?int $selectedAppointmentId = null;
 
     // ── Injected Services (non-serialized) ───────────────────────────────────
     protected CustomerLookupService $lookupService;
-    protected DashboardService      $dashboardService;
+
+    protected DashboardService $dashboardService;
 
     public function boot(
         CustomerLookupService $lookupService,
-        DashboardService      $dashboardService
+        DashboardService $dashboardService
     ): void {
-        $this->lookupService    = $lookupService;
+        $this->lookupService = $lookupService;
         $this->dashboardService = $dashboardService;
     }
 
@@ -52,42 +59,43 @@ class CustomerLookup extends Component
 
         if (mb_strlen($q) < 2) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.customer_lookup.min_chars'));
+
             return;
         }
 
         $this->resetCustomerView();
 
         $registered = $this->lookupService->searchRegisteredCustomers($q, 25);
-        $guests     = $this->lookupService->searchGuestAppointments($q, 50);
+        $guests = $this->lookupService->searchGuestAppointments($q, 50);
 
         $this->registeredCapped = $registered->count() === 25;
-        $this->guestCapped      = $guests->count() === 50;
+        $this->guestCapped = $guests->count() === 50;
 
         $this->registeredResults = $registered->map(fn ($u) => [
-            'id'                 => $u->id,
-            'name'               => $u->full_name,
-            'email'              => $u->email,
-            'phone'              => $u->phone,
+            'id' => $u->id,
+            'name' => $u->full_name,
+            'email' => $u->email,
+            'phone' => $u->phone,
             'appointments_count' => $u->customer_appointments_count,
         ])->toArray();
 
         $this->guestResults = $guests->map(fn ($apt) => [
-            'id'                   => $apt->id,
-            'number'               => $apt->number,
-            'customer_name'        => $apt->getRawOriginal('customer_name') ?: 'Guest',
-            'customer_phone'       => $apt->getRawOriginal('customer_phone'),
-            'customer_email'       => $apt->getRawOriginal('customer_email'),
+            'id' => $apt->id,
+            'number' => $apt->number,
+            'customer_name' => $apt->customer_name,
+            'customer_phone' => $apt->customer_phone,
+            'customer_email' => $apt->customer_email,
             'appointment_date_fmt' => $apt->appointment_date?->format('d M Y'),
-            'start_time'           => $apt->start_time?->format('H:i'),
-            'provider_name'        => $apt->provider?->full_name,
-            'services_summary'     => $apt->services_record
-                                         ->sortBy('sequence_order')
-                                         ->pluck('service_name')
-                                         ->implode(', '),
-            'has_notes'            => ! empty($apt->getRawOriginal('notes')) || ! empty($apt->provider_notes),
-            'colors_count'         => $apt->color_records_count,
-            'status'               => $apt->status->value,
-            'status_label'         => $apt->status->getLabel(),
+            'start_time' => $apt->start_time?->format('H:i'),
+            'provider_name' => $apt->provider?->full_name,
+            'services_summary' => $apt->services_record
+                ->sortBy('sequence_order')
+                ->pluck('service_name')
+                ->implode(', '),
+            'has_notes' => ! empty($apt->getRawOriginal('notes')) || ! empty($apt->provider_notes),
+            'colors_count' => $apt->color_records_count,
+            'status' => $apt->status->value,
+            'status_label' => $apt->status->getLabel(),
         ])->toArray();
 
         $this->searched = true;
@@ -102,12 +110,12 @@ class CustomerLookup extends Component
             return;
         }
 
-        $this->selectedCustomerId   = $userId;
+        $this->selectedCustomerId = $userId;
         $this->selectedAppointmentId = null;
 
         $this->selectedCustomerInfo = [
-            'id'    => $user->id,
-            'name'  => $user->full_name,
+            'id' => $user->id,
+            'name' => $user->full_name,
             'email' => $user->email,
             'phone' => $user->phone,
         ];
@@ -115,22 +123,22 @@ class CustomerLookup extends Component
         $appointments = $this->lookupService->getCustomerAppointments($userId);
 
         $this->customerAppointments = $appointments->map(fn ($apt) => [
-            'id'                   => $apt->id,
-            'number'               => $apt->number,
+            'id' => $apt->id,
+            'number' => $apt->number,
             'appointment_date_fmt' => $apt->appointment_date?->format('d M Y'),
-            'start_time'           => $apt->start_time?->format('H:i'),
-            'end_time'             => $apt->end_time?->format('H:i'),
-            'provider_name'        => $apt->provider?->full_name,
-            'services_summary'     => $apt->services_record
-                                         ->sortBy('sequence_order')
-                                         ->pluck('service_name')
-                                         ->implode(', '),
-            'total_amount'         => (float) $apt->total_amount,
-            'has_notes'            => ! empty($apt->getRawOriginal('notes')) || ! empty($apt->provider_notes),
-            'colors_count'         => $apt->color_records_count,
-            'status'               => $apt->status->value,
-            'status_label'         => $apt->status->getLabel(),
-            'payment_status'       => $apt->payment_status->value,
+            'start_time' => $apt->start_time?->format('H:i'),
+            'end_time' => $apt->end_time?->format('H:i'),
+            'provider_name' => $apt->provider?->full_name,
+            'services_summary' => $apt->services_record
+                ->sortBy('sequence_order')
+                ->pluck('service_name')
+                ->implode(', '),
+            'total_amount' => (float) $apt->total_amount,
+            'has_notes' => ! empty($apt->getRawOriginal('notes')) || ! empty($apt->provider_notes),
+            'colors_count' => $apt->color_records_count,
+            'status' => $apt->status->value,
+            'status_label' => $apt->status->getLabel(),
+            'payment_status' => $apt->payment_status->value,
         ])->toArray();
     }
 
@@ -159,6 +167,7 @@ class CustomerLookup extends Component
         if (! $this->selectedAppointmentId) {
             return null;
         }
+
         return app(DashboardService::class)->getAppointmentDetails($this->selectedAppointmentId);
     }
 
@@ -166,13 +175,13 @@ class CustomerLookup extends Component
 
     public function clearSearch(): void
     {
-        $this->search   = '';
+        $this->search = '';
         $this->searched = false;
         $this->resetCustomerView();
         $this->registeredResults = [];
-        $this->guestResults      = [];
-        $this->registeredCapped  = false;
-        $this->guestCapped       = false;
+        $this->guestResults = [];
+        $this->registeredCapped = false;
+        $this->guestCapped = false;
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -180,7 +189,7 @@ class CustomerLookup extends Component
     public function render()
     {
         return view('livewire.customer-lookup', [
-            'activeLanguages'     => $this->getActiveLanguages(),
+            'activeLanguages' => $this->getActiveLanguages(),
             'selectedAppointment' => $this->selectedAppointment,
         ])->layout('layouts.dashboard');
     }
@@ -189,9 +198,9 @@ class CustomerLookup extends Component
 
     private function resetCustomerView(): void
     {
-        $this->selectedCustomerId    = null;
-        $this->selectedCustomerInfo  = null;
-        $this->customerAppointments  = [];
+        $this->selectedCustomerId = null;
+        $this->selectedCustomerInfo = null;
+        $this->customerAppointments = [];
         $this->selectedAppointmentId = null;
         unset($this->selectedAppointment);
     }

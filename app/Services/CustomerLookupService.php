@@ -14,9 +14,9 @@ class CustomerLookupService
             ->where('is_active', true)
             ->where(function ($query) use ($q) {
                 $query->where('first_name', 'like', "%{$q}%")
-                      ->orWhere('last_name',  'like', "%{$q}%")
-                      ->orWhere('email',      'like', "%{$q}%")
-                      ->orWhere('phone',      'like', "%{$q}%");
+                    ->orWhere('last_name', 'like', "%{$q}%")
+                    ->orWhere('email', 'like', "%{$q}%")
+                    ->orWhere('phone', 'like', "%{$q}%");
             })
             ->withCount('customerAppointments')
             ->orderBy('first_name')
@@ -26,14 +26,26 @@ class CustomerLookupService
 
     public function searchGuestAppointments(string $q, int $limit = 50): Collection
     {
-        return Appointment::whereNull('customer_id')
+        return Appointment::where(function ($query) {
+            $query->whereNull('customer_id')
+                ->orWhereDoesntHave('customer')
+                ->orWhereHas('customer', function ($customerQuery) {
+                    $customerQuery->whereDoesntHave('roles', fn ($roleQuery) => $roleQuery->where('name', 'customer'));
+                });
+        })
             ->where(function ($query) use ($q) {
-                // Must query raw columns — not the accessor — for guests
-                $query->where('customer_name',  'like', "%{$q}%")
-                      ->orWhere('customer_email', 'like', "%{$q}%")
-                      ->orWhere('customer_phone', 'like', "%{$q}%");
+                $query->where('customer_name', 'like', "%{$q}%")
+                    ->orWhere('customer_email', 'like', "%{$q}%")
+                    ->orWhere('customer_phone', 'like', "%{$q}%")
+                    ->orWhereHas('customer', function ($customerQuery) use ($q) {
+                        $customerQuery->where('first_name', 'like', "%{$q}%")
+                            ->orWhere('last_name', 'like', "%{$q}%")
+                            ->orWhere('email', 'like', "%{$q}%")
+                            ->orWhere('phone', 'like', "%{$q}%");
+                    });
             })
             ->with([
+                'customer:id,first_name,last_name,email,phone',
                 'provider:id,first_name,last_name',
                 'services_record:id,appointment_id,service_name,sequence_order',
             ])
