@@ -50,6 +50,8 @@ class AdminPanelProvider extends PanelProvider {
             ->default()
             ->id('admin')
             ->path('admin')
+            ->brandLogo('/image/logo.png')
+            ->favicon('/image/logo.png')
             ->login(\App\Filament\Pages\Auth\Login::class)
             ->colors([
                 'primary' => Color::Amber,
