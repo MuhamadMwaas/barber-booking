@@ -40,7 +40,29 @@ class PermissionsSeeder extends Seeder
         'ManageProviderSchedules'       => ['access'],
         'ManageProviderLeaves'          => ['access'],
         'ViewProviderScheduleTimeline'  => ['access'],
-        'StaffDashboard'                => ['access'],
+
+        // StaffDashboard — one ability per actionable button on the dashboard so
+        // each can be toggled per-role from the Roles screen. `access` opens the
+        // page; `view_team` controls whether other providers' columns are visible;
+        // `edit_others` controls whether a provider may act on bookings that are
+        // not their own.
+        'StaffDashboard'                => [
+            'access',
+            'create_booking',
+            'add_service',
+            'edit_appointment',
+            'edit_others',
+            'cancel_appointment',
+            'delete_appointment',
+            'take_payment',
+            'print_invoice',
+            'print_ticket',
+            'manage_timeoff',
+            'manage_colors',
+            'edit_notes',
+            'post_message',
+            'view_team',
+        ],
     ];
 
 

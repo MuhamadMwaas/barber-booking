@@ -7,6 +7,7 @@ use App\Filament\Resources\Providers\Pages\EditProvider;
 use App\Filament\Resources\Providers\Pages\ListProviders;
 use App\Filament\Resources\Providers\Pages\ViewProvider;
 use App\Filament\Resources\Providers\RelationManagers\AppointmentsRelationManager;
+use App\Filament\Resources\Providers\RelationManagers\AttendancesRelationManager;
 use App\Filament\Resources\Providers\RelationManagers\ScheduledWorksRelationManager;
 use App\Filament\Resources\Providers\RelationManagers\TimeOffsRelationManager;
 use App\Filament\Resources\Providers\Schemas\ProviderForm;
@@ -64,6 +65,7 @@ class ProviderResource extends Resource
             AppointmentsRelationManager::class,
             ScheduledWorksRelationManager::class,
             TimeOffsRelationManager::class,
+            AttendancesRelationManager::class,
         ];
     }
 

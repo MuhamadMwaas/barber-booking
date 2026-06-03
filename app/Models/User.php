@@ -66,7 +66,22 @@ class User extends Authenticatable implements FilamentUser, HasName
     ];
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->hasRole('admin') && $this->is_active;
+        // Staff accounts (admin / manager / provider / SuperAdmin) may enter the
+        // Filament panel. What each one actually SEES is gated per-resource by the
+        // Spatie permissions checked in NavigationDefaultAccess. Providers reach a
+        // limited panel; their default landing page is the StaffDashboard (handled
+        // by StaffLoginResponse).
+        return $this->hasAnyRole(['SuperAdmin', 'admin', 'manager', 'provider']) && $this->is_active;
+    }
+
+    /**
+     * Is the currently-modelled user a service provider (barber/stylist)?
+     * Used by the StaffDashboard to enable provider-only features
+     * (my-bookings filter, attendance check-in/out, ownership warnings).
+     */
+    public function isProvider(): bool
+    {
+        return $this->hasRole('provider');
     }
     protected function casts(): array
     {
@@ -145,6 +160,11 @@ class User extends Authenticatable implements FilamentUser, HasName
     public function timeOffs(): HasMany
     {
         return $this->hasMany(ProviderTimeOff::class, 'user_id');
+    }
+
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(ProviderAttendance::class, 'user_id');
     }
 
     public function customerAppointments(): HasMany

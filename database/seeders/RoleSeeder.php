@@ -68,14 +68,30 @@ class RoleSeeder extends Seeder
             'ManageProviderSchedules:access',
             'ManageProviderLeaves:access',
             'ViewProviderScheduleTimeline:access',
-            'StaffDashboard:access',
+
+            // Staff Dashboard — full operational control
+            'StaffDashboard:access', 'StaffDashboard:create_booking',
+            'StaffDashboard:add_service', 'StaffDashboard:edit_appointment',
+            'StaffDashboard:edit_others', 'StaffDashboard:cancel_appointment',
+            'StaffDashboard:delete_appointment', 'StaffDashboard:take_payment',
+            'StaffDashboard:print_invoice', 'StaffDashboard:print_ticket',
+            'StaffDashboard:manage_timeoff', 'StaffDashboard:manage_colors',
+            'StaffDashboard:edit_notes', 'StaffDashboard:post_message',
+            'StaffDashboard:view_team',
+
+            // Provider Attendance — can review attendance logs
+            'ProviderAttendance:access', 'ProviderAttendance:view',
+            'ProviderAttendance:edit',
 
             // CMS Pages — can manage content pages
             'CmsPage:access', 'CmsPage:view', 'CmsPage:create', 'CmsPage:edit',
         ],
 
         // ── Provider (Staff) ───────────────────────────────────────────────
-        // A barber / service provider — sees only their own appointments & schedule.
+        // A barber / service provider. Works primarily from the StaffDashboard
+        // (operational board) and gets a limited Filament panel. The dashboard
+        // action permissions below are granted in full by default — admins can
+        // narrow them per provider from the Roles screen.
         'provider' => [
             'Appointment:access',          'Appointment:view',
             'Appointment:cancel',
@@ -87,6 +103,16 @@ class RoleSeeder extends Seeder
             'ManageProviderSchedules:access',
             'ManageProviderLeaves:access',
             'ViewProviderScheduleTimeline:access',
+
+            // Staff Dashboard — full operational control by default.
+            'StaffDashboard:access', 'StaffDashboard:create_booking',
+            'StaffDashboard:add_service', 'StaffDashboard:edit_appointment',
+            'StaffDashboard:edit_others', 'StaffDashboard:cancel_appointment',
+            'StaffDashboard:delete_appointment', 'StaffDashboard:take_payment',
+            'StaffDashboard:print_invoice', 'StaffDashboard:print_ticket',
+            'StaffDashboard:manage_timeoff', 'StaffDashboard:manage_colors',
+            'StaffDashboard:edit_notes', 'StaffDashboard:post_message',
+            'StaffDashboard:view_team',
         ],
 
         // ── Customer ───────────────────────────────────────────────────────

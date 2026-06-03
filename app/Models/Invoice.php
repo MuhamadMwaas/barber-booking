@@ -93,18 +93,21 @@ class Invoice extends Model
         return $this->print_count > 0;
     }
 
-    public function getCopyLabel(): string {
+    public function getCopyLabel(string $language = 'en'): string {
         $nextPrintNumber = $this->getNextPrintNumber();
 
-        if ($nextPrintNumber === 1) {
+        // Only label as a copy once the invoice has been printed before.
+        if ($nextPrintNumber <= 1) {
             return '';
         }
 
+        $word = $language === 'de' ? 'Kopie' : 'COPY';
+
         if ($nextPrintNumber === 2) {
-            return ' (COPY)';
+            return ' (' . $word . ')';
         }
 
-        return ' (COPY ' . ($nextPrintNumber - 1) . ')';
+        return ' (' . $word . ' ' . ($nextPrintNumber - 1) . ')';
     }
 
     public function incrementPrintCount(): void {

@@ -25,6 +25,11 @@ class ColorResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'Content';
 
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.content');
+    }
+
     protected static ?int $navigationSort = 30;
 
     protected static ?string $recordTitleAttribute = 'name';

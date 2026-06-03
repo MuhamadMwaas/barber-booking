@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\InteractsWithDashboardPermissions;
 use App\Livewire\Concerns\ProvidesDashboardChrome;
 use App\Enum\AppointmentStatus;
 use App\Enum\InvoiceStatus;
@@ -10,12 +11,15 @@ use App\Exceptions\PushRequiredException;
 use App\Models\Appointment;
 use App\Models\AppointmentColor;
 use App\Models\AppointmentService as AppointmentServiceModel;
+use App\Models\DashboardMessage;
 use App\Models\Language;
 use App\Models\ProviderTimeOff;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\AttendanceService;
 use App\Services\BookingService;
 use App\Services\BookingValidationService;
+use App\Services\DashboardMessageService;
 use App\Services\DashboardService;
 use App\Services\GapAnalysisService;
 use App\Services\InvoiceFinalizationService;
@@ -29,10 +33,26 @@ use Livewire\Component;
 
 class StaffDashboard extends Component {
     use ProvidesDashboardChrome;
+    use InteractsWithDashboardPermissions;
+
     public string $selectedDate;
     public array $selectedProviderIds = [];
     public int $calendarYear;
     public int $calendarMonth;
+
+    /** Provider-only view filter: when true the timeline shows only my column. */
+    public bool $onlyMine = false;
+
+    /** Today's attendance snapshot (computed at page load only — see mount()). */
+    public array $attendanceState = [];
+
+    // -------- Attendance confirmation / history modals --------
+    public bool $showCheckInModal = false;
+    public bool $showCheckOutModal = false;
+    public bool $showAttendanceHistoryModal = false;
+    public array $checkInPreview = [];
+    public array $checkOutPreview = [];
+    public array $attendanceHistory = [];
 
     public bool $showBookingModal = false;
     public bool $showAppointmentModal = false;
@@ -84,10 +104,16 @@ class StaffDashboard extends Component {
     public bool $showPushPreviewModal = false;
     public array $pushPreviewPlan = [];      // Plan array (from PushRequiredException)
 
-    protected DashboardService $dashboardService;
+    // -------- Bulletin Board (messages) ----------
+    public string $newMessageBody = '';
+    public string $newMessageExpiry = 'never';   // 'never' | 'end_of_day' | 'in_24h'
 
-    public function boot(DashboardService $dashboardService) {
+    protected DashboardService $dashboardService;
+    protected DashboardMessageService $messageService;
+
+    public function boot(DashboardService $dashboardService, DashboardMessageService $messageService) {
         $this->dashboardService = $dashboardService;
+        $this->messageService = $messageService;
     }
 
     #[Computed]
@@ -113,6 +139,10 @@ class StaffDashboard extends Component {
         $this->syncSelectedProvidersForSelectedDate();
 
         $this->addEmptyBookingService();
+
+        // Computed once at page load (not on every poll) so the "not checked in"
+        // banner is evaluated on load only, as required.
+        $this->refreshAttendanceState();
     }
 
     public function selectDate(string $date) {
@@ -359,6 +389,11 @@ class StaffDashboard extends Component {
     }
 
     public function saveBookingFromAlpine(array $data) {
+        if ($this->dashDeny('create_booking')) {
+            $this->dispatch('booking-error');
+            return;
+        }
+
         $validServices = array_filter($data['services'] ?? [], function ($bs) {
             return !empty($bs['service_id']) && !empty($bs['provider_id']) && !empty($bs['start_time']);
         });
@@ -417,6 +452,10 @@ class StaffDashboard extends Component {
     }
 
     public function saveBooking() {
+        if ($this->dashDeny('create_booking')) {
+            return;
+        }
+
         $validServices = array_filter($this->bookingServices, function ($bs) {
             return $bs['service_id'] && $bs['provider_id'] && $bs['start_time'];
         });
@@ -473,6 +512,8 @@ class StaffDashboard extends Component {
 
         $appointment = Appointment::find($this->selectedAppointmentId);
         if (!$appointment) return;
+
+        if ($this->dashDenyOnAppointment('edit_appointment', $appointment)) return;
 
         try {
             $newStart = Carbon::parse($this->selectedDate . ' ' . $this->editStartTime);
@@ -542,6 +583,8 @@ class StaffDashboard extends Component {
         $appointment = Appointment::find($this->selectedAppointmentId);
         if (!$appointment) return;
 
+        if ($this->dashDenyOnAppointment('edit_notes', $appointment)) return;
+
         try {
             $appointment->update(['notes' => $this->editNotes]);
             $this->dispatch('notify', type: 'success', message: __('dashboard.appointment_modal.notes_saved'));
@@ -560,6 +603,8 @@ class StaffDashboard extends Component {
         $appointment = Appointment::find($this->selectedAppointmentId);
         if (!$appointment) return;
 
+        if ($this->dashDenyOnAppointment('edit_notes', $appointment)) return;
+
         try {
             $appointment->update(['provider_notes' => $this->editProviderNotes]);
             $this->dispatch('notify', type: 'success', message: __('dashboard.appointment_modal.provider_notes_saved'));
@@ -575,6 +620,8 @@ class StaffDashboard extends Component {
     public function addColorToAppointment(int $colorId, float $quantity): void
     {
         if (!$this->selectedAppointmentId) return;
+
+        if ($this->dashDenyOnAppointment('manage_colors', $this->selectedAppointment)) return;
 
         try {
             $existing = AppointmentColor::where('appointment_id', $this->selectedAppointmentId)
@@ -609,6 +656,8 @@ class StaffDashboard extends Component {
     {
         if (!$this->selectedAppointmentId) return;
 
+        if ($this->dashDenyOnAppointment('manage_colors', $this->selectedAppointment)) return;
+
         try {
             AppointmentColor::where('id', $appointmentColorId)
                 ->where('appointment_id', $this->selectedAppointmentId)
@@ -628,6 +677,8 @@ class StaffDashboard extends Component {
 
         $appointment = Appointment::with('children')->find($this->selectedAppointmentId);
         if (!$appointment) return;
+
+        if ($this->dashDenyOnAppointment('cancel_appointment', $appointment)) return;
 
         if (in_array($appointment->payment_status->value, [1, 2, 3]) || $appointment->status->value === 1) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.appointment_modal.cannot_cancel_paid'));
@@ -677,6 +728,8 @@ class StaffDashboard extends Component {
         $appointment = Appointment::with(['invoice', 'invoice.items', 'children', 'parent'])
             ->find($this->selectedAppointmentId);
         if (!$appointment) return;
+
+        if ($this->dashDenyOnAppointment('delete_appointment', $appointment)) return;
 
         if (in_array($appointment->payment_status->value, [1, 2, 3]) || $appointment->status->value === 1) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.appointment_modal.cannot_delete_paid'));
@@ -733,6 +786,8 @@ class StaffDashboard extends Component {
             ->find($this->selectedAppointmentId);
         if (!$appointment) return;
 
+        if ($this->dashDenyOnAppointment('take_payment', $appointment)) return;
+
         try {
             // The unified invoice always lives on the parent (or self if standalone).
             $invoiceOwner = $appointment->parent ?? $appointment;
@@ -787,6 +842,13 @@ class StaffDashboard extends Component {
     }
 
     public function saveTimeOff() {
+        if ($this->dashDeny('manage_timeoff')) return;
+
+        // Providers may only add time off for themselves.
+        if ($this->isCurrentUserProvider()) {
+            $this->timeOffProviderId = $this->currentProviderId();
+        }
+
         if (!$this->timeOffProviderId) {
             $this->dispatch('notify', type: 'error', message: 'Please select a provider');
             return;
@@ -817,7 +879,13 @@ class StaffDashboard extends Component {
     }
 
     public function saveTimeOffFromAlpine(array $data) {
-        $providerId = $data['providerId'] ?? null;
+        if ($this->dashDeny('manage_timeoff')) return;
+
+        // Providers may only add time off for themselves.
+        $providerId = $this->isCurrentUserProvider()
+            ? $this->currentProviderId()
+            : ($data['providerId'] ?? null);
+
         if (!$providerId) {
             $this->dispatch('notify', type: 'error', message: 'Please select a provider');
             return;
@@ -854,11 +922,18 @@ class StaffDashboard extends Component {
      * Open the "Add Service" modal anchored to an existing appointment.
      */
     public function openAddServiceModal(int $appointmentId) {
+        if ($this->dashDeny('add_service')) return;
+
         $appointment = Appointment::with(['parent', 'children', 'invoice', 'provider'])
             ->find($appointmentId);
 
         if (! $appointment) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.add_service.cannot_add'));
+            return;
+        }
+
+        if (! $this->canActOnAppointment($appointment)) {
+            $this->dispatch('notify', type: 'error', message: __('dashboard.not_your_booking_denied'));
             return;
         }
 
@@ -972,6 +1047,8 @@ class StaffDashboard extends Component {
             ->find($this->addServiceToAppointmentId);
         if (! $anchor) return;
 
+        if ($this->dashDenyOnAppointment('add_service', $anchor)) return;
+
         try {
             $bookingService = app(BookingService::class);
             $result = $bookingService->addServiceToBooking($anchor, [
@@ -1026,6 +1103,8 @@ class StaffDashboard extends Component {
      * Always resolves to the parent's invoice when the appointment is a child.
      */
     public function printInvoiceForAppointment(int $appointmentId) {
+        if ($this->dashDeny('print_invoice')) return;
+
         $appointment = Appointment::with(['invoice', 'parent.invoice'])
             ->find($appointmentId);
         if (! $appointment) return;
@@ -1048,6 +1127,8 @@ class StaffDashboard extends Component {
      * - For child appointments, the controller resolves to the parent's combined ticket.
      */
     public function printAppointmentTicket(int $appointmentId) {
+        if ($this->dashDeny('print_ticket')) return;
+
         $appointment = Appointment::find($appointmentId);
         if (! $appointment) return;
 
@@ -1089,6 +1170,20 @@ class StaffDashboard extends Component {
             ->filter(fn($provider) => $this->isProviderSelectableForTimeline($provider))
             ->filter(fn($provider) => in_array($provider['id'], $this->selectedProviderIds, true))
             ->values();
+
+        // Provider scoping (single enforcement point — cannot be bypassed from
+        // the client):
+        //   - A provider without `view_team` is hard-limited to their own column.
+        //   - Otherwise the optional "My bookings" toggle narrows to their column.
+        // We select from the FULL provider list (not the work-day/selection
+        // filtered one) so a provider always sees their own column under
+        // "My bookings" — even on a day they are not scheduled to work.
+        $forceMine = $this->isCurrentUserProvider() && ! $this->dashCan('view_team');
+        if (($this->onlyMine || $forceMine) && $this->currentProviderId()) {
+            $providers = $allProviders
+                ->filter(fn($provider) => (int) $provider['id'] === $this->currentProviderId())
+                ->values();
+        }
 
         $visibleProviderIds = $providers->pluck('id')->all();
 
@@ -1133,6 +1228,11 @@ class StaffDashboard extends Component {
                 'payment_status' => $apt->payment_status->value,
                 'total_amount' => (float) $apt->total_amount,
                 'service_color_code' => $serviceColorCode,
+                // Whether this booking belongs to the logged-in provider (drives
+                // the "not your booking" warning). Always true for admin/manager.
+                'is_owned' => $this->currentProviderId() === null
+                    ? true
+                    : ((int) $apt->provider_id === $this->currentProviderId()),
                 // ---- Linked / Push metadata ----
                 'parent_appointment_id' => $apt->parent_appointment_id,
                 'linked_group_root_id' => $linkedRootId,
@@ -1233,6 +1333,194 @@ class StaffDashboard extends Component {
         $this->timeOffReasonId = null;
     }
 
+    // ==================== Attendance (Check-in / Check-out) ====================
+
+    /**
+     * Recompute today's attendance snapshot. Called at page load (mount) and
+     * after a check-in/out — never on the 5s poll, to keep request volume low.
+     */
+    private function refreshAttendanceState(): void {
+        if (! $this->isCurrentUserProvider()) {
+            $this->attendanceState = [];
+            return;
+        }
+
+        $this->attendanceState = app(AttendanceService::class)->todayState($this->dashUser());
+    }
+
+    /**
+     * Open the check-in confirmation modal: shows the current time and the
+     * provider's last checkout time before they confirm.
+     */
+    public function openCheckInModal(): void {
+        if (! $this->isCurrentUserProvider()) return;
+
+        $svc = app(AttendanceService::class);
+        $lastOut = $svc->lastCheckOut($this->dashUser());
+
+        $this->checkInPreview = [
+            'now'            => now()->format('H:i'),
+            'now_date'       => now()->isoFormat('ddd, D MMM YYYY'),
+            'last_out'       => $lastOut?->check_out_at?->format('Y-m-d H:i'),
+            'last_out_human' => $lastOut?->check_out_at?->diffForHumans(),
+        ];
+        $this->showCheckInModal = true;
+    }
+
+    /**
+     * Open the check-out confirmation modal: shows the open session's check-in
+     * time and the resulting shift duration before they confirm.
+     */
+    public function openCheckOutModal(): void {
+        if (! $this->isCurrentUserProvider()) return;
+
+        $svc = app(AttendanceService::class);
+        $open = $svc->openSession($this->dashUser());
+
+        if (! $open) {
+            $this->dispatch('notify', type: 'error', message: __('dashboard.attendance.no_open_session'));
+            return;
+        }
+
+        $minutes = (int) $open->check_in_at->diffInMinutes(now());
+
+        $this->checkOutPreview = [
+            'check_in'      => $open->check_in_at->format('H:i'),
+            'check_in_date' => $open->check_in_at->isoFormat('ddd, D MMM YYYY'),
+            'now'           => now()->format('H:i'),
+            'duration'      => $this->formatAttendanceMinutes($minutes),
+        ];
+        $this->showCheckOutModal = true;
+    }
+
+    public function closeCheckInModal(): void  { $this->showCheckInModal = false; }
+    public function closeCheckOutModal(): void { $this->showCheckOutModal = false; }
+
+    /** Confirm buttons inside the modals. */
+    public function confirmCheckIn(): void  { $this->checkIn();  $this->showCheckInModal = false; }
+    public function confirmCheckOut(): void { $this->checkOut(); $this->showCheckOutModal = false; }
+
+    /**
+     * Open the attendance history popup (last 30 sessions, newest first).
+     */
+    public function openAttendanceHistoryModal(): void {
+        if (! $this->isCurrentUserProvider()) return;
+
+        $this->attendanceHistory = app(AttendanceService::class)
+            ->recentSessions($this->dashUser(), 30)
+            ->map(fn ($s) => [
+                'date'     => $s->work_date?->format('Y-m-d'),
+                'day'      => $s->work_date?->isoFormat('ddd'),
+                'in'       => $s->check_in_at?->format('H:i'),
+                'out'      => $s->check_out_at?->format('H:i'),
+                'duration' => $s->duration_minutes !== null ? $this->formatAttendanceMinutes($s->duration_minutes) : null,
+                'open'     => $s->check_out_at === null,
+            ])
+            ->all();
+
+        $this->showAttendanceHistoryModal = true;
+    }
+
+    public function closeAttendanceHistoryModal(): void {
+        $this->showAttendanceHistoryModal = false;
+    }
+
+    private function formatAttendanceMinutes(int $minutes): string {
+        $h = intdiv($minutes, 60);
+        $m = $minutes % 60;
+
+        return $h > 0 ? ($h . 'h ' . $m . 'm') : ($m . 'm');
+    }
+
+    /**
+     * Open a new attendance session for the logged-in provider.
+     */
+    public function checkIn(): void {
+        if (! $this->isCurrentUserProvider()) return;
+
+        try {
+            $result = app(AttendanceService::class)->checkIn($this->dashUser());
+            $this->refreshAttendanceState();
+
+            $this->dispatch('notify', type: 'success', message: __('dashboard.attendance.checked_in'));
+
+            if ($result['outside_shift']) {
+                $this->dispatch('notify', type: 'error', message: __('dashboard.attendance.outside_shift_warning'));
+            }
+        } catch (\Throwable $e) {
+            $this->dispatch('notify', type: 'error', message: $e->getMessage());
+        }
+    }
+
+    /**
+     * Close the provider's most recent open attendance session.
+     */
+    public function checkOut(): void {
+        if (! $this->isCurrentUserProvider()) return;
+
+        try {
+            app(AttendanceService::class)->checkOut($this->dashUser());
+            $this->refreshAttendanceState();
+
+            $this->dispatch('notify', type: 'success', message: __('dashboard.attendance.checked_out'));
+        } catch (\Throwable $e) {
+            $this->dispatch('notify', type: 'error', message: $e->getMessage());
+        }
+    }
+
+    // ==================== Bulletin Board ====================
+
+    /**
+     * Post a new message to the board. Admin posts are pinned automatically.
+     */
+    public function addMessage() {
+        if ($this->dashDeny('post_message')) return;
+
+        try {
+            $this->messageService->add(auth()->user(), $this->newMessageBody, $this->newMessageExpiry);
+            $this->newMessageBody = '';
+            $this->newMessageExpiry = 'never';
+            $this->dispatch('notify', type: 'success', message: __('dashboard.messages.posted'));
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $this->dispatch('notify', type: 'error', message: collect($e->errors())->flatten()->first());
+        } catch (\Throwable $e) {
+            $this->dispatch('notify', type: 'error', message: $e->getMessage());
+        }
+    }
+
+    /**
+     * Soft-delete a message (history preserved). Admin: any; member: own only.
+     */
+    public function deleteMessage(int $messageId) {
+        $deleted = $this->messageService->delete($messageId, auth()->user());
+
+        if ($deleted) {
+            $this->dispatch('notify', type: 'success', message: __('dashboard.messages.deleted'));
+        } else {
+            $this->dispatch('notify', type: 'error', message: __('dashboard.messages.delete_denied'));
+        }
+    }
+
+    /**
+     * Active messages formatted for the sidebar board.
+     */
+    private function getMessagesForView(): array {
+        $actor = auth()->user();
+
+        return $this->messageService->listActive()->map(function (DashboardMessage $message) use ($actor) {
+            $authorName = $message->user?->full_name ?: __('dashboard.messages.unknown_author');
+
+            return [
+                'id'           => $message->id,
+                'body'         => $message->body,
+                'author_name'  => $authorName,
+                'is_pinned'    => $message->is_pinned,
+                'created_human' => $message->created_at?->diffForHumans() ?? '',
+                'can_delete'   => $actor ? $this->messageService->canDelete($message, $actor) : false,
+            ];
+        })->all();
+    }
+
     public function render() {
         $allProviders = $this->allProviders;
         $this->selectedProviderIds = array_values(array_intersect(
@@ -1249,6 +1537,7 @@ class StaffDashboard extends Component {
             'activeLanguages' => $this->getActiveLanguages(),
             'selectedAppointment' => $this->selectedAppointment,
             'preloadedData' => $this->getPreloadedData(),
+            'dashboardMessages' => $this->getMessagesForView(),
         ])->layout('layouts.dashboard');
     }
 

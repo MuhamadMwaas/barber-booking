@@ -1,6 +1,6 @@
 # StaffDashboard Documentation
 
-> **آخر تحديث:** 2026-05-29 — أُضيف تاب Customers + مكوّن CustomerLookup + خدمة CustomerLookupService + partial nav مشترك.
+> **آخر تحديث:** 2026-06-03 — أُضيفت لوحة الرسائل (Bulletin Board) أسفل الفريق: جدول dashboard_messages + Model + DashboardMessageService (راجع القسم 32). | 2026-05-29 — تاب Customers + CustomerLookup.
 
 > وثيقة مرجعية عميقة ومبنية على قراءة مباشرة للكود الحالي، هدفها أن تمنح أي AI أو مطور فهمًا دقيقًا جدًا لصفحة `StaffDashboard` بكل ما فيها: الواجهة، الحالة، تدفقات الحجز، الدفع، الإجازات، الـ timeline، القواعد التشغيلية، والقيود الحالية.
 
@@ -1551,3 +1551,46 @@ saveBookingFromAlpine()
 GET /dashboard/customers  →  App\Livewire\CustomerLookup  (name: staff.dashboard.customers)
 middleware: web + EnsureStaffDashboardAccess (نفس صلاحية Calendar)
 ```
+
+---
+
+## 32. Bulletin Board — لوحة الرسائل (2026-06-03)
+
+لوحة تواصل تشغيلية داخل الـ Sidebar أسفل قائمة الفريق مباشرة. المدير يكتب تعليمات اليوم فيراها الطاقم فور فتح الداشبورد، وأي عضو يضيف رسالة. التحديث شبه اللحظي يعتمد على الـ polling الموجود (كل 3 ثوانٍ) — لا WebSockets.
+
+### 32.1 السلوك المتفق عليه
+
+- **لوحة عامة**: كل رسالة نشطة يراها الجميع بصرف النظر عن `selectedDate`.
+- **رسالة الأدمن مثبّتة أولًا** (`is_pinned = true` تلقائيًا عندما يكون الكاتب `admin`) ثم بقية الرسائل بالأحدث.
+- **انتهاء تلقائي اختياري**: `never` / `end_of_day` / `in_24h` → يُخزَّن في `expires_at`، والرسالة المنتهية تختفي من العرض دون حذف.
+- **إبراز بصري فقط**، لا تتبّع قراءة (لا "مَن قرأ").
+- **إضافة + حذف فقط** — لا تعديل، حفاظًا على نظافة السجل.
+- **الحذف**: الأدمن يحذف أي رسالة، والعضو يحذف رسائله فقط.
+
+### 32.2 الملفات
+
+| الملف | الدور |
+|-------|-------|
+| `database/migrations/2026_06_03_000001_create_dashboard_messages_table.php` | جدول `dashboard_messages` مع `SoftDeletes` + `deleted_by` |
+| `app/Models/DashboardMessage.php` | Model مع `SoftDeletes`، علاقات `user()`/`deletedBy()`، scope `active()` (غير محذوف + غير منتهٍ، مرتّب: المثبّت ثم الأحدث) |
+| `app/Services/DashboardMessageService.php` | `listActive()` / `add()` / `delete()` / `canDelete()` + فرض الصلاحيات و الـ validation (حد 1000 حرف) |
+| `app/Livewire/StaffDashboard.php` | `addMessage()`، `deleteMessage($id)`، `getMessagesForView()`، الحقول `newMessageBody` + `newMessageExpiry` |
+| `resources/views/livewire/staff-dashboard.blade.php` | صندوق اللوحة أسفل الفريق (قائمة + composer + زر حذف مشروط) |
+| `lang/{ar,en,de}/dashboard.php` | قسم `messages` |
+
+### 32.3 السجل التاريخي
+
+لا يوجد جدول سجل منفصل — **SoftDeletes هو السجل**:
+
+- `created_at` = متى أُضيفت.
+- `deleted_at` = متى حُذفت.
+- `deleted_by` = مَن حذفها.
+
+الصف لا يُمحى فعليًا أبدًا (إلا `forceDelete` يدويًا). للاستعلام عن المحذوف: `DashboardMessage::withTrashed()` / `onlyTrashed()`. العرض في الواجهة للرسائل النشطة فقط (قرار: السجل مخزَّن في القاعدة بلا واجهة مخصصة).
+
+### 32.4 ملاحظات للمطورين
+
+- المستخدم الحالي يُجلب عبر `auth()->user()` (نفس حارس Filament المستخدم في `staff-nav`)؛ "المدير" = `hasRole('admin')`.
+- `is_pinned` يُحسم وقت الإنشاء حسب دور الكاتب — لو تغيّر دور المستخدم لاحقًا لا تتغيّر رسائله القديمة.
+- لا يوجد route جديد؛ اللوحة جزء من مكوّن `StaffDashboard` نفسه وتظهر في تاب Calendar فقط (لا في Customers).
+- الحذف عبر `wire:confirm` ثم `deleteMessage()` الذي يستدعي الخدمة ويسجّل `deleted_by`.

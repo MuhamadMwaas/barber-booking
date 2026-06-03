@@ -65,6 +65,18 @@ return [
             'example' => 'INV-2026-001',
         ],
 
+        'invoice.number_with_copy' => [
+            'label' => 'Invoice Number (+ Copy label)',
+            'category' => 'Invoice',
+            'example' => 'INV-2026-001 (Kopie)',
+        ],
+
+        'invoice.copy_label' => [
+            'label' => 'Copy Label (reprints only)',
+            'category' => 'Invoice',
+            'example' => ' (Kopie)',
+        ],
+
         'invoice.date' => [
             'label' => 'Invoice Date',
             'category' => 'Invoice',

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\TaxCalculatorService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -77,15 +78,21 @@ class InvoiceItem extends Model
 
     public function calculateTotal(): void
     {
-        $subtotal = $this->quantity * $this->unit_price;
+        // المبلغ الصافي للبند = الكمية × سعر الوحدة (net) — بـ bcmath بدل ضرب float
+        $netSubtotal = bcmul(
+            (string) ($this->quantity ?? 1),
+            (string) ($this->unit_price ?? 0),
+            2
+        );
 
-        if ($this->tax_rate) {
-            $this->tax_amount = $subtotal * ($this->tax_rate / 100);
-        } else {
-            $this->tax_amount = 0;
-        }
+        // unit_price مُخزَّن دائماً كصافي (net)، فنعيد بناء الإجمالي بإضافة الضريبة.
+        // addTax يضمن: التقريب لمنزلتين + تطابق net + tax = gross تماماً (لا فرق سنت).
+        // يتعامل مع tax_rate = 0/null داخلياً (يرجع ضريبة 0 وإجمالي = الصافي).
+        $result = app(TaxCalculatorService::class)
+            ->addTax($netSubtotal, (string) ($this->tax_rate ?? 0), 2);
 
-        $this->total_amount = $subtotal + $this->tax_amount;
+        $this->tax_amount = $result['tax'];
+        $this->total_amount = $result['gross'];
     }
 
     // Events

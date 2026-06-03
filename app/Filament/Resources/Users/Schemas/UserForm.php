@@ -85,6 +85,7 @@ class UserForm
                                 TextInput::make('phone')
                                     ->label(__('resources.user.phone'))
                                     ->tel()
+                                    ->unique(ignoreRecord: true)
                                     ->maxLength(20)
                                     ->autocomplete('tel'),
                             ]),

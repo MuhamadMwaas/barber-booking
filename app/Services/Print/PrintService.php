@@ -96,30 +96,15 @@ class PrintService {
         string $copyLabel
     ): string {
 
-        // Build base HTML
+        // Build base HTML. The copy label is now rendered directly by the
+        // template via the dynamic field `invoice.number_with_copy` (localized
+        // to the template language), so no post-processing injection is needed.
         $html = $this->builder->build($invoice, $template);
-
-        // Inject copy label into invoice number
-        if ($copyLabel) {
-            $html = $this->injectCopyLabel($html, $copyLabel);
-        }
 
         // Add auto-print script
         $html = $this->addAutoPrintScript($html, $printer);
 
         return $html;
-    }
-
-    /**
-     * Inject COPY label into HTML
-     */
-    protected function injectCopyLabel(string $html, string $copyLabel): string {
-        // Find invoice number pattern and add copy label
-        // Pattern: Rechnung Nr. 749
-        $pattern = '/(Rechnung Nr\.\s*\d+)/i';
-        $replacement = '$1 ' . $copyLabel;
-
-        return preg_replace($pattern, $replacement, $html, 1);
     }
 
     /**

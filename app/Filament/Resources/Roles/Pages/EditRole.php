@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Roles\Pages;
 
 use App\Filament\Resources\Roles\RoleResource;
+use App\Filament\Resources\Roles\Schemas\RoleForm;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
@@ -40,14 +41,17 @@ class EditRole extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $data['permissions'] = $this->record->permissions->pluck('name')->toArray();
+        // Group by prefix to match the nested CheckboxList paths (permissions.{group}).
+        $data['permissions'] = RoleForm::groupPermissionNames(
+            $this->record->permissions->pluck('name')->toArray()
+        );
 
         return $data;
     }
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        $this->selectedPermissions = $data['permissions'] ?? [];
+        $this->selectedPermissions = RoleForm::flattenPermissionNames($data['permissions'] ?? []);
         unset($data['permissions']);
 
         return $data;

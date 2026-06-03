@@ -4,7 +4,126 @@
     x-on:booking-error.window="bookingSaving = false"
     x-on:timeoff-saved.window="showTimeOffModal = false; timeOffSaving = false">
     {{-- Top Navigation (shared partial) --}}
-    @include('partials.staff-nav', ['active' => 'calendar'])
+    @include('partials.staff-nav', ['active' => 'calendar', 'attendanceState' => $attendanceState])
+
+    {{-- ===================== Attendance: Check-in confirmation ===================== --}}
+    @if ($showCheckInModal)
+        <div class="fixed inset-0 modal-overlay z-[80] flex items-center justify-center p-4" wire:click.self="closeCheckInModal">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm" @click.stop>
+                <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+                    <span class="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    </span>
+                    <h3 class="text-lg font-semibold text-gray-800">{{ __('dashboard.attendance.check_in_confirm_title') }}</h3>
+                </div>
+                <div class="p-5 space-y-3 text-sm">
+                    <div class="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2">
+                        <span class="text-gray-500">{{ __('dashboard.attendance.current_time') }}</span>
+                        <span class="font-semibold text-emerald-700">{{ $checkInPreview['now'] ?? '' }}</span>
+                    </div>
+                    <p class="text-xs text-gray-400 text-center">{{ $checkInPreview['now_date'] ?? '' }}</p>
+                    <div class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                        <span class="text-gray-500">{{ __('dashboard.attendance.last_checkout') }}</span>
+                        @if (!empty($checkInPreview['last_out']))
+                            <span class="font-medium text-gray-700">{{ $checkInPreview['last_out'] }}</span>
+                        @else
+                            <span class="text-gray-400">{{ __('dashboard.attendance.no_previous') }}</span>
+                        @endif
+                    </div>
+                    @if (!empty($checkInPreview['last_out_human']))
+                        <p class="text-xs text-gray-400 text-center">{{ $checkInPreview['last_out_human'] }}</p>
+                    @endif
+                </div>
+                <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex justify-end gap-2">
+                    <button wire:click="closeCheckInModal" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">{{ __('dashboard.attendance.cancel') }}</button>
+                    <button wire:click="confirmCheckIn" wire:loading.attr="disabled"
+                        class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-lg">{{ __('dashboard.attendance.confirm_check_in') }}</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- ===================== Attendance: Check-out confirmation ===================== --}}
+    @if ($showCheckOutModal)
+        <div class="fixed inset-0 modal-overlay z-[80] flex items-center justify-center p-4" wire:click.self="closeCheckOutModal">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm" @click.stop>
+                <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+                    <span class="w-9 h-9 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    </span>
+                    <h3 class="text-lg font-semibold text-gray-800">{{ __('dashboard.attendance.check_out_confirm_title') }}</h3>
+                </div>
+                <div class="p-5 space-y-3 text-sm">
+                    <div class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                        <span class="text-gray-500">{{ __('dashboard.attendance.last_checkin') }}</span>
+                        <span class="font-medium text-gray-700">{{ $checkOutPreview['check_in'] ?? '' }}</span>
+                    </div>
+                    <div class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                        <span class="text-gray-500">{{ __('dashboard.attendance.current_time') }}</span>
+                        <span class="font-medium text-gray-700">{{ $checkOutPreview['now'] ?? '' }}</span>
+                    </div>
+                    <div class="flex items-center justify-between rounded-lg bg-rose-50 px-3 py-2">
+                        <span class="text-rose-500 font-medium">{{ __('dashboard.attendance.shift_duration') }}</span>
+                        <span class="font-bold text-rose-700">{{ $checkOutPreview['duration'] ?? '' }}</span>
+                    </div>
+                </div>
+                <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex justify-end gap-2">
+                    <button wire:click="closeCheckOutModal" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">{{ __('dashboard.attendance.cancel') }}</button>
+                    <button wire:click="confirmCheckOut" wire:loading.attr="disabled"
+                        class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium rounded-lg">{{ __('dashboard.attendance.confirm_check_out') }}</button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- ===================== Attendance: History (last 30 sessions) ===================== --}}
+    @if ($showAttendanceHistoryModal)
+        <div class="fixed inset-0 modal-overlay z-[80] flex items-center justify-center p-4" wire:click.self="closeAttendanceHistoryModal">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]" @click.stop>
+                <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-800">{{ __('dashboard.attendance.history_title') }}</h3>
+                    <button wire:click="closeAttendanceHistoryModal" class="text-gray-400 hover:text-gray-600">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="overflow-y-auto p-4">
+                    @if (count($attendanceHistory) > 0)
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-xs text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                                    <th class="py-2 pr-2">{{ __('dashboard.attendance.col_date') }}</th>
+                                    <th class="py-2 px-2">{{ __('dashboard.attendance.col_in') }}</th>
+                                    <th class="py-2 px-2">{{ __('dashboard.attendance.col_out') }}</th>
+                                    <th class="py-2 pl-2 text-right">{{ __('dashboard.attendance.col_duration') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($attendanceHistory as $row)
+                                    <tr class="border-b border-gray-50">
+                                        <td class="py-2 pr-2 text-gray-700">
+                                            <span class="font-medium">{{ $row['date'] }}</span>
+                                            <span class="text-xs text-gray-400">({{ $row['day'] }})</span>
+                                        </td>
+                                        <td class="py-2 px-2 text-emerald-600 font-medium">{{ $row['in'] }}</td>
+                                        <td class="py-2 px-2">
+                                            @if ($row['open'])
+                                                <span class="text-[11px] font-semibold text-amber-600 bg-amber-100 rounded px-1.5 py-0.5">{{ __('dashboard.attendance.still_open') }}</span>
+                                            @else
+                                                <span class="text-rose-600 font-medium">{{ $row['out'] }}</span>
+                                            @endif
+                                        </td>
+                                        <td class="py-2 pl-2 text-right text-gray-600">{{ $row['duration'] ?? '—' }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    @else
+                        <p class="text-center text-sm text-gray-400 py-8">{{ __('dashboard.attendance.no_history') }}</p>
+                    @endif
+                </div>
+            </div>
+        </div>
+    @endif
 
     <div class="flex flex-1 overflow-hidden">
         {{-- Sidebar --}}
@@ -104,25 +223,128 @@
                 </div>
             </div>
 
+            {{-- Bulletin Board (messages) --}}
+            <div class="p-3 border-b border-gray-100 flex-shrink-0 bg-amber-50/40"
+                x-data="{
+                    messagesOpen: (localStorage.getItem('dashboard-messages-open') ?? '1') === '1',
+                    toggle() { this.messagesOpen = !this.messagesOpen; localStorage.setItem('dashboard-messages-open', this.messagesOpen ? '1' : '0'); }
+                }">
+                <button type="button" @click="toggle()"
+                    class="w-full text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2 flex items-center justify-between hover:text-amber-800">
+                    <span class="flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 8h10M7 12h6m-6 8l-3 1V5a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2H8l-1 4z"></path>
+                        </svg>
+                        {{ __('dashboard.messages.title') }}
+                    </span>
+                    <span class="flex items-center gap-1.5">
+                        @if (count($dashboardMessages) > 0)
+                            <span class="text-[10px] font-bold text-amber-600 bg-amber-100 rounded-full px-1.5 py-0.5">{{ count($dashboardMessages) }}</span>
+                        @endif
+                        <svg class="w-3.5 h-3.5 transition-transform" :class="messagesOpen ? '' : '-rotate-90'"
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                        </svg>
+                    </span>
+                </button>
+
+                <div x-show="messagesOpen" x-collapse x-cloak>
+                {{-- Messages list --}}
+                <div class="space-y-1.5 max-h-56 overflow-y-auto mb-2 pr-0.5">
+                    @forelse ($dashboardMessages as $message)
+                        <div wire:key="msg-{{ $message['id'] }}"
+                            class="group relative rounded-lg p-2 text-sm border {{ $message['is_pinned'] ? 'bg-amber-100/70 border-amber-300' : 'bg-white border-gray-200' }}">
+                            <div class="flex items-start gap-2">
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-xs font-semibold text-gray-800 truncate">{{ $message['author_name'] }}</span>
+                                        @if ($message['is_pinned'])
+                                            <span class="text-[9px] font-bold text-amber-700 bg-amber-200 rounded px-1 leading-tight">{{ __('dashboard.messages.admin_badge') }}</span>
+                                        @endif
+                                    </div>
+                                    <p class="text-xs text-gray-700 whitespace-pre-wrap break-words mt-0.5">{{ $message['body'] }}</p>
+                                    <span class="text-[10px] text-gray-400">{{ $message['created_human'] }}</span>
+                                </div>
+                                @if ($message['can_delete'])
+                                    <button type="button"
+                                        wire:click="deleteMessage({{ $message['id'] }})"
+                                        wire:confirm="{{ __('dashboard.messages.delete_confirm') }}"
+                                        title="{{ __('dashboard.messages.delete') }}"
+                                        class="flex-shrink-0 text-gray-300 hover:text-red-500 transition opacity-0 group-hover:opacity-100">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                        </svg>
+                                    </button>
+                                @endif
+                            </div>
+                        </div>
+                    @empty
+                        <p class="text-xs text-gray-400 text-center py-2">{{ __('dashboard.messages.empty') }}</p>
+                    @endforelse
+                </div>
+
+                {{-- Composer (only if allowed to post) --}}
+                @if ($this->dashCan('post_message'))
+                <div x-data="{ autoGrow(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 88) + 'px'; } }"
+                    x-effect="$wire.newMessageBody === '' && $refs.composer && autoGrow($refs.composer)"
+                    class="rounded-lg border border-amber-200 bg-white px-2 py-1 focus-within:border-amber-400 focus-within:ring-1 focus-within:ring-amber-400">
+                    <div class="flex items-end gap-1.5">
+                        <textarea x-ref="composer" wire:model="newMessageBody" rows="1" maxlength="1000"
+                            x-init="autoGrow($el)" x-on:input="autoGrow($el)"
+                            x-on:keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); $wire.addMessage(); }"
+                            placeholder="{{ __('dashboard.messages.placeholder') }}"
+                            class="flex-1 text-xs border-0 p-1 leading-snug resize-none focus:ring-0 max-h-[88px]"></textarea>
+                        <button type="button" wire:click="addMessage"
+                            title="{{ __('dashboard.messages.send') }}"
+                            class="flex-shrink-0 w-7 h-7 mb-0.5 flex items-center justify-center bg-amber-500 hover:bg-amber-600 text-white rounded-md transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-1 border-t border-gray-100 mt-0.5 pt-0.5">
+                        <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <select wire:model="newMessageExpiry"
+                            class="text-[10px] text-gray-500 border-0 bg-transparent p-0 pr-5 focus:ring-0 cursor-pointer">
+                            <option value="never">{{ __('dashboard.messages.expiry_never') }}</option>
+                            <option value="end_of_day">{{ __('dashboard.messages.expiry_end_of_day') }}</option>
+                            <option value="in_24h">{{ __('dashboard.messages.expiry_in_24h') }}</option>
+                        </select>
+                    </div>
+                </div>
+                @endif
+                </div>
+            </div>
+
             {{-- Action Buttons --}}
             <div class="p-3 space-y-2 flex-shrink-0">
-                <button @click="openBookingModalLocal()"
-                    class="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition flex items-center justify-center space-x-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4">
-                        </path>
-                    </svg>
-                    <span>{{ __('dashboard.add_booking') }}</span>
-                </button>
-                <button @click="openTimeOffModalLocal()"
-                    class="w-full py-2 px-3 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition flex items-center justify-center space-x-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
-                        </path>
-                    </svg>
-                    <span>{{ __('dashboard.add_time_off') }}</span>
-                </button>
+                @if ($this->dashCan('create_booking'))
+                    <button @click="openBookingModalLocal()"
+                        class="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition flex items-center justify-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4">
+                            </path>
+                        </svg>
+                        <span>{{ __('dashboard.add_booking') }}</span>
+                    </button>
+                @endif
+                @if ($this->dashCan('manage_timeoff'))
+                    <button @click="openTimeOffModalLocal()"
+                        class="w-full py-2 px-3 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg border border-gray-300 transition flex items-center justify-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z">
+                            </path>
+                        </svg>
+                        <span>{{ __('dashboard.add_time_off') }}</span>
+                    </button>
+                @endif
             </div>
         </aside>
 
@@ -143,6 +365,17 @@
                     @if ($selectedDate === $today)
                         <span
                             class="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">{{ __('dashboard.today') }}</span>
+                    @endif
+                    {{-- My bookings filter (providers who can also see the team) --}}
+                    @if ($this->isCurrentUserProvider() && $this->dashCan('view_team'))
+                        <button type="button" wire:click="$toggle('onlyMine')"
+                            class="flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-medium transition {{ $onlyMine ? 'bg-amber-500 border-amber-500 text-white shadow-sm' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50' }}">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                            {{ __('dashboard.my_bookings') }}
+                        </button>
                     @endif
                 </div>
                 <div class="flex items-center space-x-2">
@@ -188,6 +421,34 @@
                     @endif
                 </div>
             </div>
+
+            {{-- Attendance reminder banner — providers, on a scheduled work day,
+                 when not checked in. Evaluated from the page-load snapshot only
+                 (no polling), and dismissible for the session. --}}
+            @if ($this->isCurrentUserProvider() && ($attendanceState['status'] ?? null) === 'none' && ($attendanceState['is_work_day'] ?? false))
+                <div x-data="{ show: true }" x-show="show" x-cloak
+                    class="flex items-center justify-between gap-3 bg-rose-50 border-b border-rose-200 px-4 py-2 text-sm text-rose-700 flex-shrink-0">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span class="font-medium">{{ __('dashboard.attendance.not_checked_in_today') }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" wire:click="openCheckInModal" wire:loading.attr="disabled"
+                            class="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700 transition">
+                            {{ __('dashboard.attendance.check_in_now') }}
+                        </button>
+                        <button type="button" @click="show = false"
+                            class="text-rose-400 hover:text-rose-600" title="{{ __('dashboard.attendance.dismiss') }}">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            @endif
 
             {{-- Timeline --}}
             @if ($timelineData['is_open'] && count($timelineData['providers']) > 0)
@@ -608,6 +869,18 @@
                     </button>
                 </div>
                 <div class="p-5 space-y-4">
+                    @php $canAct = $this->canActOnAppointment($selectedAppointment); @endphp
+                    {{-- Ownership notice: provider is viewing a booking that is not theirs.
+                         All actions still work (subject to the edit_others permission). --}}
+                    @if ($this->isCurrentUserProvider() && (int) $selectedAppointment->provider_id !== $this->currentProviderId())
+                        <div class="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                            <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span>{{ __('dashboard.not_your_booking') }}</span>
+                        </div>
+                    @endif
                     @php
                         $statusBadge = match ($selectedAppointment->status->value) {
                             0 => [
@@ -779,11 +1052,13 @@
                                 rows="3"
                                 placeholder="{{ __('dashboard.appointment_modal.notes_placeholder') }}"
                                 class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:ring-amber-500 focus:border-amber-500 resize-none"></textarea>
-                            <button
-                                wire:click="updateNotes"
-                                class="mt-1.5 w-full px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium rounded-lg border border-amber-200 transition-colors">
-                                {{ __('dashboard.appointment_modal.save_notes') }}
-                            </button>
+                            @if ($canAct && $this->dashCan('edit_notes'))
+                                <button
+                                    wire:click="updateNotes"
+                                    class="mt-1.5 w-full px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium rounded-lg border border-amber-200 transition-colors">
+                                    {{ __('dashboard.appointment_modal.save_notes') }}
+                                </button>
+                            @endif
                         </div>
                     </div>
 
@@ -824,11 +1099,13 @@
                                 rows="3"
                                 placeholder="{{ __('dashboard.appointment_modal.provider_notes_placeholder') }}"
                                 class="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm text-gray-700 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500 resize-none"></textarea>
-                            <button
-                                wire:click="updateProviderNotes"
-                                class="mt-1.5 w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-medium rounded-lg border border-blue-200 transition-colors">
-                                {{ __('dashboard.appointment_modal.save_provider_notes') }}
-                            </button>
+                            @if ($canAct && $this->dashCan('edit_notes'))
+                                <button
+                                    wire:click="updateProviderNotes"
+                                    class="mt-1.5 w-full px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-medium rounded-lg border border-blue-200 transition-colors">
+                                    {{ __('dashboard.appointment_modal.save_provider_notes') }}
+                                </button>
+                            @endif
                         </div>
                     </div>
 
@@ -894,21 +1171,23 @@
                                     <span class="text-sm text-gray-500">
                                         {{ number_format($colorRecord->quantity, 2) }} {{ $colorRecord->color->unit ?? '' }}
                                     </span>
-                                    <button
-                                        wire:click="removeColorFromAppointment({{ $colorRecord->id }})"
-                                        wire:confirm="{{ __('dashboard.appointment_modal.confirm_remove_color') }}"
-                                        class="text-red-400 hover:text-red-600 p-1 rounded">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                        </svg>
-                                    </button>
+                                    @if ($canAct && $this->dashCan('manage_colors'))
+                                        <button
+                                            wire:click="removeColorFromAppointment({{ $colorRecord->id }})"
+                                            wire:confirm="{{ __('dashboard.appointment_modal.confirm_remove_color') }}"
+                                            class="text-red-400 hover:text-red-600 p-1 rounded">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                        </button>
+                                    @endif
                                 </div>
                             @empty
                                 <p class="text-xs text-gray-400 italic px-1">{{ __('dashboard.appointment_modal.no_colors') }}</p>
                             @endforelse
 
                             {{-- Add color row --}}
-                            <div class="flex gap-2 pt-1">
+                            <div class="flex gap-2 pt-1" @if (!($canAct && $this->dashCan('manage_colors'))) style="display:none" @endif>
                                 <select x-model="newColorId"
                                     class="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:ring-purple-500 focus:border-purple-500">
                                     <option value="">-- {{ __('dashboard.appointment_modal.select_color') }} --</option>
@@ -965,17 +1244,21 @@
                 <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex items-center justify-between flex-wrap gap-2">
                     <div class="flex flex-wrap gap-2">
                         @if (!in_array($selectedAppointment->payment_status->value, [1, 2, 3]) && $selectedAppointment->status->value !== 1)
-                            <button wire:click="cancelAppointment"
-                                wire:confirm="{{ __('dashboard.appointment_modal.confirm_cancel') }}"
-                                class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">{{ __('dashboard.appointment_modal.cancel_appointment') }}</button>
-                            <button wire:click="deleteAppointment"
-                                wire:confirm="{{ __('dashboard.appointment_modal.confirm_delete') }}"
-                                class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">{{ __('dashboard.appointment_modal.delete') }}</button>
+                            @if ($canAct && $this->dashCan('cancel_appointment'))
+                                <button wire:click="cancelAppointment"
+                                    wire:confirm="{{ __('dashboard.appointment_modal.confirm_cancel') }}"
+                                    class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">{{ __('dashboard.appointment_modal.cancel_appointment') }}</button>
+                            @endif
+                            @if ($canAct && $this->dashCan('delete_appointment'))
+                                <button wire:click="deleteAppointment"
+                                    wire:confirm="{{ __('dashboard.appointment_modal.confirm_delete') }}"
+                                    class="px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">{{ __('dashboard.appointment_modal.delete') }}</button>
+                            @endif
                         @endif
                     </div>
                     <div class="flex flex-wrap gap-2">
                         {{-- Add Service Button: only when booking can accept new services --}}
-                        @if ($selectedAppointment->canAcceptNewService())
+                        @if ($selectedAppointment->canAcceptNewService() && $canAct && $this->dashCan('add_service'))
                             <button wire:click="openAddServiceModal({{ $selectedAppointment->id }})"
                                 class="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-1">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
@@ -984,7 +1267,7 @@
                         @endif
 
                         {{-- Print Invoice Button: only when invoice is paid --}}
-                        @if ($selectedAppointment->canPrintInvoice())
+                        @if ($selectedAppointment->canPrintInvoice() && $this->dashCan('print_invoice'))
                             <button wire:click="printInvoiceForAppointment({{ $selectedAppointment->id }})"
                                 class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg inline-flex items-center gap-1"
                                 title="{{ $selectedAppointment->is_child_booking ? __('dashboard.print.combined_with_parent') : ($selectedAppointment->is_parent_booking ? __('dashboard.print.combined_invoice') : '') }}">
@@ -997,7 +1280,7 @@
                         @endif
 
                         {{-- Print Order Ticket Button: shown for all non-cancelled appointments --}}
-                        @if (! in_array($selectedAppointment->status, [\App\Enum\AppointmentStatus::USER_CANCELLED, \App\Enum\AppointmentStatus::ADMIN_CANCELLED], true))
+                        @if (! in_array($selectedAppointment->status, [\App\Enum\AppointmentStatus::USER_CANCELLED, \App\Enum\AppointmentStatus::ADMIN_CANCELLED], true) && $this->dashCan('print_ticket'))
                             <button wire:click="printAppointmentTicket({{ $selectedAppointment->id }})"
                                 class="px-3 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded-lg inline-flex items-center gap-1 cursor-pointer transform transition-transform duration-150 ease-out hover:scale-105 hover:shadow-md active:scale-95"
                                 title="{{ ($selectedAppointment->is_child_booking || $selectedAppointment->is_parent_booking) ? __('dashboard.print.order_combined_group') : '' }}">
@@ -1009,16 +1292,18 @@
                             </button>
                         @endif
 
-                        @if ($selectedAppointment->status->value === 0)
+                        @if ($selectedAppointment->status->value === 0 && $canAct && $this->dashCan('take_payment'))
                             <button wire:click="openPaymentModal({{ $selectedAppointment->id }})"
                                 class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg">
                                 {{ __('dashboard.appointment_modal.pay') }}
                             </button>
                         @endif
-                        <button wire:click="updateAppointment"
-                            class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg">
-                            {{ __('dashboard.appointment_modal.save_changes') }}
-                        </button>
+                        @if ($canAct && $this->dashCan('edit_appointment'))
+                            <button wire:click="updateAppointment"
+                                class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg">
+                                {{ __('dashboard.appointment_modal.save_changes') }}
+                            </button>
+                        @endif
                     </div>
                 </div>
             </div>

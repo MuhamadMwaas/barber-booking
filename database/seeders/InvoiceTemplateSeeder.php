@@ -123,14 +123,15 @@ class InvoiceTemplateSeeder extends Seeder
             ],
         ]);
 
-        // Invoice Number and Date
+        // Invoice Number (DYNAMIC) — real number + copy label (German, reprints only)
         $template->lines()->create([
             'section' => 'header',
             'type' => 'text',
             'order' => 5,
             'properties' => [
-                'content_type' => 'static',
-                'static_value' => 'Rechnung Nr. 8 (Kopie)',
+                'content_type' => 'dynamic',
+                'dynamic_field' => 'invoice.number_with_copy',
+                'prefix' => 'Rechnung Nr. ',
                 'font_size' => 11,
                 'font_weight' => 'bold',
                 'alignment' => 'left',
@@ -199,16 +200,18 @@ class InvoiceTemplateSeeder extends Seeder
             ],
         ]);
 
-        // Tax Breakdown (like in image with highlight box)
+        // Tax Breakdown (DYNAMIC — calculated from the actual invoice, not hard-coded)
         $template->lines()->create([
             'section' => 'body',
-            'type' => 'text',
+            'type' => 'two_column',
             'order' => 2,
             'properties' => [
-                'content_type' => 'static',
-                'static_value' => 'Netto(1)     Eur     21,01',
+                'label' => 'Netto',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.subtotal',
                 'font_size' => 9,
-                'font_weight' => 'normal',
+                'label_bold' => false,
                 'alignment' => 'left',
                 'margin_bottom' => 1,
             ],
@@ -216,13 +219,15 @@ class InvoiceTemplateSeeder extends Seeder
 
         $template->lines()->create([
             'section' => 'body',
-            'type' => 'text',
+            'type' => 'two_column',
             'order' => 3,
             'properties' => [
-                'content_type' => 'static',
-                'static_value' => '+ 19,0% MwSt.:      3,99',
+                'label' => '+ 19,0% MwSt.',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.tax_amount',
                 'font_size' => 9,
-                'font_weight' => 'normal',
+                'label_bold' => false,
                 'alignment' => 'left',
                 'margin_bottom' => 3,
             ],
@@ -487,14 +492,15 @@ class InvoiceTemplateSeeder extends Seeder
             ],
         ]);
 
-        // Invoice Number and Date
+        // Invoice Number (DYNAMIC) — real number + copy label (reprints only)
         $template->lines()->create([
             'section' => 'header',
             'type' => 'text',
             'order' => 5,
             'properties' => [
-                'content_type' => 'static',
-                'static_value' => 'Invoice No. 8 (Copy)',
+                'content_type' => 'dynamic',
+                'dynamic_field' => 'invoice.number_with_copy',
+                'prefix' => 'Invoice No. ',
                 'font_size' => 11,
                 'font_weight' => 'bold',
                 'alignment' => 'left',
@@ -563,16 +569,18 @@ class InvoiceTemplateSeeder extends Seeder
             ],
         ]);
 
-        // Tax Breakdown (like in image with highlight box)
+        // Tax Breakdown (DYNAMIC — calculated from the actual invoice, not hard-coded)
         $template->lines()->create([
             'section' => 'body',
-            'type' => 'text',
+            'type' => 'two_column',
             'order' => 2,
             'properties' => [
-                'content_type' => 'static',
-                'static_value' => 'Net(1)       Eur     21,01',
+                'label' => 'Net',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.subtotal',
                 'font_size' => 9,
-                'font_weight' => 'normal',
+                'label_bold' => false,
                 'alignment' => 'left',
                 'margin_bottom' => 1,
             ],
@@ -580,13 +588,15 @@ class InvoiceTemplateSeeder extends Seeder
 
         $template->lines()->create([
             'section' => 'body',
-            'type' => 'text',
+            'type' => 'two_column',
             'order' => 3,
             'properties' => [
-                'content_type' => 'static',
-                'static_value' => '+ 19,0% VAT:       3,99',
+                'label' => '+ 19.0% VAT',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.tax_amount',
                 'font_size' => 9,
-                'font_weight' => 'normal',
+                'label_bold' => false,
                 'alignment' => 'left',
                 'margin_bottom' => 3,
             ],

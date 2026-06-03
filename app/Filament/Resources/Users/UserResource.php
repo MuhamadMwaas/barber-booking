@@ -77,7 +77,7 @@ class UserResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->whereDoesntHave('roles', fn (Builder $query) => $query->where('name', 'customer'));
+            ->whereHas('roles', fn (Builder $query) => $query->where('name', '!=', 'customer'));
     }
 
     public static function getModelLabel(): string

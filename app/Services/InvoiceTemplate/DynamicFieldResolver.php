@@ -76,6 +76,11 @@ class DynamicFieldResolver
 
         return match($key) {
             'number' => $this->invoice->invoice_number ?? 'DRAFT',
+            // Copy label localized to the template language, shown only on reprints.
+            'copy_label' => $this->invoice->getCopyLabel($this->template->language),
+            // Invoice number with the copy label appended (e.g. "INV-2026-000001 (Kopie)").
+            'number_with_copy' => ($this->invoice->invoice_number ?? 'DRAFT')
+                . $this->invoice->getCopyLabel($this->template->language),
             'date' => $this->invoice->created_at?->format('d.m.Y') ?? '',
             'time' => $this->invoice->created_at?->format('H:i') ?? '',
             'datetime' => $this->invoice->created_at?->format('d.m.Y H:i') ?? '',

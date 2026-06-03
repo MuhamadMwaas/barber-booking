@@ -5,9 +5,11 @@ namespace App\Filament\Resources\Services\Schemas;
 use App\Models\Language;
 use App\Models\ServiceCategory;
 use App\Models\User;
+use App\Services\TaxCalculatorService;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Schemas\Components\Grid;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Schemas\Components\Section;
 use Filament\Forms\Components\Select;
@@ -18,6 +20,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Forms\Get;
 use Filament\Schemas\Schema;
 use Filament\Schemas\Components\Tabs\Tab;
+use Illuminate\Support\HtmlString;
 
 class ServiceForm
 {
@@ -99,7 +102,8 @@ class ServiceForm
                                             ->minValue(0)
                                             ->step(0.01)
                                             ->placeholder('100.00')
-                                            ->helperText(__('resources.service.price_helper')),
+                                            ->helperText(__('resources.service.price_helper'))
+                                            ->live(onBlur: true),
 
                                         // Discount Price
                                         TextInput::make('discount_price')
@@ -110,7 +114,8 @@ class ServiceForm
                                             ->step(0.01)
                                             ->placeholder('80.00')
                                             ->helperText(__('resources.service.discount_helper'))
-                                            ->lte('price'),
+                                            ->lte('price')
+                                            ->live(onBlur: true),
 
                                         // Duration
                                         TextInput::make('duration_minutes')
@@ -122,6 +127,12 @@ class ServiceForm
                                             ->step(5)
                                             ->placeholder('30')
                                             ->helperText(__('resources.service.duration_helper')),
+
+                                        // Tax breakdown for the base price (shown on blur)
+                                        self::taxBreakdownPlaceholder('price'),
+
+                                        // Tax breakdown for the discount price (shown on blur)
+                                        self::taxBreakdownPlaceholder('discount_price'),
                                     ]),
 
                                 Section::make(__('resources.service.visual_branding'))
@@ -234,7 +245,11 @@ class ServiceForm
                                                             ->minValue(0)
                                                             ->step(0.01)
                                                             ->placeholder(__('resources.service.use_default_price'))
-                                                            ->helperText(__('resources.service.custom_price_helper')),
+                                                            ->helperText(__('resources.service.custom_price_helper'))
+                                                            ->live(onBlur: true),
+
+                                                        // Tax breakdown for the custom price (shown on blur)
+                                                        self::taxBreakdownPlaceholder('custom_price'),
 
                                                         TextInput::make('custom_duration')
                                                             ->label(__('resources.service.custom_duration'))
@@ -344,5 +359,91 @@ class ServiceForm
                             ]),
                     ]),
             ]);
+    }
+
+    /**
+     * Reactive box shown beneath a price field that splits the entered
+     * gross amount (incl. tax) into net + tax using the salon tax rate.
+     * Hidden until a positive numeric value is present; updates on blur.
+     */
+    protected static function taxBreakdownPlaceholder(string $field): Placeholder
+    {
+        return Placeholder::make($field . '_tax_breakdown')
+            ->hiddenLabel()
+            ->columnSpanFull()
+            ->visible(fn ($get) => is_numeric($get($field)) && (float) $get($field) > 0)
+            ->content(fn ($get) => self::renderTaxBreakdown($get($field)));
+    }
+
+    /**
+     * Build the HTML breakdown for a gross amount.
+     */
+    protected static function renderTaxBreakdown($grossAmount): HtmlString
+    {
+        $taxRate = (float) get_setting('tax_rate', 19);
+
+        try {
+            /** @var TaxCalculatorService $calculator */
+            $calculator = app(TaxCalculatorService::class);
+            $result = $calculator->extractTax($grossAmount, $taxRate);
+        } catch (\Throwable $e) {
+            return new HtmlString('');
+        }
+
+        $net = number_format((float) $result['net'], 2);
+        $tax = number_format((float) $result['tax'], 2);
+        $gross = number_format((float) $result['gross'], 2);
+        $rate = rtrim(rtrim(number_format($taxRate, 2), '0'), '.');
+
+        $title = e(__('resources.service.tax_breakdown_title'));
+        $netLabel = e(__('resources.service.tax_net'));
+        $taxLabel = e(__('resources.service.tax_amount_label'));
+        $finalLabel = e(__('resources.service.tax_final'));
+
+        // Inline styles are used so the colours render regardless of which
+        // utility classes the compiled Filament theme ships.
+        $row = function (string $dot, string $valueColor, string $label, string $value, bool $strong = false): string {
+            $labelWeight = $strong ? '600' : '500';
+            $valueSize = $strong ? '0.9375rem' : '0.875rem';
+            return <<<ROW
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+                <span style="display:inline-flex;align-items:center;gap:0.5rem;">
+                    <span style="width:0.5rem;height:0.5rem;border-radius:9999px;background:{$dot};flex:none;"></span>
+                    <span style="color:#6b7280;font-size:0.8125rem;font-weight:{$labelWeight};">{$label}</span>
+                </span>
+                <span style="font-weight:700;font-size:{$valueSize};color:{$valueColor};white-space:nowrap;">{$value}&nbsp;&euro;</span>
+            </div>
+            ROW;
+        };
+
+        $netRow = $row('#10b981', '#059669', $netLabel, $net);
+        $taxRow = $row('#f59e0b', '#d97706', "{$taxLabel} ({$rate}%)", $tax);
+        $finalRow = $row('#6366f1', '#4f46e5', $finalLabel, $gross, true);
+
+        return new HtmlString(<<<HTML
+        <div style="border-radius:0.75rem;overflow:hidden;border:1px solid rgba(99,102,241,0.22);box-shadow:0 1px 3px rgba(0,0,0,0.06);max-width:24rem;">
+            <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;background:linear-gradient(90deg,rgba(99,102,241,0.16),rgba(99,102,241,0.04));border-bottom:1px solid rgba(99,102,241,0.18);">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:1rem;height:1rem;flex:none;">
+                    <rect x="4" y="2" width="16" height="20" rx="2"></rect>
+                    <line x1="8" y1="6" x2="16" y2="6"></line>
+                    <line x1="8" y1="10" x2="8" y2="10"></line>
+                    <line x1="12" y1="10" x2="12" y2="10"></line>
+                    <line x1="16" y1="10" x2="16" y2="10"></line>
+                    <line x1="8" y1="14" x2="8" y2="14"></line>
+                    <line x1="12" y1="14" x2="12" y2="14"></line>
+                    <line x1="16" y1="14" x2="16" y2="18"></line>
+                    <line x1="8" y1="18" x2="12" y2="18"></line>
+                </svg>
+                <span style="font-weight:600;font-size:0.8125rem;color:#4f46e5;">{$title}</span>
+                <span style="margin-inline-start:auto;font-size:0.6875rem;font-weight:700;padding:0.125rem 0.5rem;border-radius:9999px;background:rgba(99,102,241,0.16);color:#4f46e5;">{$rate}%</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.5rem;padding:0.625rem 0.75rem;">
+                {$netRow}
+                {$taxRow}
+                <div style="height:1px;background:rgba(99,102,241,0.15);margin:0.125rem 0;"></div>
+                {$finalRow}
+            </div>
+        </div>
+        HTML);
     }
 }

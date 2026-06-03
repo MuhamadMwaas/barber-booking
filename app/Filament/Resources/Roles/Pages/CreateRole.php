@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Roles\Pages;
 
 use App\Filament\Resources\Roles\RoleResource;
+use App\Filament\Resources\Roles\Schemas\RoleForm;
 use Filament\Resources\Pages\CreateRecord;
 use Spatie\Permission\Models\Permission;
 
@@ -24,7 +25,7 @@ class CreateRole extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        $this->selectedPermissions = $data['permissions'] ?? [];
+        $this->selectedPermissions = RoleForm::flattenPermissionNames($data['permissions'] ?? []);
         unset($data['permissions']);
 
         $data['guard_name'] = 'web';

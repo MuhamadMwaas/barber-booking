@@ -65,7 +65,7 @@ class BookingService
         $totals = $this->calculateTotals($preparedServices);
 
         // 6. Create booking in transaction
-        return DB::transaction(function () use ($customer, $date, $paymentMethod, $isConfirmed, $markAsPaid, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone) {
+        $appointment = DB::transaction(function () use ($customer, $date, $paymentMethod, $isConfirmed, $markAsPaid, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone, $bookingData) {
             // Allow staff-created bookings to be confirmed without being marked as paid yet.
             $createdStatus = $isConfirmed ? 1 : 0;
             $paymentStatus = $markAsPaid
@@ -118,6 +118,12 @@ class BookingService
             );
             return $appointment->load(['services', 'customer', 'provider', 'services_record']);
         });
+
+        // 7. Notify customer (online only) + company — after commit, queued,
+        //    and fully guarded so email issues never affect the booking.
+        app(BookingMailService::class)->sendForNewBooking($appointment);
+
+        return $appointment;
     }
 
     /**
