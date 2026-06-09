@@ -21,6 +21,9 @@ class ProviderAttendanceResource extends Resource
 {
     use NavigationDefaultAccess;
     use ResourceTranslation;
+    public static function canAccess(): bool {
+        return false; // This resource is only for record-level corrections via the Attendance Board cards, so we hide it from the sidebar and gate access via the board's own permission.
+    }
 
     protected static ?string $model = ProviderAttendance::class;
 
