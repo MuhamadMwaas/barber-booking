@@ -1,12 +1,12 @@
 <?php
 
 return [
-    'appointments'  => 'Appointments',
-    'services'      => 'Services',
-    'staff'         => 'Staff',
-    'reports'       => 'Reports & Analytics',
-    'billing'       => 'Billing & Printing',
-    'users'         => 'Users & Access',
-    'settings'      => 'Settings',
-    'content'       => 'Content',
+    'operations'     => 'Operations',
+    'services'       => 'Services',
+    'team'           => 'Team Management',
+    'administration' => 'Administration',
+    'reports'        => 'Reports & Analytics',
+    'content'        => 'Content Management',
+    'billing'        => 'Billing & Printing',
+    'settings'       => 'Settings',
 ];

@@ -4,6 +4,8 @@ namespace App\Filament\Resources\ServiceCategories\Pages;
 
 use App\Filament\Resources\ServiceCategories\ServiceCategoryResource;
 use Filament\Actions\DeleteAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
@@ -20,6 +22,8 @@ class EditServiceCategory extends EditRecord
             ViewAction::make(),
             DeleteAction::make()
                 ->successNotificationTitle(__('resources.service_category.deleted_notification')),
+            RestoreAction::make(),
+            ForceDeleteAction::make(),
         ];
     }
 

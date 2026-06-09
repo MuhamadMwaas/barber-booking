@@ -28,9 +28,9 @@ class AttendanceBoard extends Page
 
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedClock;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Staff';
+    protected static string|\UnitEnum|null $navigationGroup = 'team';
 
-    protected static ?int $navigationSort = 24;
+    protected static ?int $navigationSort = 26;
 
     protected string $view = 'filament.pages.attendance-board';
 

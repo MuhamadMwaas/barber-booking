@@ -20,6 +20,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class UserResource extends Resource
 {
@@ -29,9 +30,9 @@ class UserResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'staff';
+    protected static string|\UnitEnum|null $navigationGroup = 'administration';
 
-    protected static ?int $navigationSort = 89;
+    protected static ?int $navigationSort = 10;
 
     protected static ?string $recordTitleAttribute = 'Users';
 
@@ -98,5 +99,13 @@ class UserResource extends Resource
     public static function getTitleCaseModelLabel(): string
     {
         return static::translate('management_title');
+    }
+
+    public static function getRecordRouteBindingEloquentQuery(): Builder
+    {
+        return parent::getRecordRouteBindingEloquentQuery()
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]);
     }
 }

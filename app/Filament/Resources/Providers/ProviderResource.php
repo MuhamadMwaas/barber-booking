@@ -22,6 +22,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class ProviderResource extends Resource
 {
@@ -33,7 +34,7 @@ class ProviderResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'staff';
+    protected static string|\UnitEnum|null $navigationGroup = 'team';
 
     protected static ?int $navigationSort = 20;
 
@@ -77,5 +78,13 @@ class ProviderResource extends Resource
             'view' => ViewProvider::route('/{record}'),
             'edit' => EditProvider::route('/{record}/edit'),
         ];
+    }
+
+    public static function getRecordRouteBindingEloquentQuery(): Builder
+    {
+        return parent::getRecordRouteBindingEloquentQuery()
+            ->withoutGlobalScopes([
+                SoftDeletingScope::class,
+            ]);
     }
 }

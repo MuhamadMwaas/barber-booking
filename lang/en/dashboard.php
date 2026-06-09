@@ -332,6 +332,7 @@ return [
         'start_time' => 'Start Time',
         'end_time' => 'End Time',
         'reason' => 'Reason',
+        'reason_required' => 'Please select a reason.',
         'save' => 'Save',
         'cancel' => 'Cancel',
     ],

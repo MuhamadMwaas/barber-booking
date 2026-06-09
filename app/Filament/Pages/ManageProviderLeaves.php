@@ -37,7 +37,7 @@ class ManageProviderLeaves extends Page implements HasTable, HasForms
 
     public static function getNavigationGroup(): ?string
     {
-        return __('navigation.staff');
+        return __('navigation.team');
     }
 
     public function getTitle(): string

@@ -25,7 +25,7 @@ class AppointmentResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'appointments';
+    protected static string|\UnitEnum|null $navigationGroup = 'operations';
 
     protected static ?int $navigationSort = 1;
 

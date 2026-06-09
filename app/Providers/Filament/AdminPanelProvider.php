@@ -35,14 +35,14 @@ class AdminPanelProvider extends PanelProvider {
      * Value: [light mode color, dark mode color].
      */
     private const NAVIGATION_GROUP_COLORS = [
-        'appointments' => ['#2563eb', '#60a5fa'], // Blue
-        'services'     => ['#16a34a', '#4ade80'], // Green
-        'staff'        => ['#7c3aed', '#a78bfa'], // Violet
-        'reports'      => ['#f59e0b', '#fcd34d'], // Amber
-        'billing'      => ['#dc2626', '#f87171'], // Red
-        'content'      => ['#ec4899', '#ec4899'], // Pink
-        'users'        => ['#06b6d4', '#67e8f9'], // Cyan
-        'settings'     => ['#64748b', '#cbd5e1'], // Slate
+        'operations'     => ['#2563eb', '#60a5fa'], // Blue
+        'services'       => ['#16a34a', '#4ade80'], // Green
+        'team'           => ['#7c3aed', '#a78bfa'], // Violet
+        'administration' => ['#06b6d4', '#67e8f9'], // Cyan
+        'reports'        => ['#f59e0b', '#fcd34d'], // Amber
+        'content'        => ['#ec4899', '#ec4899'], // Pink
+        'billing'        => ['#dc2626', '#f87171'], // Red
+        'settings'       => ['#64748b', '#cbd5e1'], // Slate
     ];
 
     public function panel(Panel $panel): Panel {
@@ -51,6 +51,7 @@ class AdminPanelProvider extends PanelProvider {
             ->id('admin')
             ->path('admin')
             ->brandLogo('/image/logo.png')
+            ->brandLogoHeight('5rem')
             ->favicon('/image/logo.png')
             ->login(\App\Filament\Pages\Auth\Login::class)
             ->colors([
@@ -91,7 +92,8 @@ class AdminPanelProvider extends PanelProvider {
                 NavigationItem::make('Staff Dashboard')
                     ->url(fn() => route('staff.dashboard'), shouldOpenInNewTab: true)
                     ->icon(Heroicon::OutlinedComputerDesktop)
-                    ->sort(999),
+                    ->group(fn() => __('navigation.operations'))
+                    ->sort(0),
             ])
             ->authMiddleware([
                 Authenticate::class,

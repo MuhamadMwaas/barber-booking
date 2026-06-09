@@ -100,7 +100,7 @@ class ViewProviderScheduleTimeline extends Page implements HasSchemas
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendar;
     public static function getNavigationGroup(): ?string
     {
-        return __('navigation.staff');
+        return __('navigation.team');
     }
 
     /**

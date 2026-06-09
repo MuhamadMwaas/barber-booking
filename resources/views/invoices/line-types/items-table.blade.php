@@ -23,26 +23,26 @@
                     <th style="width: 8%;">#</th>
                 @endif
 
-                <th style="width: {{ $showItemNumbers ? '40%' : '48%' }};">Description</th>
+                <th style="width: {{ $showItemNumbers ? '40%' : '48%' }};">{{ __('invoice_template.description') }}</th>
 
                 @if($showQuantity)
-                    <th style="width: 10%;" class="text-center">Qty</th>
+                    <th style="width: 10%;" class="text-center">{{ __('invoice_template.qty') }}</th>
                 @endif
 
                 @if($showUnitPrice)
-                    <th style="width: 15%;" class="text-right">Price</th>
+                    <th style="width: 15%;" class="text-right">{{ __('invoice_template.price') }}</th>
                 @endif
 
                 @if($showTaxRate)
-                    <th style="width: 12%;" class="text-right">Tax</th>
+                    <th style="width: 12%;" class="text-right">{{ __('invoice_template.tax') }}</th>
                 @endif
 
                 @if($showTaxAmount)
-                    <th style="width: 15%;" class="text-right">Tax €</th>
+                    <th style="width: 15%;" class="text-right">{{ __('invoice_template.tax_eur') }}</th>
                 @endif
 
                 @if($showTotal)
-                    <th style="width: 15%;" class="text-right">Total</th>
+                    <th style="width: 15%;" class="text-right">{{ __('invoice_template.total') }}</th>
                 @endif
             </tr>
         </thead>

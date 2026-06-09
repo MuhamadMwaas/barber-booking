@@ -9,7 +9,11 @@
       "PowerShell(php artisan db:seed --class=PermissionsSeeder --force)",
       "PowerShell(php artisan db:seed --class=RoleSeeder --force)",
       "PowerShell(php artisan permission:cache-reset)",
-      "PowerShell(php artisan view:clear)"
+      "PowerShell(php artisan view:clear)",
+      "Bash(dir \"D:\\\\Coding\\\\BarberBooking\\\\lang\")",
+      "Bash(dir \"D:\\\\Coding\\\\BarberBooking\\\\lang\\\\de\")",
+      "Bash(dir \"D:\\\\Coding\\\\BarberBooking\\\\lang\\\\en\")",
+      "Bash(findstr \"soft_delete\\\\|users\")"
     ]
   }
 }

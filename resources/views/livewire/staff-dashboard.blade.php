@@ -1464,15 +1464,20 @@
                 @if ($this->reasonLeaves && $this->reasonLeaves->count() > 0)
                     <div>
                         <label
-                            class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.reason') }}</label>
+                            class="block text-xs font-medium mb-1"
+                            :class="timeOffErrors.reasonId ? 'text-red-500' : 'text-gray-500'">{{ __('dashboard.time_off_modal.reason') }}</label>
                         <select x-model="timeOff.reasonId"
-                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                            @change="delete timeOffErrors.reasonId"
+                            :class="timeOffErrors.reasonId ? 'border-red-400 focus:ring-red-400 focus:border-red-400' : 'border-gray-300 focus:ring-amber-500 focus:border-amber-500'"
+                            class="w-full border rounded-lg px-3 py-2 text-sm">
                             <option value="">-- {{ __('dashboard.time_off_modal.reason') }} --</option>
                             @foreach ($this->reasonLeaves as $reason)
                                 <option value="{{ $reason->id }}">
                                     {{ $reason->getNameIn(app()->getLocale()) }}</option>
                             @endforeach
                         </select>
+                        <p x-show="timeOffErrors.reasonId" x-text="timeOffErrors.reasonId"
+                            class="mt-1 text-xs text-red-500"></p>
                     </div>
                 @endif
             </div>
@@ -1757,6 +1762,7 @@
 
                 showTimeOffModal: false,
                 timeOffSaving: false,
+                timeOffErrors: {},
                 timeOff: {
                     providerId: '',
                     type: '1',
@@ -1839,6 +1845,7 @@
                         reasonId: '',
                     };
                     this.timeOffSaving = false;
+                    this.timeOffErrors = {};
                 },
 
                 openTimeOffModalLocal() {
@@ -1860,6 +1867,11 @@
                 },
 
                 async submitTimeOff() {
+                    this.timeOffErrors = {};
+                    if (!this.timeOff.reasonId) {
+                        this.timeOffErrors.reasonId = '{{ __('dashboard.time_off_modal.reason_required') }}';
+                        return;
+                    }
                     this.timeOffSaving = true;
                     try {
                         await this.$wire.saveTimeOffFromAlpine({
@@ -1871,7 +1883,7 @@
                             endTime: this.timeOff.endTime,
                             reasonId: this.timeOff.reasonId,
                         });
-                    } catch (e) {
+                    } finally {
                         this.timeOffSaving = false;
                     }
                 },

@@ -14,7 +14,7 @@
 @if($customer)
 <div class="line-item customer-info-block"
      style="font-size: {{ $fontSize }}px; margin-top: {{ $marginTop }}px; margin-bottom: {{ $marginBottom }}px;">
-    <div style="font-weight: bold; margin-bottom: 3px;">Customer:</div>
+    <div style="font-weight: bold; margin-bottom: 3px;">{{ __('invoice_template.customer') }}:</div>
 
     @if($showName && $customer->name)
         <div>{{ $customer->name }}</div>

@@ -2,16 +2,21 @@
 
 namespace App\Filament\Resources\Providers\Tables;
 
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\RestoreAction;
+use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
-use Filament\Actions\Action;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Filament\Support\Enums\FontWeight;
 
@@ -102,6 +107,7 @@ class ProvidersTable
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
+                TrashedFilter::make(),
                 TernaryFilter::make('is_active')
                     ->label(__('resources.provider_resource.status'))
                     ->placeholder(__('resources.provider_resource.all_providers'))
@@ -145,10 +151,14 @@ class ProvidersTable
                     ->color('warning')
                     ->url(fn ($record) => route('filament.admin.resources.providers.view', ['record' => $record->id]) . '#time-offs')
                     ->tooltip(__('resources.provider_resource.add_leave_tooltip')),
+                RestoreAction::make(),
+                ForceDeleteAction::make(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
+                    RestoreBulkAction::make(),
+                    ForceDeleteBulkAction::make(),
                 ]),
             ])
             ->emptyStateHeading(__('resources.provider_resource.no_providers_yet'))

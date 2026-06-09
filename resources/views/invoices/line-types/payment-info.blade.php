@@ -17,19 +17,19 @@
 
     @if($showMethod)
         <div style="font-weight: bold;">
-            Payment Method: {{ $payment->method ?? 'Cash' }}
+            {{ __('invoice_template.payment_method') }}: {{ $payment->method ?? 'Cash' }}
         </div>
     @endif
 
     @if($showAmount)
         <div style="margin-top: 2px;">
-            Amount Paid: {{ number_format($payment->amount ?? 0, 2) }}
+            {{ __('invoice_template.amount_paid') }}: {{ number_format($payment->amount ?? 0, 2) }}
         </div>
     @endif
 
     @if($showReference && $payment->reference)
         <div style="font-size: 0.9em; margin-top: 2px;">
-            Ref: {{ $payment->reference }}
+            {{ __('invoice_template.ref') }}: {{ $payment->reference }}
         </div>
     @endif
 </div>

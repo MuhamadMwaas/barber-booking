@@ -4,10 +4,11 @@ namespace App\Filament\Resources\Providers\Pages;
 
 use App\Filament\Resources\Providers\ProviderResource;
 use Filament\Actions\DeleteAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Illuminate\Database\Eloquent\Model;
 
 class EditProvider extends EditRecord
 {
@@ -40,6 +41,8 @@ class EditProvider extends EditRecord
                     $provider->services()->detach();
                     $provider->serviceReviews()->delete();
                 }),
+            RestoreAction::make(),
+            ForceDeleteAction::make(),
         ];
     }
 

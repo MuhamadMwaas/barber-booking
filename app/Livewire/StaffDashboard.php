@@ -864,6 +864,11 @@ class StaffDashboard extends Component {
             return;
         }
 
+        if (!$this->timeOffReasonId) {
+            $this->dispatch('notify', type: 'error', message: __('dashboard.time_off_modal.reason_required'));
+            return;
+        }
+
         try {
             $data = [
                 'user_id' => $this->timeOffProviderId,
@@ -901,13 +906,18 @@ class StaffDashboard extends Component {
             return;
         }
 
+        if (empty($data['reasonId'])) {
+            $this->dispatch('notify', type: 'error', message: __('dashboard.time_off_modal.reason_required'));
+            return;
+        }
+
         try {
             $timeOffData = [
                 'user_id' => (int) $providerId,
                 'type' => (int) ($data['type'] ?? 1),
                 'start_date' => $data['startDate'] ?? now()->format('Y-m-d'),
                 'end_date' => !empty($data['endDate']) ? $data['endDate'] : ($data['startDate'] ?? now()->format('Y-m-d')),
-                'reason_id' => !empty($data['reasonId']) ? (int) $data['reasonId'] : null,
+                'reason_id' => (int) $data['reasonId'],
             ];
 
             if ((int) ($data['type'] ?? 1) === ProviderTimeOff::TYPE_HOURLY) {

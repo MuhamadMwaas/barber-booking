@@ -1,12 +1,12 @@
 <?php
 
 return [
-    'appointments' => 'Termine',
-    'services' => 'Dienstleistungen',
-    'staff' => 'Mitarbeiter',
-    'reports' => 'Berichte & Analysen',
-    'billing' => 'Abrechnung & Druck',
-    'users' => 'Benutzer & Zugriff',
-    'settings' => 'Einstellungen',
-    'content' => 'Inhalte',
+    'operations'     => 'Terminverwaltung',
+    'services'       => 'Dienstleistungen',
+    'team'           => 'Personalverwaltung',
+    'administration' => 'Verwaltung',
+    'reports'        => 'Berichte & Analysen',
+    'content'        => 'Inhaltsverwaltung',
+    'billing'        => 'Abrechnung & Druck',
+    'settings'       => 'Einstellungen',
 ];

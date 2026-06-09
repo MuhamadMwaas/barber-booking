@@ -328,6 +328,7 @@ return [
         'start_time' => 'وقت البدء',
         'end_time' => 'وقت الانتهاء',
         'reason' => 'السبب',
+        'reason_required' => 'يرجى اختيار سبب الإجازة.',
         'save' => 'حفظ',
         'cancel' => 'إلغاء',
     ],

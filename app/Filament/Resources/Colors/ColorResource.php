@@ -23,11 +23,11 @@ class ColorResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSwatch;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Content';
+    protected static string|\UnitEnum|null $navigationGroup = 'services';
 
     public static function getNavigationGroup(): ?string
     {
-        return __('navigation.content');
+        return __('navigation.services');
     }
 
     protected static ?int $navigationSort = 30;

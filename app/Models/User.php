@@ -9,6 +9,7 @@ use App\Enum\OtpType;
 use App\Enum\RegistrationMethod;
 use Filament\Models\Contracts\FilamentUser;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -28,7 +29,7 @@ use Filament\Models\Contracts\HasName;
 class User extends Authenticatable implements FilamentUser, HasName
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens,HasRoles;
+    use HasFactory, Notifiable, HasApiTokens, HasRoles, SoftDeletes;
 
 
     protected $fillable = [

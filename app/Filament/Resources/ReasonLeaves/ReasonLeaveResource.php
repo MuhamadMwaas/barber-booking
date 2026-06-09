@@ -24,7 +24,7 @@ class ReasonLeaveResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedNoSymbol;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'staff';
+    protected static string|\UnitEnum|null $navigationGroup = 'team';
 
     protected static ?int $navigationSort = 22;
 

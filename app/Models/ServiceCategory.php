@@ -5,13 +5,14 @@ namespace App\Models;
 use App\Models\Translation\ServiceCategoryTranslation;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\UploadedFile;
 class ServiceCategory extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
 
     protected $table = 'service_categories';

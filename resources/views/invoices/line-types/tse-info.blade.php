@@ -16,26 +16,26 @@
 <div class="line-item tse-info text-{{ $alignment }}"
      style="font-size: {{ $fontSize }}px; margin-top: {{ $marginTop }}px; margin-bottom: {{ $marginBottom }}px;">
 
-    <div style="margin-bottom: 3px; font-weight: bold;">TSE Information</div>
+    <div style="margin-bottom: 3px; font-weight: bold;">{{ __('invoice_template.tse_information') }}</div>
 
     @if($showTssSerial && isset($fiskalyData['fiskaly_tss_serial']))
-        <div>TSS Serial: {{ Str::limit($fiskalyData['fiskaly_tss_serial'], 30) }}</div>
+        <div>{{ __('invoice_template.tss_serial') }}: {{ Str::limit($fiskalyData['fiskaly_tss_serial'], 30) }}</div>
     @endif
 
     @if($showTransactionNumber && isset($fiskalyData['fiskaly_transaction_number']))
-        <div>Transaction: {{ $fiskalyData['fiskaly_transaction_number'] }}</div>
+        <div>{{ __('invoice_template.transaction') }}: {{ $fiskalyData['fiskaly_transaction_number'] }}</div>
     @endif
 
     @if($showSignatureCounter && isset($fiskalyData['fiskaly_signature']['counter']))
-        <div>Signature Counter: {{ $fiskalyData['fiskaly_signature']['counter'] }}</div>
+        <div>{{ __('invoice_template.signature_counter') }}: {{ $fiskalyData['fiskaly_signature']['counter'] }}</div>
     @endif
 
     @if($showTimestamp && isset($fiskalyData['fiskaly_time_start']))
-        <div>Time: {{ date('Y-m-d H:i:s', $fiskalyData['fiskaly_time_start']) }}</div>
+        <div>{{ __('invoice_template.time') }}: {{ date('Y-m-d H:i:s', $fiskalyData['fiskaly_time_start']) }}</div>
     @endif
 
     @if(isset($fiskalyData['fiskaly_client_serial']))
-        <div style="margin-top: 2px;">Client: {{ $fiskalyData['fiskaly_client_serial'] }}</div>
+        <div style="margin-top: 2px;">{{ __('invoice_template.client') }}: {{ $fiskalyData['fiskaly_client_serial'] }}</div>
     @endif
 </div>
 @endif

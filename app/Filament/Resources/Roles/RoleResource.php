@@ -30,9 +30,9 @@ class RoleResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'users';
+    protected static string|\UnitEnum|null $navigationGroup = 'administration';
 
-    protected static ?int $navigationSort = 51;
+    protected static ?int $navigationSort = 11;
 
     protected static ?string $recordTitleAttribute = 'name';
 

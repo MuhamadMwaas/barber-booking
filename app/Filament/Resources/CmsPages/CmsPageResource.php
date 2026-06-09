@@ -23,7 +23,7 @@ class CmsPageResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Content';
+    protected static string|\UnitEnum|null $navigationGroup = 'content';
 
     public static function getNavigationGroup(): ?string
     {

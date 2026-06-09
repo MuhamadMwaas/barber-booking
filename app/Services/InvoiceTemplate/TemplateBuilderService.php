@@ -36,8 +36,7 @@ class TemplateBuilderService
         // Initialize field resolver
         $this->fieldResolver = new DynamicFieldResolver($this->invoice, $this->template);
 
-        // Generate the HTML
-        return $this->generateHtml();
+        return $this->renderWithLocale(fn () => $this->generateHtml());
     }
 
     /**
@@ -52,7 +51,23 @@ class TemplateBuilderService
         // Initialize field resolver
         $this->fieldResolver = new DynamicFieldResolver($this->invoice, $this->template);
 
-        return $this->generateHtml();
+        return $this->renderWithLocale(fn () => $this->generateHtml());
+    }
+
+    /**
+     * Run a render callback with the template locale active, then restore.
+     */
+    protected function renderWithLocale(callable $callback): string
+    {
+        $original = app()->getLocale();
+        $lang = $this->template->language ?? 'en';
+        app()->setLocale($lang);
+
+        try {
+            return $callback();
+        } finally {
+            app()->setLocale($original);
+        }
     }
 
     /**

@@ -328,6 +328,7 @@ return [
         'start_time' => 'Startzeit',
         'end_time' => 'Endzeit',
         'reason' => 'Grund',
+        'reason_required' => 'Bitte einen Grund auswählen.',
         'save' => 'Speichern',
         'cancel' => 'Abbrechen',
     ],

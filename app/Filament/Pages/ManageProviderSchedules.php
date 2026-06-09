@@ -50,7 +50,7 @@ class ManageProviderSchedules extends Page
 
     public static function getNavigationGroup(): ?string
     {
-        return __('navigation.staff');
+        return __('navigation.team');
     }
 
 

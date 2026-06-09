@@ -4,6 +4,8 @@ namespace App\Filament\Resources\Users\Pages;
 
 use App\Filament\Resources\Users\UserResource;
 use Filament\Actions\DeleteAction;
+use Filament\Actions\ForceDeleteAction;
+use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
@@ -38,6 +40,8 @@ class EditUser extends EditRecord
                     $user->services()->detach();
                     $user->serviceReviews()->delete();
                 }),
+            RestoreAction::make(),
+            ForceDeleteAction::make(),
         ];
     }
 
