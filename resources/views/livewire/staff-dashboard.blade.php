@@ -364,6 +364,14 @@
                     <h2 class="text-sm font-semibold text-gray-700">
                         {{ \Carbon\Carbon::parse($selectedDate)->format('l, d M Y') }}
                     </h2>
+                    {{-- Live current time (HH:MM), browser-local clock --}}
+                    <span class="flex items-center gap-1 text-sm font-semibold text-gray-500 tabular-nums">
+                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span x-text="nowClock">--:--</span>
+                    </span>
                     @if ($selectedDate !== $today)
                         <button wire:click="goToToday"
                             class="px-2 py-1 text-xs text-amber-600 hover:text-amber-700 font-medium rounded hover:bg-amber-50">
@@ -536,7 +544,7 @@
                                         {{-- Current Time Indicator --}}
                                         @if ($selectedDate === $today)
                                             @php
-                                                $nowMinutes = \Carbon\Carbon::now()->diffInMinutes($start);
+                                                $nowMinutes = $start->diffInMinutes(\Carbon\Carbon::now());
                                             @endphp
                                             @if ($nowMinutes >= 0 && $nowMinutes <= $totalMinutes)
                                                 <div class="absolute left-0 right-0 z-30 pointer-events-none"
@@ -1740,6 +1748,10 @@
                 linkedLines: [],
                 _linkedRedrawHandle: null,
 
+                // ---- Live wall-clock (browser-local; app tz is Asia/Baghdad so they match) ----
+                nowClock: '',
+                _clockTimer: null,
+
                 showBookingModal: false,
                 bookingSaving: false,
 
@@ -1884,6 +1896,27 @@
                         window.addEventListener('resize', () => this.scheduleLinkedLineRedraw());
                     }
                     this.scheduleLinkedLineRedraw();
+
+                    // Live HH:MM clock next to the date header.
+                    this.tickClock();
+                    clearInterval(this._clockTimer);
+                    this._clockTimer = setInterval(() => this.tickClock(), 1000);
+                },
+
+                destroy() {
+                    // Stop the clock when the component is torn down (e.g. wire:navigate
+                    // to the Customers tab) so the interval does not leak.
+                    if (this._clockTimer) {
+                        clearInterval(this._clockTimer);
+                        this._clockTimer = null;
+                    }
+                },
+
+                tickClock() {
+                    const d = new Date();
+                    this.nowClock =
+                        String(d.getHours()).padStart(2, '0') + ':' +
+                        String(d.getMinutes()).padStart(2, '0');
                 },
 
                 // ---- Linked-group SVG connector lines ----
