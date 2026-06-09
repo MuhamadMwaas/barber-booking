@@ -70,7 +70,8 @@ return [
     'messages' => [
         'title' => 'Nachrichten',
         'admin_badge' => 'Manager',
-        'empty' => 'Noch keine Nachrichten',
+        'empty' => 'Keine Nachrichten für diesen Tag',
+        'for_day' => 'Nachrichten für :date',
         'placeholder' => 'Nachricht an das Team schreiben...',
         'send' => 'Senden',
         'delete' => 'Löschen',

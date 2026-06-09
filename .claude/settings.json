@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(php artisan tinker --execute=\"require base_path\\('tmp_discount_check.php'\\);\")",
+      "PowerShell(php artisan tinker --execute=\"require base_path\\('tmp_render_check.php'\\);\")",
+      "PowerShell(php artisan db:seed --class='Database\\\\Seeders\\\\InvoiceTemplateSeeder' --force)",
+      "PowerShell(php artisan tinker --execute=\"require base_path\\('tmp_en_check.php'\\);\")",
+      "PowerShell(php artisan tinker --execute=\"require base_path\\('tmp_fmt_check.php'\\);\")",
+      "PowerShell(php artisan db:seed --class=PermissionsSeeder --force)",
+      "PowerShell(php artisan db:seed --class=RoleSeeder --force)",
+      "PowerShell(php artisan permission:cache-reset)",
+      "PowerShell(php artisan view:clear)"
+    ]
+  }
+}

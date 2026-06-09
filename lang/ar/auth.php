@@ -8,4 +8,7 @@ return [
     'account_disabled_title' => 'الحساب معطّل',
     'account_disabled_body'  => 'تم تعطيل حسابك. يرجى التواصل مع الإدارة للمساعدة.',
     'account_disabled'       => 'تم تعطيل حسابك. يرجى التواصل مع الإدارة للمساعدة.',
+
+    'customer_not_allowed_title' => 'وصول مرفوض',
+    'customer_not_allowed_body'  => 'حسابات العملاء لا يمكنها الوصول إلى لوحة التحكم.',
 ];

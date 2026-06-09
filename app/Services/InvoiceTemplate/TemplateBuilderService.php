@@ -202,12 +202,20 @@ class TemplateBuilderService
                 text-align: left;
                 font-size: 0.9em;
                 font-weight: bold;
+                border-bottom: 1px solid {$primaryColor};
             }
 
             .items-table td {
                 padding: 3px 2px;
                 font-size: 0.9em;
+                vertical-align: top;
             }
+
+            .items-table th.text-right,
+            .items-table td.text-right { text-align: right; }
+
+            .items-table th.text-center,
+            .items-table td.text-center { text-align: center; }
 
             .items-table.bordered {
                 border: 1px solid {$borderColor};
@@ -238,11 +246,23 @@ class TemplateBuilderService
                 margin-top: 5px;
             }
 
-            /* Two Column Layout */
+            /* Two Column Layout (label : value on one clean row) */
             .two-column {
                 display: flex;
                 justify-content: space-between;
-                align-items: center;
+                align-items: baseline;
+                gap: 10px;
+                margin: 1px 0;
+            }
+
+            .two-column .tc-label {
+                white-space: nowrap;   /* never wrap the label onto a second line */
+            }
+
+            .two-column .tc-value {
+                flex: 1 1 auto;
+                text-align: right;
+                word-break: break-word;
             }
 
             /* Customer Info Block */

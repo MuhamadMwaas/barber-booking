@@ -424,6 +424,12 @@ class AppointmentsTable
                                     $invoice->refresh();
                                 }
 
+                                // Step 2b: Apply the final amount through the single source of
+                                // truth. Records the discount (items total - amount paid) and
+                                // reconciles net/tax/total on the discounted gross, so the printed
+                                // receipt shows the same breakdown as the StaffDashboard path.
+                                $invoice = $invoiceService->applyFinalAmount($invoice, (float) $data['amount_paid']);
+
                                 // Step 3: Determine PaymentStatus based on PaymentMethod type
                                 $paymentMethod = \App\Models\PaymentMethod::find($data['payment_method_id']);
                                 $paymentStatus = match ($paymentMethod->type) {
@@ -433,10 +439,10 @@ class AppointmentsTable
                                     default => PaymentStatus::PAID_ONSTIE_CASH,
                                 };
 
-                                // Step 4: Create payment record
+                                // Step 4: Create payment record for the reconciled (post-discount) total.
                                 $payment = $invoicePaymentService->createFromInvoice(
                                     invoice: $invoice,
-                                    amount: $data['amount_paid'],
+                                    amount: (float) $invoice->total_amount,
                                     paymentMethod: $data['payment_method_id'],
                                     status: $paymentStatus,
                                     metadata: [
@@ -446,6 +452,13 @@ class AppointmentsTable
                                         'paid_by' => \Illuminate\Support\Facades\Auth::user()?->full_name ?? 'System',
                                     ]
                                 );
+
+                                // Step 4b: Ensure a sequential invoice number once PAID.
+                                // (InvoicePaymentService flips the status but does not assign a number.)
+                                $invoice->refresh();
+                                if ($invoice->status === \App\Enum\InvoiceStatus::PAID && empty($invoice->invoice_number)) {
+                                    $invoice->update(['invoice_number' => \App\Models\Invoice::generateInvoiceNumber()]);
+                                }
 
                                 // Step 5: Update appointment status
                                 $record->update([

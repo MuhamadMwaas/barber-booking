@@ -366,6 +366,14 @@ class EditInvoiceTemplate extends EditRecord
                 }
             }
 
+            if ($lineType === 'two_column') {
+                $fields[] = Toggle::make('properties.hide_when_empty')
+                    ->label('Hide when value is empty')
+                    ->helperText('Used by discount / items-total lines so the row only appears when a discount exists.')
+                    ->default(false)
+                    ->inline(false);
+            }
+
             $fields[] = Grid::make(3)->schema([
                 TextInput::make('properties.font_size')
                     ->label('Font Size')

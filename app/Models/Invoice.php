@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enum\InvoiceStatus;
 use App\Services\DocumentNumberGenerator;
+use App\Services\TaxCalculatorService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,6 +24,7 @@ class Invoice extends Model
         'tax_amount',
         'tax_rate',
         'total_amount',
+        'discount_amount',
         'status',
         'notes',
         'invoice_data',
@@ -39,6 +41,7 @@ class Invoice extends Model
         'tax_amount' => 'decimal:2',
         'tax_rate' => 'decimal:2',
         'total_amount' => 'decimal:2',
+        'discount_amount' => 'decimal:2',
         'invoice_data' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -166,21 +169,53 @@ class Invoice extends Model
 
     }
 
+    /**
+     * Pre-discount gross total = the sum of all item gross totals.
+     *
+     * Derived as (total_amount + discount_amount) so we never need a second
+     * stored column. This is the "Artikel gesamt" / "Items total" value shown
+     * on the receipt above the discount line.
+     */
+    public function getItemsTotalAttribute(): float
+    {
+        return (float) bcadd(
+            (string) ($this->total_amount ?? 0),
+            (string) ($this->discount_amount ?? 0),
+            2
+        );
+    }
+
+    /**
+     * Recalculate the invoice money fields from its items, GROSS pricing model.
+     *
+     * Unified accounting rule for the whole system:
+     *   itemsGross = Σ items.total_amount        (gross, tax-inclusive)
+     *   total      = itemsGross - discount_amount (the amount actually owed/paid)
+     *   {net,tax}  = reverse-extract tax from `total`  (net + tax == total)
+     *
+     * This replaces the previous FORWARD-tax formula ((net * rate) / 100) so it
+     * matches TaxCalculatorService / rebuildAggregatedInvoice everywhere, and it
+     * is discount-aware so the InvoiceItem observer can never clobber a discount
+     * back to the full price.
+     */
     public function calculateTotals(): void
     {
-        $subtotal = '0';
+        $itemsGross = '0';
         foreach ($this->items as $item) {
-            $subtotal = bcadd($subtotal, (string)$item->subtotal, 2);
+            $itemsGross = bcadd($itemsGross, (string) $item->total_amount, 2);
         }
 
-        $this->subtotal = (float)$subtotal;
+        $discount = (string) ($this->discount_amount ?? 0);
+        $total = bcsub($itemsGross, $discount, 2);
+        if (bccomp($total, '0', 2) < 0) {
+            $total = '0.00';
+        }
 
-        // حساب الضريبة: (Subtotal * Rate) / 100
-        $taxAmount = bcmul($subtotal, (string)$this->tax_rate, 4);
-        $taxAmount = bcdiv($taxAmount, '100', 2);
+        $tax = app(TaxCalculatorService::class)->extractTax($total, (string) ($this->tax_rate ?? 0));
 
-        $this->tax_amount =(float) $taxAmount;
-        $this->total_amount = bcadd($subtotal, $taxAmount, 2);
+        $this->subtotal = $tax['net'];
+        $this->tax_amount = $tax['tax'];
+        $this->total_amount = $tax['gross']; // == $total, reconciled so net + tax == total
 
         $this->save();
     }

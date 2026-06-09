@@ -17,14 +17,16 @@ class DashboardMessage extends Model
     protected $fillable = [
         'user_id',
         'body',
+        'message_date',
         'is_pinned',
         'expires_at',
         'deleted_by',
     ];
 
     protected $casts = [
-        'is_pinned'  => 'boolean',
-        'expires_at' => 'datetime',
+        'is_pinned'    => 'boolean',
+        'message_date' => 'date',
+        'expires_at'   => 'datetime',
     ];
 
     // ── Relationships ──────────────────────────────────────────────────
@@ -53,5 +55,15 @@ class DashboardMessage extends Model
             })
             ->orderByDesc('is_pinned')
             ->orderByDesc('created_at');
+    }
+
+    /**
+     * Limit to messages that belong to a specific calendar day. The board is
+     * day-scoped: changing the selected day on the dashboard reloads only that
+     * day's messages.
+     */
+    public function scopeForDate(Builder $query, string $date): Builder
+    {
+        return $query->whereDate('message_date', $date);
     }
 }

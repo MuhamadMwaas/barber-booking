@@ -92,8 +92,37 @@ class DynamicFieldResolver
             'total' => number_format($this->invoice->total_amount ?? 0, 2),
             'paid_amount' => number_format($this->invoice->total_amount ?? 0, 2),
             'remaining' => '0.00',
+            // Discount-aware fields. They return '' when there is no discount so a
+            // line bound to them (with hide_when_empty) disappears on full-price
+            // invoices and only appears when a discount was actually granted.
+            'discount' => $this->resolveDiscountValue(),
+            'items_total' => $this->resolveItemsTotalValue(),
             default => '',
         };
+    }
+
+    /**
+     * Discount shown with a leading minus (e.g. "-10.00"); '' when no discount.
+     */
+    protected function resolveDiscountValue(): string
+    {
+        $discount = (float) ($this->invoice->discount_amount ?? 0);
+
+        return $discount > 0 ? '-' . number_format($discount, 2) : '';
+    }
+
+    /**
+     * Pre-discount gross (items total = total + discount); '' when no discount.
+     */
+    protected function resolveItemsTotalValue(): string
+    {
+        $discount = (float) ($this->invoice->discount_amount ?? 0);
+
+        if ($discount <= 0) {
+            return '';
+        }
+
+        return number_format((float) ($this->invoice->total_amount ?? 0) + $discount, 2);
     }
 
     /**

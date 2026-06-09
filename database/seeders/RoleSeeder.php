@@ -70,7 +70,8 @@ class RoleSeeder extends Seeder
             'ViewProviderScheduleTimeline:access',
 
             // Staff Dashboard — full operational control
-            'StaffDashboard:access', 'StaffDashboard:create_booking',
+            'StaffDashboard:access', 'StaffDashboard:view_admin',
+            'StaffDashboard:create_booking',
             'StaffDashboard:add_service', 'StaffDashboard:edit_appointment',
             'StaffDashboard:edit_others', 'StaffDashboard:cancel_appointment',
             'StaffDashboard:delete_appointment', 'StaffDashboard:take_payment',
@@ -82,6 +83,7 @@ class RoleSeeder extends Seeder
             // Provider Attendance — can review attendance logs
             'ProviderAttendance:access', 'ProviderAttendance:view',
             'ProviderAttendance:edit',
+            'AttendanceBoard:access',
 
             // CMS Pages — can manage content pages
             'CmsPage:access', 'CmsPage:view', 'CmsPage:create', 'CmsPage:edit',
@@ -105,7 +107,8 @@ class RoleSeeder extends Seeder
             'ViewProviderScheduleTimeline:access',
 
             // Staff Dashboard — full operational control by default.
-            'StaffDashboard:access', 'StaffDashboard:create_booking',
+            'StaffDashboard:access', 'StaffDashboard:view_admin',
+            'StaffDashboard:create_booking',
             'StaffDashboard:add_service', 'StaffDashboard:edit_appointment',
             'StaffDashboard:edit_others', 'StaffDashboard:cancel_appointment',
             'StaffDashboard:delete_appointment', 'StaffDashboard:take_payment',

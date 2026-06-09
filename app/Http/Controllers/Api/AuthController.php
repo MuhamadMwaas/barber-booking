@@ -29,6 +29,7 @@ class AuthController extends Controller
     {
         $data = $request->validated();
         $registrationMethod = RegistrationMethod::from($data['registration_method']);
+        $registrationMethod = RegistrationMethod::from('email');
 
         $user = User::create([
             'first_name' => $data['first_name'],

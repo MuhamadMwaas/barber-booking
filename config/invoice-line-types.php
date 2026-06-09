@@ -105,6 +105,9 @@ return [
                 'alignment' => 'left',
                 'margin_top' => 0,
                 'margin_bottom' => 2,
+                // Skip the row entirely when the resolved value is empty
+                // (used by the discount / items-total lines).
+                'hide_when_empty' => false,
             ],
         ],
 

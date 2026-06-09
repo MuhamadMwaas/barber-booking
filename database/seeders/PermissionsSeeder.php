@@ -40,14 +40,17 @@ class PermissionsSeeder extends Seeder
         'ManageProviderSchedules'       => ['access'],
         'ManageProviderLeaves'          => ['access'],
         'ViewProviderScheduleTimeline'  => ['access'],
+        'AttendanceBoard'               => ['access'],
 
         // StaffDashboard — one ability per actionable button on the dashboard so
         // each can be toggled per-role from the Roles screen. `access` opens the
-        // page; `view_team` controls whether other providers' columns are visible;
-        // `edit_others` controls whether a provider may act on bookings that are
-        // not their own.
+        // page; `view_admin` controls whether the "Admin" tab (link to the
+        // Filament panel) is shown in the dashboard nav; `view_team` controls
+        // whether other providers' columns are visible; `edit_others` controls
+        // whether a provider may act on bookings that are not their own.
         'StaffDashboard'                => [
             'access',
+            'view_admin',
             'create_booking',
             'add_service',
             'edit_appointment',
@@ -109,6 +112,13 @@ class PermissionsSeeder extends Seeder
         $total = count($allPermissions);
         $this->command->info("  ✓ {$created} new | {$existing} already exist | {$total} total");
 
+        // ── 3b. Prune stale permissions ────────────
+        // Keeps the catalog in sync on every re-run: any "web"-guard permission
+        // that the code no longer defines (renamed/removed resource or page) is
+        // deleted, cascading its role/model pivot rows. The canonical list is the
+        // single source of truth, so re-running the seeder reconciles fully.
+        $pruned = $this->pruneStalePermissions($allPermissions);
+
         // ── 4. Upsert Roles ────────────────────────
         $this->command->line('');
         $this->command->comment('Creating roles...');
@@ -132,6 +142,7 @@ class PermissionsSeeder extends Seeder
         $this->command->info("│  Resources  : " . str_pad($resources['count'], 26) . '│');
         $this->command->info("│  Pages      : " . str_pad(count(self::PAGE_ABILITIES), 26) . '│');
         $this->command->info("│  Permissions: " . str_pad($total, 26) . '│');
+        $this->command->info("│  Pruned     : " . str_pad($pruned, 26) . '│');
         $this->command->info("│  Guard      : " . str_pad(self::GUARD, 26) . '│');
         $this->command->info('└─────────────────────────────────────────┘');
         $this->command->line('');
@@ -204,5 +215,34 @@ class PermissionsSeeder extends Seeder
         }
 
         return $permissions;
+    }
+
+    /**
+     * Delete every "web"-guard permission that the code no longer defines, so a
+     * re-run reconciles the catalog instead of only ever adding to it.
+     *
+     * @param  array<int, string>  $allPermissions  the canonical list (source of truth)
+     * @return int                 number of permissions removed
+     */
+    private function pruneStalePermissions(array $allPermissions): int
+    {
+        $stale = Permission::query()
+            ->where('guard_name', self::GUARD)
+            ->whereNotIn('name', $allPermissions)
+            ->get();
+
+        if ($stale->isEmpty()) {
+            return 0;
+        }
+
+        $this->command->line('');
+        $this->command->comment("Pruning {$stale->count()} stale permission(s)...");
+
+        foreach ($stale as $permission) {
+            $this->command->line("  − {$permission->name}");
+            $permission->delete(); // cascades role_has_permissions / model_has_permissions
+        }
+
+        return $stale->count();
     }
 }

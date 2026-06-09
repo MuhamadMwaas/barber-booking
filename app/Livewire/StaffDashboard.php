@@ -77,6 +77,8 @@ class StaffDashboard extends Component {
     public string $editProviderNotes = '';  // ← provider professional notes
 
     public float $paymentAmount = 0;
+    /** The amount shown when the payment modal opened — used to detect a real discount. */
+    public float $paymentBaseline = 0;
     public string $paymentType = '2';
 
     public ?int $timeOffProviderId = null;
@@ -267,6 +269,9 @@ class StaffDashboard extends Component {
         $appointment = $this->selectedAppointment;
         if ($appointment) {
             $this->paymentAmount = (float) $appointment->total_amount;
+            // Remember the suggested amount so processPayment() can tell whether
+            // the staff actually lowered it (a discount) or left it untouched.
+            $this->paymentBaseline = (float) $appointment->total_amount;
             $this->paymentType = '2';
         }
         $this->showAppointmentModal = false;
@@ -808,23 +813,28 @@ class StaffDashboard extends Component {
             // TSE signs the correct total covering parent + all children.
             $invoice = $invoiceService->rebuildAggregatedInvoice($invoiceOwner);
 
-            // If the staff manually adjusted the payment amount (discount),
-            // override the total. We keep the items intact; only total changes.
-            if ((float) $this->paymentAmount != (float) $invoice->total_amount) {
-                $invoice->update([
-                    'total_amount' => $this->paymentAmount,
-                ]);
-                $invoice->refresh();
-            }
+            // Apply the final amount through the single source of truth. If the
+            // staff lowered the amount it is recorded as a discount (items total
+            // is kept, discount_amount is stored, net/tax/total are reconciled on
+            // the discounted gross). If they left the suggested amount untouched
+            // we pass null = "charge the full items total" (no accidental discount
+            // on aggregated invoices whose suggested amount was the parent only).
+            $staffChangedAmount = abs($this->paymentAmount - $this->paymentBaseline) >= 0.005;
+            $invoice = $invoiceService->applyFinalAmount(
+                $invoice,
+                $staffChangedAmount ? (float) $this->paymentAmount : null
+            );
 
             $paymentTypeValue = (string) $this->paymentType;
 
             // finalizeDraftInvoice() now updates EVERY linked appointment
             // (parent + children) to COMPLETED + matching payment_status.
+            // Pass the reconciled invoice total (post-discount) so the Payment
+            // record + amount_paid always match what was actually charged.
             $finalizedInvoice = $finalizationService->finalizeDraftInvoice(
                 $invoice,
                 $paymentTypeValue,
-                (float) $this->paymentAmount,
+                (float) $invoice->total_amount,
                 null,
                 true
             );
@@ -1477,7 +1487,7 @@ class StaffDashboard extends Component {
         if ($this->dashDeny('post_message')) return;
 
         try {
-            $this->messageService->add(auth()->user(), $this->newMessageBody, $this->newMessageExpiry);
+            $this->messageService->add(auth()->user(), $this->newMessageBody, $this->selectedDate, $this->newMessageExpiry);
             $this->newMessageBody = '';
             $this->newMessageExpiry = 'never';
             $this->dispatch('notify', type: 'success', message: __('dashboard.messages.posted'));
@@ -1502,12 +1512,13 @@ class StaffDashboard extends Component {
     }
 
     /**
-     * Active messages formatted for the sidebar board.
+     * Active messages for the selected day, formatted for the sidebar board.
+     * Changing the calendar day reloads this list automatically (Livewire render).
      */
     private function getMessagesForView(): array {
         $actor = auth()->user();
 
-        return $this->messageService->listActive()->map(function (DashboardMessage $message) use ($actor) {
+        return $this->messageService->listActive($this->selectedDate)->map(function (DashboardMessage $message) use ($actor) {
             $authorName = $message->user?->full_name ?: __('dashboard.messages.unknown_author');
 
             return [

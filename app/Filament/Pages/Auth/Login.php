@@ -58,6 +58,20 @@ class Login extends BaseLogin
 
             return null;
         }
+
+        // ── Customer account — panel is for staff only ────────────────────────────
+        if ($user->hasRole('customer')) {
+            $this->fireFailedEvent($authGuard, $user, $credentials);
+
+            Notification::make()
+                ->danger()
+                ->title(__('auth.customer_not_allowed_title'))
+                ->body(__('auth.customer_not_allowed_body'))
+                ->persistent()
+                ->send();
+
+            return null;
+        }
         // ─────────────────────────────────────────────────────────────────────────
 
         // Multi-factor authentication challenge

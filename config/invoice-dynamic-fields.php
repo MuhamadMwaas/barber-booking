@@ -163,6 +163,18 @@ return [
             'example' => '350.00',
         ],
 
+        'invoice.items_total' => [
+            'label' => 'Items Total (before discount)',
+            'category' => 'Totals',
+            'example' => '40.00',
+        ],
+
+        'invoice.discount' => [
+            'label' => 'Discount (− amount, blank if none)',
+            'category' => 'Totals',
+            'example' => '-10.00',
+        ],
+
         'invoice.paid_amount' => [
             'label' => 'Paid Amount',
             'category' => 'Totals',

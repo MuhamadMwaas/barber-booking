@@ -77,8 +77,12 @@ class InvoiceService
                 $taxAmount
             );
 
-            // إنشاء بنود الفاتورة من الخدمات
+            // إنشاء بنود الفاتورة من الخدمات (بالأسعار الكاملة)
             $this->createInvoiceItems($invoice, $appointment);
+
+            // Record the discount in the column + reconcile net/tax/total from
+            // the items total vs. the amount actually paid. Single source of truth.
+            $invoice = $this->applyFinalAmount($invoice, $amountPaid);
 
             // تحديث حالة الدفع للحجز
             $this->updateAppointmentPaymentStatus($appointment, $paymentType);
@@ -136,15 +140,11 @@ class InvoiceService
             'payment_type' => $paymentType,
         ];
 
-        // إضافة معلومات الخصم إذا كان المبلغ المدفوع أقل من الإجمالي الأصلي
-        if ($totalAmount < $appointment->total_amount) {
-            $discount = $appointment->total_amount - $totalAmount;
-            $discountPercentage = ($discount / $appointment->total_amount) * 100;
-
-            $invoiceData['discount_amount'] = round($discount, 2);
-            $invoiceData['discount_percentage'] = round($discountPercentage, 2);
-            $invoiceData['original_amount'] = $appointment->total_amount;
-        }
+        // NOTE: The discount is NOT computed here anymore. It is derived and
+        // stored in the `discount_amount` COLUMN by applyFinalAmount(), called
+        // right after the items are built (see createInvoiceFromAppointment).
+        // The previous logic compared against $appointment->total_amount which
+        // callers overwrite to the paid amount first → discount always 0 (bug).
 
         return Invoice::create([
             'appointment_id' => $appointment->id,
@@ -546,6 +546,62 @@ class InvoiceService
 
             return $invoice->fresh(['items', 'appointment']);
         });
+    }
+
+    /**
+     * THE single source of truth for applying a manual/discounted final amount.
+     *
+     * Every payment path (StaffDashboard, Filament AppointmentsTable, Filament
+     * Providers RelationManager) funnels its "amount the customer actually pays"
+     * through here so the discount is recorded and the money fields stay
+     * mathematically consistent on ALL printed templates.
+     *
+     * Rules (GROSS pricing, German VAT):
+     *   itemsGross = Σ items.total_amount             (authoritative pre-discount gross)
+     *   final      = clamp(finalGross, 0 .. itemsGross) (null => itemsGross, i.e. no discount)
+     *   discount   = itemsGross - final               (never negative => overpay is NOT a discount)
+     *   {net,tax}  = reverse-extract tax from `final`  (net + tax == final, reconciled)
+     *
+     * @param  float|null $finalGross  The gross amount to charge. Null = charge the full items total.
+     */
+    public function applyFinalAmount(Invoice $invoice, ?float $finalGross = null): Invoice
+    {
+        $taxRate = (string) ($invoice->tax_rate ?: get_setting('tax_rate', 19));
+
+        // Authoritative pre-discount gross = sum of item gross totals.
+        $itemsGross = (string) ($invoice->items()->sum('total_amount'));
+        if (bccomp($itemsGross, '0', 2) <= 0) {
+            // Defensive fallback for an item-less invoice: current total + any existing discount.
+            $itemsGross = bcadd((string) $invoice->total_amount, (string) ($invoice->discount_amount ?? 0), 2);
+        }
+
+        // Null => caller wants the full amount (no discount).
+        $final = $finalGross === null
+            ? $itemsGross
+            : number_format($finalGross, 2, '.', '');
+
+        // Clamp: never below zero, never above the items total (overpayment is not a discount).
+        if (bccomp($final, '0', 2) < 0) {
+            $final = '0.00';
+        }
+        if (bccomp($final, $itemsGross, 2) > 0) {
+            $final = $itemsGross;
+        }
+
+        $discount = bcsub($itemsGross, $final, 2);
+
+        // Reverse-extract VAT from the discounted gross so net + tax == total exactly.
+        $tax = app(TaxCalculatorService::class)->extractTax($final, $taxRate);
+
+        $invoice->update([
+            'discount_amount' => $discount,
+            'subtotal'        => $tax['net'],
+            'tax_amount'      => $tax['tax'],
+            'total_amount'    => $tax['gross'], // == $final
+            'tax_rate'        => $taxRate,
+        ]);
+
+        return $invoice->refresh();
     }
 
     /**

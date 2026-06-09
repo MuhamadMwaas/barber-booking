@@ -70,7 +70,8 @@ return [
     'messages' => [
         'title' => 'Messages',
         'admin_badge' => 'Manager',
-        'empty' => 'No messages yet',
+        'empty' => 'No messages for this day',
+        'for_day' => 'Messages for :date',
         'placeholder' => 'Write a message to the team...',
         'send' => 'Send',
         'delete' => 'Delete',

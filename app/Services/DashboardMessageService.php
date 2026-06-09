@@ -12,8 +12,9 @@ use Illuminate\Validation\ValidationException;
  * Thin service for the StaffDashboard bulletin board.
  *
  * Behaviour (agreed spec):
- *  - Global board: every active message is visible to everyone.
- *  - Admin messages are pinned to the top automatically.
+ *  - Day-scoped board: each message belongs to a calendar day (message_date) and
+ *    is only visible while that day is selected on the dashboard.
+ *  - Admin messages are pinned to the top of their day automatically.
  *  - Optional auto-expiry hides a message after a chosen time without deleting it.
  *  - Soft deletes keep the full history in the database (who/when added, who/when deleted).
  *  - Add + delete only — no editing, to keep the history clean.
@@ -22,35 +23,42 @@ class DashboardMessageService
 {
     public const MAX_BODY_LENGTH = 1000;
 
-    /** Allowed expiry presets → resolver returning a Carbon or null. */
-    private function resolveExpiry(?string $preset): ?Carbon
+    /**
+     * Allowed expiry presets → resolver returning a Carbon or null.
+     * Resolved relative to the message's own day so "end of day" stays meaningful
+     * even when posting ahead for a future day.
+     */
+    private function resolveExpiry(?string $preset, Carbon $messageDate): ?Carbon
     {
         return match ($preset) {
-            'end_of_day' => Carbon::today()->endOfDay(),
+            'end_of_day' => $messageDate->copy()->endOfDay(),
             'in_24h'     => Carbon::now()->addDay(),
             default      => null, // 'never' or anything unknown
         };
     }
 
     /**
-     * Active messages ready for display, with author eager-loaded.
+     * Active messages for a given calendar day, ready for display, with author
+     * eager-loaded. The board is day-scoped, so a date is always required.
      *
      * @return Collection<int, DashboardMessage>
      */
-    public function listActive(): Collection
+    public function listActive(string $date): Collection
     {
         return DashboardMessage::query()
             ->active()
+            ->forDate($date)
             ->with('user:id,first_name,last_name')
             ->get();
     }
 
     /**
-     * Add a message. Admin authors are pinned automatically.
+     * Add a message tied to a specific calendar day. Admin authors are pinned
+     * automatically.
      *
      * @throws ValidationException when the body is empty/too long.
      */
-    public function add(User $author, string $body, ?string $expiryPreset = null): DashboardMessage
+    public function add(User $author, string $body, string $messageDate, ?string $expiryPreset = null): DashboardMessage
     {
         $body = trim($body);
 
@@ -66,11 +74,14 @@ class DashboardMessageService
             ]);
         }
 
+        $day = Carbon::parse($messageDate)->startOfDay();
+
         return DashboardMessage::create([
-            'user_id'    => $author->id,
-            'body'       => $body,
-            'is_pinned'  => $author->hasRole('admin'),
-            'expires_at' => $this->resolveExpiry($expiryPreset),
+            'user_id'      => $author->id,
+            'body'         => $body,
+            'message_date' => $day->toDateString(),
+            'is_pinned'    => $author->hasRole('admin'),
+            'expires_at'   => $this->resolveExpiry($expiryPreset, $day),
         ]);
     }
 

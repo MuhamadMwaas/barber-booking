@@ -27,7 +27,9 @@ class InvoiceTemplateSeeder extends Seeder
      */
     protected function createGermanTemplate(): void
     {
-        $template = InvoiceTemplate::create([
+        $template = InvoiceTemplate::updateOrCreate(
+            ['name' => 'German POS Receipt (80mm)'],
+            [
             'name' => 'German POS Receipt (80mm)',
             'description' => 'German receipt template matching Look up Friseur style',
             'is_active' => true,
@@ -53,6 +55,9 @@ class InvoiceTemplateSeeder extends Seeder
                 'logo_path' => null,
             ],
         ]);
+
+        // Clean re-seed: wipe existing lines before rebuilding them (no duplicates).
+        $template->lines()->delete();
 
         // Header Lines
         $template->lines()->create([
@@ -200,11 +205,47 @@ class InvoiceTemplateSeeder extends Seeder
             ],
         ]);
 
-        // Tax Breakdown (DYNAMIC — calculated from the actual invoice, not hard-coded)
+        // Items total (pre-discount) — only shows when a discount was granted.
         $template->lines()->create([
             'section' => 'body',
             'type' => 'two_column',
             'order' => 2,
+            'properties' => [
+                'label' => 'Artikel gesamt',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.items_total',
+                'font_size' => 9,
+                'label_bold' => false,
+                'alignment' => 'left',
+                'margin_bottom' => 1,
+                'hide_when_empty' => true,
+            ],
+        ]);
+
+        // Discount line — only shows when a discount was granted.
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 3,
+            'properties' => [
+                'label' => 'Rabatt',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.discount',
+                'font_size' => 9,
+                'label_bold' => false,
+                'alignment' => 'left',
+                'margin_bottom' => 2,
+                'hide_when_empty' => true,
+            ],
+        ]);
+
+        // Tax Breakdown (DYNAMIC — calculated from the actual invoice, not hard-coded)
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 4,
             'properties' => [
                 'label' => 'Netto',
                 'label_width' => 60,
@@ -220,7 +261,7 @@ class InvoiceTemplateSeeder extends Seeder
         $template->lines()->create([
             'section' => 'body',
             'type' => 'two_column',
-            'order' => 3,
+            'order' => 5,
             'properties' => [
                 'label' => '+ 19,0% MwSt.',
                 'label_width' => 60,
@@ -228,35 +269,6 @@ class InvoiceTemplateSeeder extends Seeder
                 'dynamic_field' => 'invoice.tax_amount',
                 'font_size' => 9,
                 'label_bold' => false,
-                'alignment' => 'left',
-                'margin_bottom' => 3,
-            ],
-        ]);
-
-        $template->lines()->create([
-            'section' => 'body',
-            'type' => 'separator',
-            'order' => 4,
-            'properties' => [
-                'style' => 'double',
-                'width' => 2,
-                'margin_top' => 2,
-                'margin_bottom' => 2,
-            ],
-        ]);
-
-        // Grand Total
-        $template->lines()->create([
-            'section' => 'body',
-            'type' => 'two_column',
-            'order' => 5,
-            'properties' => [
-                'label' => 'Summe Eur',
-                'label_width' => 60,
-                'value_type' => 'dynamic',
-                'dynamic_field' => 'invoice.total',
-                'font_size' => 11,
-                'label_bold' => true,
                 'alignment' => 'left',
                 'margin_bottom' => 3,
             ],
@@ -274,11 +286,40 @@ class InvoiceTemplateSeeder extends Seeder
             ],
         ]);
 
-        // Payment
+        // Grand Total
         $template->lines()->create([
             'section' => 'body',
             'type' => 'two_column',
             'order' => 7,
+            'properties' => [
+                'label' => 'Summe Eur',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.total',
+                'font_size' => 11,
+                'label_bold' => true,
+                'alignment' => 'left',
+                'margin_bottom' => 3,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'separator',
+            'order' => 8,
+            'properties' => [
+                'style' => 'double',
+                'width' => 2,
+                'margin_top' => 2,
+                'margin_bottom' => 2,
+            ],
+        ]);
+
+        // Payment
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 9,
             'properties' => [
                 'label' => 'Gegeben Eur',
                 'label_width' => 60,
@@ -294,7 +335,7 @@ class InvoiceTemplateSeeder extends Seeder
         $template->lines()->create([
             'section' => 'body',
             'type' => 'text',
-            'order' => 8,
+            'order' => 10,
             'properties' => [
                 'content_type' => 'static',
                 'static_value' => 'Bezahlt per Girocard',
@@ -323,7 +364,7 @@ class InvoiceTemplateSeeder extends Seeder
             'type' => 'thank_you_message',
             'order' => 1,
             'properties' => [
-                'message' => 'Vielen Dank für Ihren Einkauf',
+                'message' => 'Danke für Ihren Besuch in unserem Zentrum',
                 'font_size' => 10,
                 'font_style' => 'normal',
                 'alignment' => 'center',
@@ -396,7 +437,9 @@ class InvoiceTemplateSeeder extends Seeder
      */
     protected function createEnglishTemplate(): void
     {
-        $template = InvoiceTemplate::create([
+        $template = InvoiceTemplate::updateOrCreate(
+            ['name' => 'English POS Receipt (80mm)'],
+            [
             'name' => 'English POS Receipt (80mm)',
             'description' => 'English receipt template matching Look up Friseur style',
             'is_active' => true,
@@ -422,6 +465,9 @@ class InvoiceTemplateSeeder extends Seeder
                 'logo_path' => null,
             ],
         ]);
+
+        // Clean re-seed: wipe existing lines before rebuilding them (no duplicates).
+        $template->lines()->delete();
 
         // Header Lines
         $template->lines()->create([
@@ -569,11 +615,47 @@ class InvoiceTemplateSeeder extends Seeder
             ],
         ]);
 
-        // Tax Breakdown (DYNAMIC — calculated from the actual invoice, not hard-coded)
+        // Items total (pre-discount) — only shows when a discount was granted.
         $template->lines()->create([
             'section' => 'body',
             'type' => 'two_column',
             'order' => 2,
+            'properties' => [
+                'label' => 'Items total',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.items_total',
+                'font_size' => 9,
+                'label_bold' => false,
+                'alignment' => 'left',
+                'margin_bottom' => 1,
+                'hide_when_empty' => true,
+            ],
+        ]);
+
+        // Discount line — only shows when a discount was granted.
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 3,
+            'properties' => [
+                'label' => 'Discount',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.discount',
+                'font_size' => 9,
+                'label_bold' => false,
+                'alignment' => 'left',
+                'margin_bottom' => 2,
+                'hide_when_empty' => true,
+            ],
+        ]);
+
+        // Tax Breakdown (DYNAMIC — calculated from the actual invoice, not hard-coded)
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 4,
             'properties' => [
                 'label' => 'Net',
                 'label_width' => 60,
@@ -589,7 +671,7 @@ class InvoiceTemplateSeeder extends Seeder
         $template->lines()->create([
             'section' => 'body',
             'type' => 'two_column',
-            'order' => 3,
+            'order' => 5,
             'properties' => [
                 'label' => '+ 19.0% VAT',
                 'label_width' => 60,
@@ -597,35 +679,6 @@ class InvoiceTemplateSeeder extends Seeder
                 'dynamic_field' => 'invoice.tax_amount',
                 'font_size' => 9,
                 'label_bold' => false,
-                'alignment' => 'left',
-                'margin_bottom' => 3,
-            ],
-        ]);
-
-        $template->lines()->create([
-            'section' => 'body',
-            'type' => 'separator',
-            'order' => 4,
-            'properties' => [
-                'style' => 'double',
-                'width' => 2,
-                'margin_top' => 2,
-                'margin_bottom' => 2,
-            ],
-        ]);
-
-        // Grand Total
-        $template->lines()->create([
-            'section' => 'body',
-            'type' => 'two_column',
-            'order' => 5,
-            'properties' => [
-                'label' => 'Total Eur',
-                'label_width' => 60,
-                'value_type' => 'dynamic',
-                'dynamic_field' => 'invoice.total',
-                'font_size' => 11,
-                'label_bold' => true,
                 'alignment' => 'left',
                 'margin_bottom' => 3,
             ],
@@ -643,11 +696,40 @@ class InvoiceTemplateSeeder extends Seeder
             ],
         ]);
 
-        // Payment
+        // Grand Total
         $template->lines()->create([
             'section' => 'body',
             'type' => 'two_column',
             'order' => 7,
+            'properties' => [
+                'label' => 'Total Eur',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.total',
+                'font_size' => 11,
+                'label_bold' => true,
+                'alignment' => 'left',
+                'margin_bottom' => 3,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'separator',
+            'order' => 8,
+            'properties' => [
+                'style' => 'double',
+                'width' => 2,
+                'margin_top' => 2,
+                'margin_bottom' => 2,
+            ],
+        ]);
+
+        // Payment
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 9,
             'properties' => [
                 'label' => 'Paid Eur',
                 'label_width' => 60,
@@ -663,7 +745,7 @@ class InvoiceTemplateSeeder extends Seeder
         $template->lines()->create([
             'section' => 'body',
             'type' => 'text',
-            'order' => 8,
+            'order' => 10,
             'properties' => [
                 'content_type' => 'static',
                 'static_value' => 'Paid by Girocard',
@@ -692,7 +774,7 @@ class InvoiceTemplateSeeder extends Seeder
             'type' => 'thank_you_message',
             'order' => 1,
             'properties' => [
-                'message' => 'Thank you for your purchase',
+                'message' => 'Thank you for visiting our center',
                 'font_size' => 10,
                 'font_style' => 'normal',
                 'alignment' => 'center',

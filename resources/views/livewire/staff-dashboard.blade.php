@@ -250,6 +250,14 @@
                 </button>
 
                 <div x-show="messagesOpen" x-collapse x-cloak>
+                {{-- Day the board is scoped to (messages are per-day) --}}
+                <p class="text-[10px] text-gray-400 mb-1.5 flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                    </svg>
+                    {{ __('dashboard.messages.for_day', ['date' => \Illuminate\Support\Carbon::parse($selectedDate)->isoFormat('ddd, D MMM YYYY')]) }}
+                </p>
                 {{-- Messages list --}}
                 <div class="space-y-1.5 max-h-56 overflow-y-auto mb-2 pr-0.5">
                     @forelse ($dashboardMessages as $message)

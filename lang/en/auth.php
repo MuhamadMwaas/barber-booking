@@ -21,4 +21,7 @@ return [
     'account_disabled_body'  => 'Your account has been disabled. Please contact the administration for assistance.',
     'account_disabled'       => 'Your account has been disabled. Please contact the administration for assistance.',
 
+    'customer_not_allowed_title' => 'Access Denied',
+    'customer_not_allowed_body'  => 'Customer accounts cannot access the admin panel.',
+
 ];
