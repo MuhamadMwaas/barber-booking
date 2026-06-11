@@ -17,6 +17,13 @@
             $navUser->hasRole('SuperAdmin')
             || $navUser->can('StaffDashboard:view_admin')
         );
+    // The "Stats" tab (Daily Statistics) is gated by StaffDashboard:view_stats so
+    // it can be revoked per-role from the Roles screen. SuperAdmin always sees it.
+    $canViewStats = $navUser
+        && (
+            $navUser->hasRole('SuperAdmin')
+            || $navUser->can('StaffDashboard:view_stats')
+        );
 @endphp
 <header class="bg-white border-b border-gray-200 flex items-center justify-between px-4 py-2 flex-shrink-0">
     <div class="flex items-center space-x-6">
@@ -30,6 +37,15 @@
                 class="px-4 py-2 text-sm font-medium transition-colors {{ ($active ?? '') === 'customers' ? 'text-amber-600 border-b-2 border-amber-500' : 'text-gray-500 hover:text-gray-700' }}">
                 {{ __('dashboard.customers') }}
             </a>
+            @php
+            $canViewStats=false;
+            @endphp
+            @if ($canViewStats)
+                <a href="{{ route('staff.dashboard.stats') }}" wire:navigate
+                    class="px-4 py-2 text-sm font-medium transition-colors {{ ($active ?? '') === 'stats' ? 'text-amber-600 border-b-2 border-amber-500' : 'text-gray-500 hover:text-gray-700' }}">
+                    {{ __('dashboard.stats.tab') }}
+                </a>
+            @endif
             @if ($canViewAdmin)
                 <a href="/admin"
                     class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">

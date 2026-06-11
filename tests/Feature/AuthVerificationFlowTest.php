@@ -69,6 +69,37 @@ class AuthVerificationFlowTest extends TestCase
         });
     }
 
+    public function test_register_with_existing_email_returns_conflict_dialog_payload(): void
+    {
+        User::create([
+            'first_name' => 'Existing',
+            'last_name' => 'Customer',
+            'registration_method' => 'email',
+            'email' => 'taken@example.com',
+            'password' => bcrypt('Password@123'),
+        ]);
+
+        $response = $this->postJson('/api/auth/register', [
+            'first_name' => 'Another',
+            'last_name' => 'Person',
+            'registration_method' => 'email',
+            'email' => 'taken@example.com',
+            'password' => 'Password@123',
+            'password_confirmation' => 'Password@123',
+        ], ['Accept-Language' => 'ar']);
+
+        $response
+            ->assertStatus(409)
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('error_code', 'EMAIL_ALREADY_EXISTS')
+            ->assertJsonPath('title', __('auth.email_exists_title', [], 'ar'))
+            ->assertJsonMissingPath('user')
+            ->assertJsonMissingPath('access_token');
+
+        // No second row was created for the same email.
+        $this->assertSame(1, User::query()->where('email', 'taken@example.com')->count());
+    }
+
     public function test_register_with_phone_creates_unverified_user_without_tokens(): void
     {
         Queue::fake();

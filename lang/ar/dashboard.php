@@ -369,4 +369,48 @@ return [
         11 => 'نوفمبر',
         12 => 'ديسمبر',
     ],
+
+    'stats' => [
+        'tab' => 'الإحصائيات',
+        'live' => 'مباشر',
+        'today' => 'اليوم',
+        'salon_wide' => 'كل الفريق',
+        'my_stats' => 'إحصائياتي',
+        'refresh' => 'تحديث',
+
+        'paid_revenue' => 'الإيراد المدفوع',
+        'completed' => 'مكتملة',
+        'in_progress_now' => 'جارية الآن',
+        'upcoming' => 'قادمة',
+        'booked_hours' => 'ساعات العمل',
+        'total_bookings' => 'إجمالي الحجوزات',
+        'cancelled' => 'ملغاة',
+        'no_show' => 'لم يحضر',
+
+        'source_title' => 'مصدر الحجز',
+        'source_app' => 'التطبيق',
+        'source_reception' => 'الاستقبال',
+
+        'money_title' => 'المالية',
+        'collected' => 'المُحصَّل',
+        'outstanding' => 'متبقٍّ للتحصيل',
+        'paid_count' => 'حجوزات مدفوعة',
+        'avg_ticket' => 'متوسط الفاتورة',
+
+        'services_title' => 'الخدمات المقدَّمة',
+        'services_empty' => 'لا خدمات مقدَّمة بعد',
+
+        'breakdown_title' => 'تفصيل حسب مقدّم الخدمة',
+        'no_providers' => 'لا يوجد مقدّمو خدمة للعرض',
+
+        'col_provider' => 'مقدّم الخدمة',
+        'col_bookings' => 'الحجوزات',
+        'col_completed' => 'المكتملة',
+        'col_cancelled' => 'الملغاة',
+        'col_hours' => 'الساعات',
+        'col_source' => 'تطبيق / استقبال',
+        'col_revenue' => 'الإيراد',
+
+        'empty_day' => 'لا حجوزات في هذا اليوم',
+    ],
 ];

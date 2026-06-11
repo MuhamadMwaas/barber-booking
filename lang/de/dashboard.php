@@ -369,4 +369,48 @@ return [
         11 => 'November',
         12 => 'Dezember',
     ],
+
+    'stats' => [
+        'tab' => 'Statistik',
+        'live' => 'Live',
+        'today' => 'Heute',
+        'salon_wide' => 'Gesamter Salon',
+        'my_stats' => 'Meine Statistik',
+        'refresh' => 'Aktualisieren',
+
+        'paid_revenue' => 'Bezahlter Umsatz',
+        'completed' => 'Abgeschlossen',
+        'in_progress_now' => 'Gerade laufend',
+        'upcoming' => 'Bevorstehend',
+        'booked_hours' => 'Gebuchte Stunden',
+        'total_bookings' => 'Buchungen gesamt',
+        'cancelled' => 'Storniert',
+        'no_show' => 'Nicht erschienen',
+
+        'source_title' => 'Buchungsquelle',
+        'source_app' => 'App',
+        'source_reception' => 'Empfang',
+
+        'money_title' => 'Finanzen',
+        'collected' => 'Eingenommen',
+        'outstanding' => 'Ausstehend',
+        'paid_count' => 'Bezahlte Buchungen',
+        'avg_ticket' => 'Durchschnittsbon',
+
+        'services_title' => 'Erbrachte Leistungen',
+        'services_empty' => 'Noch keine Leistungen erbracht',
+
+        'breakdown_title' => 'Aufschlüsselung pro Mitarbeiter',
+        'no_providers' => 'Keine Mitarbeiter anzuzeigen',
+
+        'col_provider' => 'Mitarbeiter',
+        'col_bookings' => 'Buchungen',
+        'col_completed' => 'Abgeschlossen',
+        'col_cancelled' => 'Storniert',
+        'col_hours' => 'Stunden',
+        'col_source' => 'App / Empfang',
+        'col_revenue' => 'Umsatz',
+
+        'empty_day' => 'Keine Buchungen an diesem Tag',
+    ],
 ];

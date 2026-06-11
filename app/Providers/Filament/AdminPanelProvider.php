@@ -101,7 +101,12 @@ class AdminPanelProvider extends PanelProvider {
             ->renderHook(
                 'panels::styles.before',
                 fn() => new HtmlString($this->navigationGroupStyles())
-            );
+            )
+            ->renderHook(
+                'panels::scripts.after',
+                fn() => new HtmlString($this->navigationScrollScript())
+            )
+            ->spa();
     }
 
     /**
@@ -190,6 +195,67 @@ class AdminPanelProvider extends PanelProvider {
                 background: navajowhite !important;
             }
         </style>
+        HTML;
+    }
+
+    /**
+     * Keep the active navigation item visible inside the scrollable sidebar.
+     *
+     * Filament ships scroll-sidebar.js, but it only listens to
+     * `DOMContentLoaded` — which, in SPA mode (`->spa()`), fires solely on the
+     * very first page visit and never on subsequent `wire:navigate` swaps. So
+     * after navigating away and back (or any in-app navigation), the sidebar
+     * stays scrolled to the top and the active item ends up off-screen.
+     *
+     * `livewire:navigated` fires on the initial load AND after every navigation,
+     * so listening to it covers refresh, direct links, and SPA navigation alike.
+     * `data-navigate-once` makes Livewire run this body script a single time, so
+     * we register exactly one document-level listener (the document persists
+     * across navigations). The double rAF lets layout settle — x-cloak removal
+     * and the collapsed-group script run first — before we measure and scroll.
+     */
+    private function navigationScrollScript(): string {
+        return <<<'HTML'
+        <script data-navigate-once>
+            (function () {
+                function scrollActiveNavItemIntoView() {
+                    var nav = document.querySelector('.fi-main-sidebar .fi-sidebar-nav');
+
+                    if (! nav) {
+                        return;
+                    }
+
+                    var active =
+                        nav.querySelector('.fi-sidebar-item.fi-active') ||
+                        nav.querySelector('.fi-sidebar-group.fi-active');
+
+                    // `offsetParent === null` means the item is hidden (e.g. inside
+                    // a collapsed group), so there is nothing meaningful to reveal.
+                    if (! active || active.offsetParent === null) {
+                        return;
+                    }
+
+                    var navRect = nav.getBoundingClientRect();
+                    var activeRect = active.getBoundingClientRect();
+
+                    // Where the item currently sits relative to the visible top of
+                    // the scroll container, then nudge it toward the vertical centre.
+                    var delta =
+                        (activeRect.top - navRect.top) -
+                        (nav.clientHeight / 2) +
+                        (active.offsetHeight / 2);
+
+                    // scrollTop self-clamps, so over/under-shoot is handled for us.
+                    nav.scrollTop += delta;
+                }
+
+                document.addEventListener('livewire:navigated', function () {
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(scrollActiveNavItemIntoView);
+                    });
+                });
+            })();
+        </script>
         HTML;
     }
 }

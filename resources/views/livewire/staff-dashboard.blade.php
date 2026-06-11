@@ -542,20 +542,26 @@
                                         </template>
 
                                         {{-- Current Time Indicator --}}
+                                        {{--
+                                            Position is computed CLIENT-SIDE from the browser's local clock
+                                            (see currentTimeOffset / nowMinutesOfDay in Alpine), NOT from
+                                            server-side Carbon::now(). The app timezone (APP_TIMEZONE) may
+                                            differ from the viewer's timezone — using the server clock here
+                                            placed the line in the wrong spot (e.g. 1h ahead). Driving it from
+                                            the same source as the header clock keeps both in sync and lets the
+                                            line glide every minute instead of only on the Livewire poll.
+                                            The @if below only gates WHICH day shows a marker, not its position.
+                                        --}}
                                         @if ($selectedDate === $today)
-                                            @php
-                                                $nowMinutes = $start->diffInMinutes(\Carbon\Carbon::now());
-                                            @endphp
-                                            @if ($nowMinutes >= 0 && $nowMinutes <= $totalMinutes)
-                                                <div class="absolute left-0 right-0 z-30 pointer-events-none"
-                                                    :style="timelineMarkerStyle({{ $nowMinutes }})">
-                                                    <div class="border-t-2 border-red-500 relative">
-                                                        <div
-                                                            class="absolute -top-1.5 -left-1 w-3 h-3 bg-red-500 rounded-full">
-                                                        </div>
+                                            <div class="absolute left-0 right-0 z-30 pointer-events-none"
+                                                x-show="currentMarkerVisible(@js($timelineData['start_time']), {{ $totalMinutes }})"
+                                                :style="timelineMarkerStyle(currentTimeOffset(@js($timelineData['start_time'])))">
+                                                <div class="border-t-2 border-red-500 relative">
+                                                    <div
+                                                        class="absolute -top-1.5 -left-1 w-3 h-3 bg-red-500 rounded-full">
                                                     </div>
                                                 </div>
-                                            @endif
+                                            </div>
                                         @endif
 
                                         {{-- Time Off Blocks --}}
@@ -1753,8 +1759,13 @@
                 linkedLines: [],
                 _linkedRedrawHandle: null,
 
-                // ---- Live wall-clock (browser-local; app tz is Asia/Baghdad so they match) ----
+                // ---- Live wall-clock (browser-local) ----
+                // Both the header clock AND the timeline "now" marker read from the
+                // viewer's own clock, so they stay correct regardless of the server's
+                // APP_TIMEZONE. nowMinutesOfDay is reactive → the red line re-positions
+                // itself every minute (it used to be a static server-rendered value).
                 nowClock: '',
+                nowMinutesOfDay: 0,
                 _clockTimer: null,
 
                 showBookingModal: false,
@@ -1929,6 +1940,24 @@
                     this.nowClock =
                         String(d.getHours()).padStart(2, '0') + ':' +
                         String(d.getMinutes()).padStart(2, '0');
+                    // Reactive minutes-since-local-midnight that drives the timeline marker.
+                    this.nowMinutesOfDay = (d.getHours() * 60) + d.getMinutes();
+                },
+
+                /**
+                 * Offset (in minutes) of the viewer's local "now" from the salon's
+                 * opening time. Feeds timelineMarkerStyle() so the red line sits at the
+                 * true local time. startTime is the salon open time "HH:MM".
+                 */
+                currentTimeOffset(startTime) {
+                    const [h, m] = String(startTime).split(':').map(Number);
+                    return this.nowMinutesOfDay - ((h * 60) + m);
+                },
+
+                /** Show the marker only while local "now" falls inside the open window. */
+                currentMarkerVisible(startTime, totalMinutes) {
+                    const offset = this.currentTimeOffset(startTime);
+                    return offset >= 0 && offset <= totalMinutes;
                 },
 
                 // ---- Linked-group SVG connector lines ----

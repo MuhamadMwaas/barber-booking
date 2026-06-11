@@ -11,4 +11,8 @@ return [
 
     'customer_not_allowed_title' => 'وصول مرفوض',
     'customer_not_allowed_body'  => 'حسابات العملاء لا يمكنها الوصول إلى لوحة التحكم.',
+
+    // Returned (HTTP 409) when registering with an email that already exists.
+    'email_exists_title' => 'الحساب موجود بالفعل',
+    'email_exists_body'  => 'تم إنشاء حساب باستخدام هذا البريد الإلكتروني مسبقًا. سجّل الدخول للمتابعة.',
 ];

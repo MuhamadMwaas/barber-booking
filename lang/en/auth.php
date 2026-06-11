@@ -24,4 +24,8 @@ return [
     'customer_not_allowed_title' => 'Access Denied',
     'customer_not_allowed_body'  => 'Customer accounts cannot access the admin panel.',
 
+    // Returned (HTTP 409) when registering with an email that already exists.
+    'email_exists_title' => 'Account already exists',
+    'email_exists_body'  => 'An account with this email already exists. Please sign in to continue.',
+
 ];

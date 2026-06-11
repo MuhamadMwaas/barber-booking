@@ -51,6 +51,7 @@ class PermissionsSeeder extends Seeder
         'StaffDashboard'                => [
             'access',
             'view_admin',
+            'view_stats',
             'create_booking',
             'add_service',
             'edit_appointment',

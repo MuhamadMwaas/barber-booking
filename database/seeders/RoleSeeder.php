@@ -71,6 +71,7 @@ class RoleSeeder extends Seeder
 
             // Staff Dashboard — full operational control
             'StaffDashboard:access', 'StaffDashboard:view_admin',
+            'StaffDashboard:view_stats',
             'StaffDashboard:create_booking',
             'StaffDashboard:add_service', 'StaffDashboard:edit_appointment',
             'StaffDashboard:edit_others', 'StaffDashboard:cancel_appointment',
@@ -108,6 +109,7 @@ class RoleSeeder extends Seeder
 
             // Staff Dashboard — full operational control by default.
             'StaffDashboard:access', 'StaffDashboard:view_admin',
+            'StaffDashboard:view_stats',
             'StaffDashboard:create_booking',
             'StaffDashboard:add_service', 'StaffDashboard:edit_appointment',
             'StaffDashboard:edit_others', 'StaffDashboard:cancel_appointment',

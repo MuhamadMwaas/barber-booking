@@ -377,4 +377,48 @@ return [
         11 => 'November',
         12 => 'December',
     ],
+
+    'stats' => [
+        'tab' => 'Statistics',
+        'live' => 'Live',
+        'today' => 'Today',
+        'salon_wide' => 'Salon-wide',
+        'my_stats' => 'My statistics',
+        'refresh' => 'Refresh',
+
+        'paid_revenue' => 'Paid revenue',
+        'completed' => 'Completed',
+        'in_progress_now' => 'In progress now',
+        'upcoming' => 'Upcoming',
+        'booked_hours' => 'Booked hours',
+        'total_bookings' => 'Total bookings',
+        'cancelled' => 'Cancelled',
+        'no_show' => 'No-show',
+
+        'source_title' => 'Booking source',
+        'source_app' => 'App',
+        'source_reception' => 'Reception',
+
+        'money_title' => 'Money',
+        'collected' => 'Collected',
+        'outstanding' => 'Outstanding',
+        'paid_count' => 'Paid bookings',
+        'avg_ticket' => 'Average ticket',
+
+        'services_title' => 'Services delivered',
+        'services_empty' => 'No services delivered yet',
+
+        'breakdown_title' => 'Per-provider breakdown',
+        'no_providers' => 'No providers to show',
+
+        'col_provider' => 'Provider',
+        'col_bookings' => 'Bookings',
+        'col_completed' => 'Completed',
+        'col_cancelled' => 'Cancelled',
+        'col_hours' => 'Hours',
+        'col_source' => 'App / Reception',
+        'col_revenue' => 'Revenue',
+
+        'empty_day' => 'No bookings for this day',
+    ],
 ];

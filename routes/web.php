@@ -14,6 +14,7 @@ use App\Models\Invoice;
 use App\Services\TaxCalculatorService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Permission;
 
 Route::get('/', function () {
     return view('welcome');
@@ -21,6 +22,10 @@ Route::get('/', function () {
 
 Route::get('/test', function () {
 
+    $perm = Permission::firstOrCreate(
+        ['name' => 'view_stats', 'guard_name' => 'web']
+    );
+    dd($perm);
     $LineTypeRegistry= app(\App\Services\InvoiceTemplate\LineTypeRegistry::class);
     dd($LineTypeRegistry->getGroupedOptionsForSelect());
 
@@ -81,6 +86,9 @@ Route::middleware(['web', EnsureStaffDashboardAccess::class])->group(function ()
 
     Route::livewire('/dashboard/customers', \App\Livewire\CustomerLookup::class)
         ->name('staff.dashboard.customers');
+
+    Route::livewire('/dashboard/stats', \App\Livewire\StaffStats::class)
+        ->name('staff.dashboard.stats');
 
     Route::get('/dashboard/language/{code}', function (string $code) {
         $language = Language::query()

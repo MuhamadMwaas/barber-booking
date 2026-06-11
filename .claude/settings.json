@@ -13,7 +13,8 @@
       "Bash(dir \"D:\\\\Coding\\\\BarberBooking\\\\lang\")",
       "Bash(dir \"D:\\\\Coding\\\\BarberBooking\\\\lang\\\\de\")",
       "Bash(dir \"D:\\\\Coding\\\\BarberBooking\\\\lang\\\\en\")",
-      "Bash(findstr \"soft_delete\\\\|users\")"
+      "Bash(findstr \"soft_delete\\\\|users\")",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }

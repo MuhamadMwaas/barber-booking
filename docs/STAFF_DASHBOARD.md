@@ -1,6 +1,6 @@
 # StaffDashboard Documentation
 
-> **آخر تحديث:** 2026-06-03 — أُضيفت لوحة الرسائل (Bulletin Board) أسفل الفريق: جدول dashboard_messages + Model + DashboardMessageService (راجع القسم 32). | 2026-05-29 — تاب Customers + CustomerLookup.
+> **آخر تحديث:** 2026-06-11 — أُضيف تاب "الإحصائيات اليومية" (`/dashboard/stats`): مقاييس اليوم (مكتمل/جارٍ/قادم/ملغى/إيراد/مصدر/خدمات/ساعات) بنطاق provider خاص أو salon-wide + تفصيل per-provider، عبر `DashboardStatsService` المعزول (راجع القسم 33). | 2026-06-11 — خط الوقت الحالي (red marker) صار يُحسب client-side من ساعة المتصفح المحلية بدل `Carbon::now()` على السيرفر، لإصلاح إزاحته بمقدار فرق المنطقة الزمنية عن `APP_TIMEZONE=Asia/Baghdad` (راجع القسم 11.7). | 2026-06-03 — أُضيفت لوحة الرسائل (Bulletin Board) أسفل الفريق: جدول dashboard_messages + Model + DashboardMessageService (راجع القسم 32). | 2026-05-29 — تاب Customers + CustomerLookup.
 
 > وثيقة مرجعية عميقة ومبنية على قراءة مباشرة للكود الحالي، هدفها أن تمنح أي AI أو مطور فهمًا دقيقًا جدًا لصفحة `StaffDashboard` بكل ما فيها: الواجهة، الحالة، تدفقات الحجز، الدفع، الإجازات، الـ timeline، القواعد التشغيلية، والقيود الحالية.
 
@@ -525,6 +525,30 @@ formatTimelineMinute(offsetMinutes, startTime)
 ### 11.7 Current Time Marker
 
 إذا كان `selectedDate === today`، يظهر خط أحمر أفقي في مكان الوقت الحالي.
+
+**مهم (تحديث 2026-06-11):** موضع الخط يُحسب الآن **client-side من ساعة المتصفح المحلية**، لا من `Carbon::now()` على السيرفر.
+
+الخلفية: قيمة `APP_TIMEZONE` في `.env` هي `Asia/Baghdad` (UTC+3). النسخة القديمة كانت تحسب الموضع في Blade عبر:
+
+```php
+$nowMinutes = $start->diffInMinutes(\Carbon\Carbon::now()); // ← server tz
+```
+
+فإذا فتح مستخدمٌ الداشبورد من منطقة زمنية مختلفة (مثلًا ألمانيا CEST = UTC+2) كان الخط يسبق وقته الحقيقي بمقدار فرق المنطقتين (ساعة في الصيف، ساعتان في الشتاء)، بينما الساعة الحية بجانب التاريخ كانت صحيحة لأنها أصلًا تُبنى بـ JavaScript (`new Date()`).
+
+الحل الحالي يوحّد المصدرين على ساعة المتصفح:
+
+- `tickClock()` يحدّث `nowMinutesOfDay` (دقائق منذ منتصف الليل المحلي) كل ثانية — وهي **reactive**.
+- `currentTimeOffset(startTime)` = `nowMinutesOfDay − (دقائق وقت فتح الصالون)` → تُمرَّر إلى `timelineMarkerStyle()`.
+- `currentMarkerVisible(startTime, totalMinutes)` تتحكم بإظهار/إخفاء الخط عبر `x-show` بدل شرط PHP.
+
+النتائج العملية:
+
+1. الخط صحيح لأي مستخدم في أي منطقة زمنية (مستقل عن `APP_TIMEZONE`).
+2. الخط **ينزلق كل دقيقة** بدل أن يقفز فقط عند الـ poll (كل 3 ثوانٍ).
+3. يبقى متطابقًا مع الساعة الحية في الهيدر لأنهما يقرآن من نفس `new Date()`.
+
+ملاحظة نطاق: تحديد **أيّ يوم** يُعرض عليه الخط (`@if ($selectedDate === $today)`) ما زال يعتمد على `Carbon::today()` بتوقيت السيرفر. هذا لم يُغيَّر؛ يؤثّر فقط في نافذة ضيّقة حول منتصف الليل (الفرق بين منتصف ليل بغداد ومنتصف ليل المستخدم) وخارج ساعات الدوام غالبًا، فاعتُبر خارج نطاق إصلاح موضع الخط.
 
 ### 11.8 Drag-to-Create
 
@@ -1594,3 +1618,53 @@ middleware: web + EnsureStaffDashboardAccess (نفس صلاحية Calendar)
 - `is_pinned` يُحسم وقت الإنشاء حسب دور الكاتب — لو تغيّر دور المستخدم لاحقًا لا تتغيّر رسائله القديمة.
 - لا يوجد route جديد؛ اللوحة جزء من مكوّن `StaffDashboard` نفسه وتظهر في تاب Calendar فقط (لا في Customers).
 - الحذف عبر `wire:confirm` ثم `deleteMessage()` الذي يستدعي الخدمة ويسجّل `deleted_by`.
+
+---
+
+## 33. Daily Statistics — تاب الإحصائيات (2026-06-11)
+
+تابٌ مستقل (`/dashboard/stats`) يعرض إحصائيات يوم مختار. مبني على نفس نمط `CustomerLookup` (مكوّن Livewire 4 مستقل + خدمة معزولة + `staff-nav`)، والمنطق كله في الخدمة لإبقاء المكوّن نحيفًا.
+
+### 33.1 النطاقان (Scopes)
+
+| المستخدم | ما يراه |
+|----------|---------|
+| **Provider** بلا `view_team` | إحصائيات **يومه هو فقط** (عمودُه)، لا يمكن توسيعها من العميل |
+| **Admin / Manager** (أو Provider معه `view_team`) | إجماليات **الصالون كله** لليوم + **تفصيل لكل provider** (جدول) |
+
+القرار يُحسم في `StaffStats::isSalonScope()`: غير-provider ⇒ salon؛ provider ⇒ حسب `view_team`.
+
+### 33.2 المقاييس (لكل نطاق، لليوم المختار)
+
+- **مكتملة** (`COMPLETED`)، **جارية الآن** (`PENDING` و `start ≤ now ≤ end`)، **قادمة** (`PENDING` و `start > now`).
+- **ملغاة** (`USER_CANCELLED`/`ADMIN_CANCELLED`)، **لم يحضر** (`NO_SHOW`)، **إجمالي** (غير الملغاة).
+- **الإيراد المدفوع**: مجموع `total_amount` للحجوزات المدفوعة (`payment_status ∈ {1,2,3}`) **حسب تاريخ الموعد**. + **متبقٍّ للتحصيل** (`payment_status = PENDING`)، **متوسط الفاتورة**، **عدد المدفوعة**.
+- **مصدر الحجز**: `online` (تطبيق/API) مقابل `in_person` (استقبال/داشبورد) من عمود `booking_source`.
+- **ساعات العمل**: مجموع `duration_minutes` للمواعيد غير الملغاة (ساعات محجوزة — **لا** ربط بالحضور، حسب طلب المالك).
+- **الخدمات المقدَّمة**: تجميع من `appointment_services` (اسم × عدد × إيراد)، مرتّب تنازليًا.
+
+### 33.3 قرارات دقّة حرجة
+
+1. **نسب الإيراد للـ provider عبر `provider_id`** الموجود أصلًا — **لا يوجد ولا حاجة لـ `created_by`**. "مَن استلم الحجز" = مقدّم الخدمة المُسنَد.
+2. **لا مضاعفة في الحجوزات المرتبطة**: كل حجز (أب/ابن) يحمل `total_amount` الخاص بخدماته فقط؛ التجميع يعيش على **الفاتورة** (`rebuildAggregatedInvoice`) لا على `appointment.total_amount`. لذا جمع `total_amount` عبر الأب + الأبناء = الإجمالي الصحيح. راجع [[payment-discount-unified]].
+3. **الأساس `created_status = 1`** و عمود اليوم `appointment_date` (نفس `DashboardService`)، فالأرقام تتطابق مع التايملاين والعدّادات.
+4. المقاييس النسبية لـ "الآن" تُحسب مقابل `now()` الفعلي ⇒ منطقية لليوم، وتقرأ 0/كلها-قادمة للأيام الماضية/المستقبلية.
+
+### 33.4 الملفات
+
+| الملف | الدور |
+|-------|-------|
+| `app/Services/DashboardStatsService.php` | **كل المنطق**: `statsForDate($date,$providerId?)` + `perProviderBreakdown($date)` + الحسابات الخاصة |
+| `app/Livewire/StaffStats.php` | مكوّن نحيف: `selectedDate` + تنقّل الأيام + بوّابة `view_stats` (`abort_unless`) + تمرير البيانات |
+| `resources/views/livewire/staff-stats.blade.php` | الواجهة: شريط تاريخ/نطاق + شبكة KPI + مصدر الحجز + المالية + الخدمات + جدول per-provider. منطق العرض فقط (مساعدو تنسيق) |
+| `resources/views/partials/staff-nav.blade.php` | أُضيف تاب "Statistics" مشروط بـ `$canViewStats` |
+| `routes/web.php` | `Route::livewire('/dashboard/stats', StaffStats::class)->name('staff.dashboard.stats')` ضمن مجموعة `EnsureStaffDashboardAccess` |
+| `database/seeders/{PermissionsSeeder,RoleSeeder}.php` | صلاحية جديدة `StaffDashboard:view_stats` (مُنحت admin + provider افتراضيًا) |
+| `lang/{en,ar,de}/dashboard.php` | قسم `stats` (34 مفتاحًا لكل لغة) |
+
+### 33.5 ملاحظات للمطورين
+
+- **التحديث الحيّ**: `wire:poll.30s` على الجذر **فقط عندما يكون اليوم المختار = اليوم** (لإبقاء "جارية الآن"/الإيراد طازجًا دون تحميل زائد للأيام الماضية). + زر تحديث يدوي (`$refresh`).
+- **بوّابة الوصول مزدوجة**: التاب مخفي بلا `view_stats`، و`StaffStats::mount()/render()` يعمل `abort_unless(...,403)` — إخفاء الرابط ليس خط الدفاع الوحيد. SuperAdmin يتجاوز عبر `dashCan`.
+- **ألوان Tailwind الديناميكية**: خرائط الـ accent مكتوبة كسلاسل صريحة كاملة في الـ Blade حتى لا يحذفها الـ purge (لا `bg-{$x}-100`).
+- **لا migration**: الميزة تستخدم أعمدة موجودة فقط (`provider_id`, `total_amount`, `payment_status`, `status`, `booking_source`, `duration_minutes`).
