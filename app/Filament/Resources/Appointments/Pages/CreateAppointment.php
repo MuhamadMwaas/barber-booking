@@ -308,13 +308,16 @@ class CreateAppointment extends CreateRecord
             $validationService->validateProviderOffersService($provider, $service);
         }
 
-        // 4. Validate time slot availability for the provider
+        // 4. Validate time slot availability for the provider.
+        //    Admin-created bookings are trusted staff actions, so same-day
+        //    back-dating is allowed (earlier days still blocked by validateBasicData).
         $firstService = $serviceModels->first();
         $validationService->validateTimeSlotAvailability(
             $provider,
             $firstService,
             $startTime,
-            $endTime
+            $endTime,
+            true
         );
 
         // 5. Validate duplicate bookings for registered / guest customer

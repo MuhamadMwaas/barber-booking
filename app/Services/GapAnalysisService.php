@@ -47,7 +47,8 @@ class GapAnalysisService
         Appointment $anchor,
         Service $service,
         int $requestedDuration,
-        ?Carbon $requestedStartTime = null
+        ?Carbon $requestedStartTime = null,
+        bool $allowSameDayPast = false
     ): array {
         $provider = $anchor->provider;
         $date = $anchor->appointment_date->format('Y-m-d');
@@ -85,8 +86,9 @@ class GapAnalysisService
             ? $previous->end_time->copy()
             : $workStart->copy();
 
-        // Clamp by current time when the date is today (cannot book in the past)
-        if ($anchor->appointment_date->isToday() && $earliestStart->lt(Carbon::now())) {
+        // Clamp by current time when the date is today (cannot book in the past).
+        // Trusted staff may opt out ($allowSameDayPast) to back-date within today.
+        if (! $allowSameDayPast && $anchor->appointment_date->isToday() && $earliestStart->lt(Carbon::now())) {
             $earliestStart = Carbon::now();
         }
 
@@ -174,7 +176,8 @@ class GapAnalysisService
         Appointment $anchor,
         Service $service,
         int $requestedDuration,
-        ?Carbon $requestedStartTime = null
+        ?Carbon $requestedStartTime = null,
+        bool $allowSameDayPast = false
     ): array {
         $provider = $anchor->provider;
         $date = $anchor->appointment_date->format('Y-m-d');
@@ -318,7 +321,8 @@ class GapAnalysisService
         Service $service,
         int $requestedDuration,
         string $placement,
-        ?Carbon $requestedStartTime = null
+        ?Carbon $requestedStartTime = null,
+        bool $allowSameDayPast = false
     ): array {
         $date = $invoiceOwner->appointment_date->format('Y-m-d');
         $ownerStart = $invoiceOwner->start_time->copy();
@@ -377,8 +381,9 @@ class GapAnalysisService
             return ['is_possible' => false, 'reason' => 'exceeds_work_hours'];
         }
 
-        // 6) Past time check
-        if ($proposedStart->lt(Carbon::now()) && $invoiceOwner->appointment_date->isToday()) {
+        // 6) Past time check. Trusted staff may opt out ($allowSameDayPast) to
+        //    back-date a child service within today.
+        if (! $allowSameDayPast && $proposedStart->lt(Carbon::now()) && $invoiceOwner->appointment_date->isToday()) {
             return ['is_possible' => false, 'reason' => 'in_past'];
         }
 

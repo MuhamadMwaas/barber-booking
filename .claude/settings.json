@@ -14,7 +14,12 @@
       "Bash(dir \"D:\\\\Coding\\\\BarberBooking\\\\lang\\\\de\")",
       "Bash(dir \"D:\\\\Coding\\\\BarberBooking\\\\lang\\\\en\")",
       "Bash(findstr \"soft_delete\\\\|users\")",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "PowerShell(php -l app/Services/BookingValidationService.php)",
+      "PowerShell(php -l app/Services/BookingService.php)",
+      "PowerShell(php -l app/Services/GapAnalysisService.php)",
+      "PowerShell(php -l app/Livewire/StaffDashboard.php)",
+      "PowerShell(php -l app/Filament/Resources/Appointments/Pages/CreateAppointment.php)"
     ]
   }
 }

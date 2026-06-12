@@ -97,7 +97,8 @@ class BookingValidationService
         User $provider,
         Service $service,
         Carbon $startTime,
-        Carbon $endTime
+        Carbon $endTime,
+        bool $allowSameDayPast = false
     ): void {
         $date = $startTime->format('Y-m-d');
         $dayOfWeek = $startTime->dayOfWeek;
@@ -177,6 +178,37 @@ class BookingValidationService
                 "Time slot {$startTime->format('H:i')} - {$endTime->format('H:i')} " .
                 "is already booked for provider '{$provider->full_name}'"
             );
+        }
+
+        // 6 + 7. Past-time / minimum-advance guard.
+        //   Isolated in validateNotInPast() so trusted staff paths can opt-in to
+        //   same-day back-dating WITHOUT touching any rule above (provider hours,
+        //   conflicts, time-off all stay intact).
+        $this->validateNotInPast($startTime, $allowSameDayPast);
+    }
+
+    /**
+     * Past-time & minimum-advance guard for a single slot start.
+     *
+     * Default (customer-facing) behaviour — unchanged:
+     *   - the slot may not start before "now"; and
+     *   - it must respect the `book_buffer` minimum-advance window.
+     *
+     * Same-day-past mode ($allowSameDayPast = true) — opted into ONLY by trusted
+     * staff paths (Staff Dashboard + Filament admin):
+     *   - ANY time within the CURRENT day is accepted (past or future) with no
+     *     buffer, so staff can record a walk-in that already started today; but
+     *   - earlier calendar days stay blocked (a past day is never "today"), and
+     *     future days fall through to the normal checks (buffer still applies).
+     *
+     * This is the single, isolated place that decides "is this start time in the
+     * past?" — by design, so the relaxation can never leak into other rules.
+     */
+    private function validateNotInPast(Carbon $startTime, bool $allowSameDayPast = false): void
+    {
+        // Trusted staff back-dating: permitted only ever within today.
+        if ($allowSameDayPast && $startTime->isToday()) {
+            return;
         }
 
         // 6. Check time slot is not in the past

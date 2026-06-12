@@ -416,6 +416,8 @@ class StaffDashboard extends Component {
                 'payment_method' => 'cash',
                 'is_confirmed' => true,
                 'mark_as_paid' => false,
+                // Staff may record a walk-in that already started earlier today.
+                'allow_same_day_past' => true,
                 'notes' => $data['notes'] ?? '',
                 'services' => [],
             ];
@@ -1028,14 +1030,16 @@ class StaffDashboard extends Component {
 
             $result = $sameProvider
                 ? ($form['placement'] === 'before'
-                    ? $gap->analyzeAddBefore($anchor, $service, $duration)
-                    : $gap->analyzeAddAfter($anchor, $service, $duration))
+                    ? $gap->analyzeAddBefore($anchor, $service, $duration, null, true)
+                    : $gap->analyzeAddAfter($anchor, $service, $duration, null, true))
                 : $gap->analyzeChildAdd(
                     $anchor->parent ?? $anchor,
                     $provider,
                     $service,
                     $duration,
-                    $form['placement']
+                    $form['placement'],
+                    null,
+                    true
                 );
 
             $this->addServiceAnalysis = $result;
@@ -1074,6 +1078,8 @@ class StaffDashboard extends Component {
             $result = $bookingService->addServiceToBooking($anchor, [
                 ...$this->addServiceForm,
                 'apply_push' => $applyPush,
+                // Staff may back-date an added service within today.
+                'allow_same_day_past' => true,
             ]);
 
             $this->closeAddServiceModal();

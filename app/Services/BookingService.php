@@ -48,6 +48,11 @@ class BookingService
         $customerEmail = $bookingData['customer_email'] ?? $customer->email ?? null;
         $customerPhone = $bookingData['customer_phone'] ?? $customer->phone ?? null;
 
+        // Trusted staff flag (Staff Dashboard / Filament admin): allow booking a
+        // slot earlier on the SAME current day. Defaults to false so every
+        // customer-facing path keeps the strict "no past" behaviour.
+        $allowSameDayPast = (bool) ($bookingData['allow_same_day_past'] ?? false);
+
 
         $this->validationService->validateBasicData($services, $date);
 
@@ -59,7 +64,7 @@ class BookingService
         $services = $this->sortServicesByStartTime($services);
 
 
-        $preparedServices = $this->validateAndPrepareServices($services, $date, $customer, $customerPhone);
+        $preparedServices = $this->validateAndPrepareServices($services, $date, $customer, $customerPhone, $allowSameDayPast);
 
         // 5. Calculate totals
         $totals = $this->calculateTotals($preparedServices);
@@ -146,6 +151,7 @@ class BookingService
         string $date,
         ?User $customer,
         ?string $customerPhone = null,
+        bool $allowSameDayPast = false,
     ): array {
         $preparedServices = [];
         $previousEndTime = null;
@@ -185,7 +191,8 @@ class BookingService
                 $provider,
                 $service,
                 $startTime,
-                $endTime
+                $endTime,
+                $allowSameDayPast
             );
 
             // 6. Validate no duplicate booking
@@ -507,6 +514,9 @@ class BookingService
         }
         $placement   = $data['placement'];
         $applyPush   = (bool) ($data['apply_push'] ?? false);
+        // Trusted staff flag — allow inserting a service earlier on today (the
+        // add-service flow is staff/dashboard-only, mirrors createBooking()).
+        $allowSameDayPast = (bool) ($data['allow_same_day_past'] ?? false);
         $requestedStart = $this->parseTimeOrNull($data['start_time'] ?? null, $anchor);
 
         // 1) Validate provider offers the service
@@ -517,8 +527,8 @@ class BookingService
         // 2) Analyze gap
         if ($sameProvider) {
             $analysis = $placement === 'before'
-                ? $this->gapAnalysis->analyzeAddBefore($anchor, $service, $duration, $requestedStart)
-                : $this->gapAnalysis->analyzeAddAfter($anchor, $service, $duration, $requestedStart);
+                ? $this->gapAnalysis->analyzeAddBefore($anchor, $service, $duration, $requestedStart, $allowSameDayPast)
+                : $this->gapAnalysis->analyzeAddAfter($anchor, $service, $duration, $requestedStart, $allowSameDayPast);
         } else {
             // Child mode — gap measured against invoice owner (parent or self)
             $invoiceOwner = $this->linkingService->getInvoiceOwner($anchor);
@@ -528,7 +538,8 @@ class BookingService
                 $service,
                 $duration,
                 $placement,
-                $requestedStart
+                $requestedStart,
+                $allowSameDayPast
             );
         }
 
