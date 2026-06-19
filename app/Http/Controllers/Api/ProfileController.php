@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\AccountDeletionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
@@ -22,17 +23,16 @@ class ProfileController extends Controller
 
     public function update(Request $request)
     {
+        $user = $request->user();
 
         $data = $request->validate([
             'first_name' => 'sometimes|string|max:255',
             'last_name' => 'sometimes|string|max:255',
-            'phone' => 'sometimes|string|max:20',
+            'phone' => ['sometimes', 'string', 'max:20', Rule::unique('users', 'phone')->ignore($user->id)],
             'address' => 'sometimes|string|max:500',
             'city' => 'sometimes|string|max:255',
             'image' => 'sometimes|image|max:2048',
         ]);
-
-        $user = $request->user();
 
         if ($request->hasFile('image')) {
             $user->updateProfileImage($request->file('image'));
@@ -44,8 +44,12 @@ class ProfileController extends Controller
         if (isset($data['last_name']))
             $user->last_name = $data['last_name'];
 
-        if (isset($data['phone']))
+        // Changing the phone number invalidates any prior verification: the new
+        // number must be re-verified before it counts as verified again.
+        if (isset($data['phone']) && $data['phone'] !== $user->phone) {
             $user->phone = $data['phone'];
+            $user->phone_verified_at = null;
+        }
 
         if (isset($data['address']))
             $user->address = $data['address'];
@@ -54,7 +58,7 @@ class ProfileController extends Controller
             $user->city = $data['city'];
 
         $user->save();
-        $user=User::find($user->id);
+        $user = $user->fresh();
         return response()->json([
             'success' => true,
             'message' => 'Profile updated successfully',

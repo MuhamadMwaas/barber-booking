@@ -20,20 +20,23 @@
       "Bash(type lang\\\\de\\\\navigation.php)",
       "Bash(findstr /i \"about_us\\\\|sort_order_to_files\")",
       "Bash(grep -v \"//\")",
-      "WebSearch"
+      "WebSearch",
+      "PowerShell(php -l app/Http/Controllers/Api/PhoneVerificationController.php)",
+      "PowerShell(php -l app/Http/Controllers/Api/ProfileController.php)",
+      "PowerShell(php -l app/Http/Resources/UserResource.php)",
+      "PowerShell(php artisan route:list --path=profile/phone 2>&1)"
     ],
     "deny": [],
     "ask": []
-
   },
-    "mcpServers": {
-        "laravel-boost": {
-            "command": "php",
-            "args": [
-                "artisan",
-                "boost:mcp:serve"
-            ],
-            "cwd": "d:\\Coding\\BarberBooking"
-        }
+  "mcpServers": {
+    "laravel-boost": {
+      "command": "php",
+      "args": [
+        "artisan",
+        "boost:mcp:serve"
+      ],
+      "cwd": "d:\\Coding\\BarberBooking"
     }
+  }
 }

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\DevicesController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
+use App\Http\Controllers\Api\PhoneVerificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProvidersController;
 use App\Http\Controllers\Api\ServicesController;
@@ -92,6 +93,14 @@ Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
     Route::post('profile', [ProfileController::class, 'update']);
     Route::post('profile/change-password', [ProfileController::class, 'changePassword']);
     Route::delete('profile', [ProfileController::class, 'destroy']);
+
+    // Post-login phone-number verification (settings screen).
+    Route::post('profile/phone/send-otp', [PhoneVerificationController::class, 'sendOtp'])
+        ->middleware('throttle:6,1')
+        ->name('profile.phone.send-otp');
+    Route::post('profile/phone/verify-otp', [PhoneVerificationController::class, 'verifyOtp'])
+        ->middleware('throttle:10,1')
+        ->name('profile.phone.verify-otp');
 
 
     Route::prefix('noticifation')->name('noticifation.')->group(function () {

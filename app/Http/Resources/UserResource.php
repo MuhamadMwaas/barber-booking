@@ -29,6 +29,7 @@ class UserResource extends JsonResource
             'is_active' => $this->is_active,
             'email_verified_at' => $this->email_verified_at,
             'phone_verified_at' => $this->phone_verified_at,
+            'phone_verified' => (bool) $this->phone_verified_at,
             'is_account_verified' => $this->is_account_verified,
             'requires_otp_verification' => $this->requires_otp_verification,
             'created_at' => $this->created_at,

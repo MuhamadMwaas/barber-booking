@@ -335,6 +335,15 @@ return [
         'reason_required' => 'Please select a reason.',
         'save' => 'Save',
         'cancel' => 'Cancel',
+        'edit_title' => 'Edit Time Off',
+        'update' => 'Update',
+        'updated' => 'Time off updated',
+        'deleted' => 'Time off deleted',
+        'delete' => 'Delete',
+        'not_found' => 'Time off not found',
+        'not_yours' => 'You can only manage your own time off',
+        'multi_day_warning' => 'This time off spans multiple days. Editing or deleting it affects the entire range.',
+        'confirm_delete' => 'Delete this time off? This affects the whole record.',
     ],
 
     'timeline' => [
