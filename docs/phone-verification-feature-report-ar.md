@@ -99,7 +99,7 @@ public function isAccountVerified(): bool
 4. **منع التكرار غير المجدي:** لو الرقم **مؤكّد مسبقاً** ⟵ 400 «مؤكّد مسبقاً».
 5. **Cooldown:** فحص آخر OTP لنفس الرقم/النوع؛ لو ضمن 60 ثانية ⟵ 429 مع `retry_after`. *يخدم المهمة:* يمنع إساءة استخدام إرسال SMS (وله كلفة فعلية).
 6. **توليد وإرسال:** `OtpService::generate($user, OTP_LENGTH, OtpType::SMS_OTP)` ⟵ يمرّ تلقائياً عبر `SendOtpDeliveryJob` ⟵ Vonage (أو log محلياً).
-7. **الاستجابة:** `success` + `message` + `masked_destination` (الرقم مُقنّعاً) + `phone_verified=false`، و`otp` **فقط في وضع debug**.
+7. **الاستجابة:** `success` + `message` + `masked_destination` (الرقم مُقنّعاً) + `phone_verified=false`، و`otp` **يُرجَع مؤقتاً للتجربة طالما خدمة SMS غير مفعّلة** (`VONAGE_SMS_ENABLED=false`) أو في وضع debug — ويختفي تلقائياً بمجرد تفعيل Vonage.
 
 #### `verifyOtp(Request $request)`
 
@@ -195,7 +195,7 @@ Route::post('profile/phone/verify-otp', [PhoneVerificationController::class, 've
   "message": "A verification code has been sent to your phone number.",
   "masked_destination": "********xxxx",
   "phone_verified": false,
-  "otp": "123456"   // في وضع debug فقط
+  "otp": "123456"   // مؤقتاً للتجربة طالما SMS غير مفعّل (أو debug) — يختفي عند تفعيل Vonage
 }
 ```
 
@@ -255,7 +255,7 @@ $registrationMethod = RegistrationMethod::from('email');  // ← يلغي اخت
 ## 8. كيف تختبر محلياً
 
 1. سجّل دخول واحصل على `access_token`.
-2. `POST /api/profile/phone/send-otp` مع رقم في الـ body ⟵ سيُرجَع الـ `otp` في الاستجابة (وضع debug)، ولن يُضرب Vonage فعلياً ما لم تُضبط `VONAGE_SMS_ENABLED=true` وبقية المفاتيح.
+2. `POST /api/profile/phone/send-otp` مع رقم في الـ body ⟵ سيُرجَع الـ `otp` في الاستجابة (لأن `VONAGE_SMS_ENABLED` غير مفعّل حالياً)، ولن يُضرب Vonage فعلياً. عند تفعيل `VONAGE_SMS_ENABLED=true` وبقية المفاتيح، يتوقّف إرجاع الـ `otp` ويُرسَل عبر SMS فقط.
 3. `POST /api/profile/phone/verify-otp` بالـ `otp` ⟵ يصبح `phone_verified=true`.
 4. `GET /api/profile` ⟵ تأكّد أن `phone_verified=true`.
 5. غيّر الرقم عبر `POST /api/profile` ⟵ تأكّد أن `phone_verified` رجع `false`.
