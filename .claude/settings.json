@@ -19,7 +19,14 @@
       "PowerShell(php -l app/Services/BookingService.php)",
       "PowerShell(php -l app/Services/GapAnalysisService.php)",
       "PowerShell(php -l app/Livewire/StaffDashboard.php)",
-      "PowerShell(php -l app/Filament/Resources/Appointments/Pages/CreateAppointment.php)"
+      "PowerShell(php -l app/Filament/Resources/Appointments/Pages/CreateAppointment.php)",
+      "PowerShell(php -l lang/en/dashboard.php)",
+      "PowerShell(php -l lang/ar/dashboard.php)",
+      "PowerShell(php -l lang/de/dashboard.php)",
+      "PowerShell(php artisan view:cache 2>&1)",
+      "PowerShell(php artisan view:clear 2>&1)",
+      "PowerShell($code = $LASTEXITCODE)",
+      "PowerShell(exit $code)"
     ]
   }
 }

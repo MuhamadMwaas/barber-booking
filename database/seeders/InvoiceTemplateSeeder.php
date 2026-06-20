@@ -391,8 +391,8 @@ class InvoiceTemplateSeeder extends Seeder
             'type' => 'text',
             'order' => 3,
             'properties' => [
-                'content_type' => 'static',
-                'static_value' => 'Luay',
+                'content_type' => 'dynamic',
+                'dynamic_field' => 'employee.name',
                 'font_size' => 10,
                 'font_weight' => 'bold',
                 'alignment' => 'center',
@@ -801,8 +801,8 @@ class InvoiceTemplateSeeder extends Seeder
             'type' => 'text',
             'order' => 3,
             'properties' => [
-                'content_type' => 'static',
-                'static_value' => 'Luay',
+                'content_type' => 'dynamic',
+                'dynamic_field' => 'employee.name',
                 'font_size' => 10,
                 'font_weight' => 'bold',
                 'alignment' => 'center',

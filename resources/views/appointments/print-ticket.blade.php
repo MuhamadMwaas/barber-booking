@@ -128,8 +128,7 @@
         }
 
         .col-num   { width: 6%;  text-align: center; }
-        .col-name  { width: 64%; }
-        .col-price { width: 30%; text-align: {{ $isRtl ? 'left'  : 'right' }}; }
+        .col-name  { width: 94%; }
 
         .total-row {
             margin-top: 4px;
@@ -234,13 +233,6 @@
             </span>
         </div>
 
-        @if ($countdownText)
-            <div class="kv">
-                <span class="k">{{ $tr('status_now') }}:</span>
-                <span class="bold">{{ $countdownText }}</span>
-            </div>
-        @endif
-
         <hr class="hr-single">
 
         {{-- ───────────────── CUSTOMER ───────────────── --}}
@@ -288,7 +280,6 @@
                     <tr>
                         <th class="col-num">#</th>
                         <th class="col-name">{{ $tr('service') }}</th>
-                        <th class="col-price">{{ $tr('price') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -299,57 +290,17 @@
                                 {{ $s->service_name }}
                                 <div style="font-size: 9px;">{{ $s->duration_minutes }}m</div>
                             </td>
-                            <td class="col-price">{{ number_format((float) $s->price, 2) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
         @endforeach
 
-        {{-- ───────────────── GRAND TOTAL ───────────────── --}}
-        <div class="total-row">
-            <span>{{ $tr('total') }}</span>
-            <span>{{ number_format($grandTotal, 2) }} EUR</span>
-        </div>
-
         <div class="center" style="margin-top: 4px;">
             <span class="badge {{ $isPaid ? 'badge-filled' : '' }}">
                 {{ $isPaid ? $tr('paid') : $tr('unpaid') }}
             </span>
         </div>
-
-        {{-- ───────────────── COLORS — aggregated across the group ───────────────── --}}
-        @php
-            $allColors = $appointments
-                ->flatMap(fn ($apt) => $apt->colorRecords ?? collect())
-                ->filter(fn ($cr) => $cr->color !== null);
-        @endphp
-
-        @if ($allColors->isNotEmpty())
-            <hr class="hr-single">
-            <div class="section-title">{{ $tr('section_colors') }}</div>
-            <table>
-                <tbody>
-                    @foreach ($allColors as $cr)
-                        <tr>
-                            <td style="width: 16px;">
-                                <span class="swatch" style="background: {{ $cr->color->hex_code }};"></span>
-                            </td>
-                            <td>
-                                {{ $cr->color->name }}
-                                @if ($cr->color->brand)
-                                    <span style="font-size: 9px;">({{ $cr->color->brand }})</span>
-                                @endif
-                            </td>
-                            <td class="right">
-                                {{ rtrim(rtrim(number_format((float) $cr->quantity, 2), '0'), '.') }}
-                                {{ $cr->color->unit }}
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        @endif
 
         {{-- ───────────────── CUSTOMER NOTES (per appointment) ───────────────── --}}
         @php

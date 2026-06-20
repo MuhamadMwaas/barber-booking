@@ -240,14 +240,14 @@ return [
         'combined_with_parent' => 'Druckt die kombinierte Rechnung der Hauptbuchung.',
 
         // Auftragsbeleg drucken (separater Beleg, keine Rechnung)
-        'order_button'         => 'Auftrag drucken',
+        'order_button'         => 'Buchung drucken',
         'order_cancelled'      => 'Drucken nicht moeglich: dieser Termin ist storniert.',
         'order_combined_group' => 'Kombinierter Beleg — beinhaltet verknuepfte Buchungen.',
     ],
 
     // -------- Druckbeleg (Auftrag, 80mm) --------
     'print_ticket' => [
-        'title'                  => 'Auftragsbeleg',
+        'title'                  => 'Buchungsbeleg',
         'date'                   => 'Datum',
         'time'                   => 'Uhrzeit',
         'status_now'             => 'Status',
@@ -331,6 +331,15 @@ return [
         'reason_required' => 'Bitte einen Grund auswählen.',
         'save' => 'Speichern',
         'cancel' => 'Abbrechen',
+        'edit_title' => 'Abwesenheit bearbeiten',
+        'update' => 'Aktualisieren',
+        'updated' => 'Abwesenheit aktualisiert',
+        'deleted' => 'Abwesenheit gelöscht',
+        'delete' => 'Löschen',
+        'not_found' => 'Abwesenheit nicht gefunden',
+        'not_yours' => 'Sie können nur Ihre eigene Abwesenheit verwalten',
+        'multi_day_warning' => 'Diese Abwesenheit erstreckt sich über mehrere Tage. Bearbeiten oder Löschen betrifft den gesamten Zeitraum.',
+        'confirm_delete' => 'Diese Abwesenheit löschen? Dies betrifft den gesamten Datensatz.',
     ],
     'timeline' => [
         'no_providers' => 'Keine Mitarbeiter ausgewählt',

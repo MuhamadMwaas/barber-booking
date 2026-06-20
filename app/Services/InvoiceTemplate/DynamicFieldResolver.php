@@ -181,17 +181,20 @@ class DynamicFieldResolver
     protected function resolveEmployeeField(string $field): string
     {
         $key = str_replace('employee.', '', $field);
-        $appointment = $this->invoice->appointment;
 
-        if (!$appointment || !$appointment->employee) {
+        // "Employee" on a receipt = the service provider who served the customer.
+        // The appointment links to them via the provider() relation (provider_id).
+        $employee = $this->invoice->appointment?->provider;
+
+        if (!$employee) {
             return '';
         }
 
-        $employee = $appointment->employee;
+        $name = $employee->full_name ?: ($employee->name ?? '');
 
         return match($key) {
-            'name' => $employee->name ?? '',
-            'signature' => $this->getEmployeeSignature($employee->name ?? ''),
+            'name' => $name,
+            'signature' => $this->getEmployeeSignature($name),
             default => '',
         };
     }
