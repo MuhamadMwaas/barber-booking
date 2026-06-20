@@ -5,6 +5,10 @@ return [
         'failed' => 'بيانات غير صالحة.',
     ],
     'cancel' => 'إلغاء',
+    'settings' => [
+        'updated' => 'تم تحديث الإعداد بنجاح.',
+        'not_found' => 'الإعداد غير موجود.',
+    ],
     'appointment' => [
         'validation' => [
             'appointment_id' => [

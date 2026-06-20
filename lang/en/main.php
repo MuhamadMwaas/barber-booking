@@ -5,6 +5,10 @@ return [
         'failed' => 'Invalid data provided.',
     ],
     'cancel' => 'Cancel',
+    'settings' => [
+        'updated' => 'Setting updated successfully.',
+        'not_found' => 'Setting not found.',
+    ],
     'appointment' => [
         'validation' => [
             'appointment_id' => [

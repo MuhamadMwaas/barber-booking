@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\PhoneVerificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProvidersController;
 use App\Http\Controllers\Api\ServicesController;
+use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SliderController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Http\Controllers\PrintController;
@@ -113,6 +114,11 @@ Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
         Route::get('/unread-count', [NotificationController::class, 'unreadCount'])->name('unread-count');
         Route::post('/{notificationId}/read', [NotificationController::class, 'markAsRead'])->name('mark-as-read');
     });
+
+    // User-facing application settings (reminder channels, …).
+    // GET lists the catalog + current values; PATCH updates any single option.
+    Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
+    Route::patch('settings/{key}', [SettingsController::class, 'update'])->name('settings.update');
 
 
     Route::post('/register-device', [DevicesController::class, 'registerDevice']);

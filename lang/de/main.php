@@ -5,6 +5,10 @@ return [
         'failed' => 'Es wurden ungueltige Daten uebermittelt.',
     ],
     'cancel' => 'Abbrechen',
+    'settings' => [
+        'updated' => 'Einstellung erfolgreich aktualisiert.',
+        'not_found' => 'Einstellung nicht gefunden.',
+    ],
     'appointment' => [
         'validation' => [
             'appointment_id' => [

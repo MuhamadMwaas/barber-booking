@@ -16,6 +16,7 @@ class DatabaseSeeder extends Seeder
             LanguageSeeder::class,
             BranchSeeder::class,
             SalonSettingSeeder::class,
+            AppSettingSeeder::class,
             PermissionsSeeder::class,
             RoleSeeder::class,
             UserSeeder::class,

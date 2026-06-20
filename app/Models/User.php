@@ -297,4 +297,14 @@ public function devices(): HasMany
         ->pluck('device_id')
         ->toArray();
 }
+
+    /**
+     * The user's overridden application option values (see {@see UserSetting}).
+     * Only options the user has explicitly changed are stored here; everything
+     * else falls back to the option's default in `app_settings`.
+     */
+    public function settings(): HasMany
+    {
+        return $this->hasMany(UserSetting::class, 'user_id');
+    }
 }
