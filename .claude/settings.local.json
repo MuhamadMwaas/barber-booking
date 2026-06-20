@@ -24,9 +24,7 @@
       "PowerShell(php -l app/Http/Controllers/Api/PhoneVerificationController.php)",
       "PowerShell(php -l app/Http/Controllers/Api/ProfileController.php)",
       "PowerShell(php -l app/Http/Resources/UserResource.php)",
-      "PowerShell(php artisan route:list --path=profile/phone 2>&1)",
-      "PowerShell(php artisan config:clear)",
-      "PowerShell(php artisan migrate --path=database/migrations/2026_06_20_000001_convert_served_by_line_to_dynamic_employee_name.php --force)"
+      "PowerShell(php artisan route:list --path=profile/phone 2>&1)"
     ],
     "deny": [],
     "ask": []
