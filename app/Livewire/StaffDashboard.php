@@ -384,17 +384,32 @@ class StaffDashboard extends Component {
         );
     }
 
-    public function getAvailableProvidersForBooking(int $serviceId, string $startTime, int $duration): array {
+    public function getAvailableProvidersForBooking(int $serviceId, string $startTime, int $duration, bool $bypassAvailability = false): array {
+        // Only honour the force flag for users who actually hold the permission,
+        // so a forged request can never surface on-leave providers.
+        $bypassAvailability = $bypassAvailability && $this->dashCan('force_booking');
+
         return $this->dashboardService->getAvailableProvidersForServiceAtTime(
             $serviceId,
             $this->selectedDate,
             $startTime,
-            $duration ?: 30
+            $duration ?: 30,
+            $bypassAvailability
         );
     }
 
     public function saveBookingFromAlpine(array $data) {
         if ($this->dashDeny('create_booking')) {
+            $this->dispatch('booking-error');
+            return;
+        }
+
+        // Force booking: the client toggle is NEVER trusted on its own. Only
+        // honour it after a server-side force_booking permission check; if the
+        // toggle is on but the user lacks the ability, hard-stop here so a
+        // forged request can never bypass the availability window.
+        $bypassAvailability = (bool) ($data['bypassAvailability'] ?? false);
+        if ($bypassAvailability && $this->dashDeny('force_booking')) {
             $this->dispatch('booking-error');
             return;
         }
@@ -418,6 +433,10 @@ class StaffDashboard extends Component {
                 'mark_as_paid' => false,
                 // Staff may record a walk-in that already started earlier today.
                 'allow_same_day_past' => true,
+                // Authorised force booking (validated above). Bypasses ONLY the
+                // provider availability window; conflict + offers-service stay on.
+                'bypass_availability' => $bypassAvailability,
+                'override_reason' => $bypassAvailability ? trim((string) ($data['overrideReason'] ?? '')) ?: null : null,
                 'notes' => $data['notes'] ?? '',
                 'services' => [],
             ];
@@ -1254,6 +1273,8 @@ class StaffDashboard extends Component {
                 'payment_status' => $apt->payment_status->value,
                 'total_amount' => (float) $apt->total_amount,
                 'service_color_code' => $serviceColorCode,
+                // Force/override booking marker — drives the ⚡ badge on the card.
+                'is_override' => (bool) $apt->is_override,
                 // Whether this booking belongs to the logged-in provider (drives
                 // the "not your booking" warning). Always true for admin/manager.
                 'is_owned' => $this->currentProviderId() === null

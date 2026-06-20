@@ -109,6 +109,15 @@ return [
         'services' => 'Dienstleistungen',
         'remove_service' => 'Entfernen',
     ],
+
+    'force_booking' => [
+        'toggle' => 'Termin erzwingen (Zeitprüfung umgehen)',
+        'hint' => 'Bucht auch, wenn der Mitarbeiter frei hat, abwesend ist oder außerhalb der Arbeitszeiten. Die Doppelbuchungsprüfung bleibt aktiv.',
+        'reason_placeholder' => 'Grund (optional) – z. B. VIP-Kunde, Geschäft extra geöffnet',
+        'warning' => 'Die Konfliktprüfung bleibt aktiv: Der Mitarbeiter muss zu dieser Zeit frei sein.',
+        'badge_title' => 'Erzwungener Termin – Verfügbarkeitsfenster umgangen',
+    ],
+
     'appointment_modal' => [
         'title' => 'Termindetails',
         'edit' => 'Bearbeiten',

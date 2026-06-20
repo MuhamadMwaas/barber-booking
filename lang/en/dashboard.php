@@ -111,6 +111,14 @@ return [
         'remove_service' => 'Remove',
     ],
 
+    'force_booking' => [
+        'toggle' => 'Force booking (override time check)',
+        'hint' => 'Books even if the provider is off, on leave, or outside working hours. The double-booking check still applies.',
+        'reason_placeholder' => 'Reason (optional) — e.g. VIP customer, shop opened specially',
+        'warning' => 'The conflict check stays active: the provider must be free at this time.',
+        'badge_title' => 'Force booking — availability window bypassed',
+    ],
+
     'appointment_modal' => [
         'title' => 'Appointment Details',
         'edit' => 'Edit',

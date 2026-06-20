@@ -98,7 +98,72 @@ class BookingValidationService
         Service $service,
         Carbon $startTime,
         Carbon $endTime,
-        bool $allowSameDayPast = false
+        bool $allowSameDayPast = false,
+        bool $bypassAvailability = false
+    ): void {
+        $date = $startTime->format('Y-m-d');
+
+        // Provider availability window — working day (#1), working hours (#2),
+        // full-day time off (#3) and hourly time off (#4).
+        //
+        // Trusted staff "force booking" ($bypassAvailability = true) may skip
+        // this ENTIRE window — that is exactly the requested feature: book a VIP
+        // while the provider is on leave, outside working hours, or on a day the
+        // shop/provider is normally off. It is the single, isolated decision
+        // point for "is this slot within the provider's allowed window?", so the
+        // relaxation can never leak into the rules below.
+        //
+        // The hard conflict check (#5) and the past-time guard (#6/#7) below are
+        // OUTSIDE this branch and ALWAYS run — an override can never double-book
+        // a busy provider, and the past-time policy is untouched. Likewise the
+        // "provider offers the service" check lives in validateProviderOffersService()
+        // (called earlier in the flow) and is never bypassed here.
+        if (! $bypassAvailability) {
+            $this->validateProviderScheduleWindow($provider, $startTime, $endTime);
+        }
+
+        // 5. Check for conflicting appointments
+        $hasConflictingAppointment = Appointment::where('provider_id', $provider->id)
+            ->whereDate('appointment_date', $date)
+            // TODO: rmov created_status check and make job for cleaning unpaid bookings
+            ->where('created_status', 1)
+            ->whereIn('status', [AppointmentStatus::PENDING->value, AppointmentStatus::COMPLETED->value])
+            ->where(function ($query) use ($startTime, $endTime) {
+                $query->where(function ($q) use ($startTime, $endTime) {
+                    $q->where('start_time', '<', $endTime)
+                        ->where('end_time', '>', $startTime);
+                });
+            })
+            ->exists();
+
+        if ($hasConflictingAppointment) {
+            throw new InvalidArgumentException(
+                "Time slot {$startTime->format('H:i')} - {$endTime->format('H:i')} " .
+                "is already booked for provider '{$provider->full_name}'"
+            );
+        }
+
+        // 6 + 7. Past-time / minimum-advance guard.
+        //   Isolated in validateNotInPast() so trusted staff paths can opt-in to
+        //   same-day back-dating WITHOUT touching any rule above (provider hours,
+        //   conflicts, time-off all stay intact).
+        $this->validateNotInPast($startTime, $allowSameDayPast);
+    }
+
+    /**
+     * Provider availability window: working day, working hours, and time-off.
+     *
+     * This is the set of checks (#1–#4) that the trusted-staff "force booking"
+     * path is allowed to bypass. It is intentionally extracted so that bypassing
+     * is a single, auditable `if (! $bypassAvailability)` decision and CANNOT
+     * touch the conflict / past-time / offers-service rules.
+     *
+     * @throws InvalidArgumentException when the slot falls outside the window.
+     */
+    private function validateProviderScheduleWindow(
+        User $provider,
+        Carbon $startTime,
+        Carbon $endTime
     ): void {
         $date = $startTime->format('Y-m-d');
         $dayOfWeek = $startTime->dayOfWeek;
@@ -158,33 +223,6 @@ class BookingValidationService
                 "Provider has time off during the requested time slot"
             );
         }
-
-        // 5. Check for conflicting appointments
-        $hasConflictingAppointment = Appointment::where('provider_id', $provider->id)
-            ->whereDate('appointment_date', $date)
-            // TODO: rmov created_status check and make job for cleaning unpaid bookings
-            ->where('created_status', 1)
-            ->whereIn('status', [AppointmentStatus::PENDING->value, AppointmentStatus::COMPLETED->value])
-            ->where(function ($query) use ($startTime, $endTime) {
-                $query->where(function ($q) use ($startTime, $endTime) {
-                    $q->where('start_time', '<', $endTime)
-                        ->where('end_time', '>', $startTime);
-                });
-            })
-            ->exists();
-
-        if ($hasConflictingAppointment) {
-            throw new InvalidArgumentException(
-                "Time slot {$startTime->format('H:i')} - {$endTime->format('H:i')} " .
-                "is already booked for provider '{$provider->full_name}'"
-            );
-        }
-
-        // 6 + 7. Past-time / minimum-advance guard.
-        //   Isolated in validateNotInPast() so trusted staff paths can opt-in to
-        //   same-day back-dating WITHOUT touching any rule above (provider hours,
-        //   conflicts, time-off all stay intact).
-        $this->validateNotInPast($startTime, $allowSameDayPast);
     }
 
     /**

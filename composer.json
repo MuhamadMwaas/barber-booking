@@ -19,7 +19,9 @@
         "laravel/tinker": "^2.10.1",
         "laravolt/avatar": "^6.3",
         "simplesoftwareio/simple-qrcode": "^4.2",
-        "spatie/laravel-permission": "*"
+        "spatie/laravel-permission": "*",
+        "vonage/client": "^4.3",
+        "vonage/vonage-laravel": "^1.2"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

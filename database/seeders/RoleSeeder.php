@@ -73,6 +73,8 @@ class RoleSeeder extends Seeder
             'StaffDashboard:access', 'StaffDashboard:view_admin',
             'StaffDashboard:view_stats',
             'StaffDashboard:create_booking',
+            // Force booking (override availability window) — management only.
+            'StaffDashboard:force_booking',
             'StaffDashboard:add_service', 'StaffDashboard:edit_appointment',
             'StaffDashboard:edit_others', 'StaffDashboard:cancel_appointment',
             'StaffDashboard:delete_appointment', 'StaffDashboard:take_payment',

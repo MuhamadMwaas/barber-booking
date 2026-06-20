@@ -53,6 +53,10 @@ class PermissionsSeeder extends Seeder
             'view_admin',
             'view_stats',
             'create_booking',
+            // Force booking: bypass the provider availability window (working day,
+            // working hours, full-day & hourly time-off) for a single booking.
+            // The conflict + offers-service checks still apply.
+            'force_booking',
             'add_service',
             'edit_appointment',
             'edit_others',

@@ -617,6 +617,9 @@
                                                     title="{{ $apt['services'] }}">
                                                     <div
                                                         class="text-[10px] font-semibold text-gray-800 leading-tight truncate">
+                                                        @if (!empty($apt['is_override']))
+                                                            <span class="text-amber-600" title="{{ __('dashboard.force_booking.badge_title') }}">⚡</span>
+                                                        @endif
                                                         {{ $apt['start_time'] }} - {{ $apt['end_time'] }}
                                                     </div>
                                                     <div x-show="blockVisible({{ $aptDurationMinutes }}, 20)"
@@ -863,6 +866,30 @@
                     <textarea x-model="booking.notes" rows="2"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500"></textarea>
                 </div>
+
+                {{-- Force Booking (override the provider availability window).
+                     Shown ONLY to users holding StaffDashboard:force_booking; the
+                     server re-checks the permission, so hiding it is not the only
+                     line of defence. The conflict + offers-service checks remain. --}}
+                @if ($this->dashCan('force_booking'))
+                    <div class="rounded-lg border border-amber-300 bg-amber-50/60 p-3">
+                        <label class="flex items-start gap-2 cursor-pointer">
+                            <input type="checkbox" x-model="booking.bypassAvailability"
+                                @change="booking.services.forEach(bs => { if (bs.service_id && bs.start_time) { bs.provider_id = ''; loadProvidersForService(bs); } })"
+                                class="mt-0.5 rounded border-gray-300 text-amber-600 focus:ring-amber-500">
+                            <span class="text-sm leading-snug">
+                                <span class="font-semibold text-amber-800">{{ __('dashboard.force_booking.toggle') }}</span>
+                                <span class="block text-xs text-amber-700 mt-0.5">{{ __('dashboard.force_booking.hint') }}</span>
+                            </span>
+                        </label>
+                        <div x-show="booking.bypassAvailability" x-cloak class="mt-2 space-y-1">
+                            <input type="text" x-model="booking.overrideReason" maxlength="255"
+                                placeholder="{{ __('dashboard.force_booking.reason_placeholder') }}"
+                                class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:ring-amber-500 focus:border-amber-500">
+                            <p class="text-xs text-amber-600">⚠ {{ __('dashboard.force_booking.warning') }}</p>
+                        </div>
+                    </div>
+                @endif
             </div>
             <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex justify-end space-x-2">
                 <button @click="showBookingModal = false"
@@ -1819,6 +1846,8 @@
                         _loadingProviders: false
                     }],
                     notes: '',
+                    bypassAvailability: false,
+                    overrideReason: '',
                 },
 
                 resetBooking() {
@@ -1841,6 +1870,8 @@
                             _loadingProviders: false
                         }],
                         notes: '',
+                        bypassAvailability: false,
+                        overrideReason: '',
                     };
                     this.bookingSaving = false;
                 },
@@ -2232,7 +2263,8 @@
                         const result = await this.$wire.getAvailableProvidersForBooking(
                             parseInt(bs.service_id),
                             bs.start_time,
-                            bs.duration || 30
+                            bs.duration || 30,
+                            this.booking.bypassAvailability || false
                         );
                         bs._availableProviders = result;
                         if (bs._preselectedProvider && result.some(p => p.id == bs._preselectedProvider)) {
@@ -2254,6 +2286,8 @@
                         guestPhone: this.booking.guestPhone,
                         guestEmail: this.booking.guestEmail,
                         notes: this.booking.notes,
+                        bypassAvailability: this.booking.bypassAvailability,
+                        overrideReason: this.booking.overrideReason,
                         services: this.booking.services.map(s => ({
                             category_id: s.category_id,
                             service_id: s.service_id,

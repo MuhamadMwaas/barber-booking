@@ -51,6 +51,8 @@ class Appointment extends Model
         'payment_status',
         'created_status',
         'booking_source',
+        'is_override',
+        'override_reason',
     ];
 
 
@@ -70,6 +72,7 @@ class Appointment extends Model
         'payment_status' => PaymentStatus::class,
         'duration_minutes' => 'integer',
         'booking_source' => BookingSource::class,
+        'is_override' => 'boolean',
     ];
 
 

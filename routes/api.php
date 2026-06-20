@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\ServicesController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SliderController;
 use App\Http\Controllers\Api\SocialAuthController;
+use App\Services\VonageSdkSmsService;
 use App\Http\Controllers\PrintController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -54,6 +55,40 @@ Route::prefix('auth')->group(function () {
 
     Route::post('verify-email-otp', [OtpController::class, 'verifyEmailViaOtp']);
     Route::post('resend-verification-otp', [OtpController::class, 'resendVerificationOtp']);
+});
+
+Route::post('/test/vonage-sms', function (Request $request, VonageSdkSmsService $sms) {
+    abort_unless(app()->environment('local') || config('app.debug'), 404);
+
+    $payload = $request->validate([
+        'phone' => ['required', 'string', 'max:20'],
+        'text' => ['required', 'string', 'max:1000'],
+    ]);
+
+    try {
+        $result = $sms->send($payload['phone'], $payload['text']);
+    } catch (\RuntimeException $exception) {
+        return response()->json([
+            'success' => false,
+            'message' => $exception->getMessage(),
+        ], 502);
+    }
+
+    if ($result['skipped']) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Vonage is not fully configured.',
+        ], 422);
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'SMS sent successfully.',
+        'to' => $result['to'],
+        'from' => $result['from'],
+        'message_ids' => $result['message_ids'],
+        'remaining_balance' => $result['remaining_balance'],
+    ]);
 });
 
 

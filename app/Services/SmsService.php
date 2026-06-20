@@ -49,7 +49,10 @@ class SmsService
         $message = $response->json('messages.0');
 
         if (! $response->successful() || ! is_array($message) || ($message['status'] ?? '0') !== '0') {
-            throw new RuntimeException('Vonage SMS delivery failed.');
+            $status = (string) ($message['status'] ?? $response->status());
+            $errorText = (string) ($message['error-text'] ?? 'Unknown error.');
+
+            throw new RuntimeException(sprintf('Vonage SMS delivery failed: status %s - %s', $status, $errorText));
         }
     }
 }

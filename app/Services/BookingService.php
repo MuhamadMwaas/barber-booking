@@ -53,6 +53,16 @@ class BookingService
         // customer-facing path keeps the strict "no past" behaviour.
         $allowSameDayPast = (bool) ($bookingData['allow_same_day_past'] ?? false);
 
+        // Trusted staff "force booking" flag: bypass the provider availability
+        // WINDOW only (working day / working hours / full-day & hourly time-off).
+        // The conflict check and "provider offers the service" check still run.
+        // Defaults to false; only raised server-side after a force_booking
+        // permission check, so it can never leak into any customer-facing path.
+        $bypassAvailability = (bool) ($bookingData['bypass_availability'] ?? false);
+        $overrideReason = $bypassAvailability
+            ? ($bookingData['override_reason'] ?? null)
+            : null;
+
 
         $this->validationService->validateBasicData($services, $date);
 
@@ -64,13 +74,13 @@ class BookingService
         $services = $this->sortServicesByStartTime($services);
 
 
-        $preparedServices = $this->validateAndPrepareServices($services, $date, $customer, $customerPhone, $allowSameDayPast);
+        $preparedServices = $this->validateAndPrepareServices($services, $date, $customer, $customerPhone, $allowSameDayPast, $bypassAvailability);
 
         // 5. Calculate totals
         $totals = $this->calculateTotals($preparedServices);
 
         // 6. Create booking in transaction
-        $appointment = DB::transaction(function () use ($customer, $date, $paymentMethod, $isConfirmed, $markAsPaid, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone, $bookingData) {
+        $appointment = DB::transaction(function () use ($customer, $date, $paymentMethod, $isConfirmed, $markAsPaid, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone, $bookingData, $bypassAvailability, $overrideReason) {
             // Allow staff-created bookings to be confirmed without being marked as paid yet.
             $createdStatus = $isConfirmed ? 1 : 0;
             $paymentStatus = $markAsPaid
@@ -98,6 +108,8 @@ class BookingService
                 'notes' => $notes,
                 'created_status' => $createdStatus,
                 'booking_source' => $bookingData['booking_source'] ?? 'in_person',
+                'is_override' => $bypassAvailability,
+                'override_reason' => $overrideReason,
                 'customer_name' => $customerName,
                 'customer_email' => $customerEmail,
                 'customer_phone' => $customerPhone,
@@ -152,6 +164,7 @@ class BookingService
         ?User $customer,
         ?string $customerPhone = null,
         bool $allowSameDayPast = false,
+        bool $bypassAvailability = false,
     ): array {
         $preparedServices = [];
         $previousEndTime = null;
@@ -192,7 +205,8 @@ class BookingService
                 $service,
                 $startTime,
                 $endTime,
-                $allowSameDayPast
+                $allowSameDayPast,
+                $bypassAvailability
             );
 
             // 6. Validate no duplicate booking

@@ -228,7 +228,7 @@ class DashboardService {
         }
     }
 
-    public function getAvailableProvidersForServiceAtTime(int $serviceId, string $date, string $startTime, int $duration): array {
+    public function getAvailableProvidersForServiceAtTime(int $serviceId, string $date, string $startTime, int $duration, bool $bypassAvailability = false): array {
         $service = Service::find($serviceId);
         if (!$service) return [];
 
@@ -239,33 +239,40 @@ class DashboardService {
         $availableProviders = [];
 
         foreach ($providers as $provider) {
-            $dayOfWeek = $carbonDate->dayOfWeek;
-            $schedule = ProviderScheduledWork::where('user_id', $provider->id)
-                ->where('day_of_week', $dayOfWeek)
-                ->where('is_work_day', true)
-                ->where('is_active', true)
-                ->first();
+            // Provider availability window (working day, working hours, full-day &
+            // hourly time-off). Trusted staff "force booking" bypasses this whole
+            // window so on-leave / off-day providers still appear and can be picked
+            // (e.g. Sophie is off today but is coming in for a VIP). The appointment
+            // CONFLICT check below always runs — a busy provider is never offered.
+            if (! $bypassAvailability) {
+                $dayOfWeek = $carbonDate->dayOfWeek;
+                $schedule = ProviderScheduledWork::where('user_id', $provider->id)
+                    ->where('day_of_week', $dayOfWeek)
+                    ->where('is_work_day', true)
+                    ->where('is_active', true)
+                    ->first();
 
-            if (!$schedule) continue;
+                if (!$schedule) continue;
 
-            $scheduleStart = Carbon::parse($date . ' ' . $schedule->start_time);
-            $scheduleEnd = Carbon::parse($date . ' ' . $schedule->end_time);
-            if ($slotStart->lt($scheduleStart) || $slotEnd->gt($scheduleEnd)) continue;
+                $scheduleStart = Carbon::parse($date . ' ' . $schedule->start_time);
+                $scheduleEnd = Carbon::parse($date . ' ' . $schedule->end_time);
+                if ($slotStart->lt($scheduleStart) || $slotEnd->gt($scheduleEnd)) continue;
 
-            $hasFullDayOff = ProviderTimeOff::where('user_id', $provider->id)
-                ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
-                ->where('start_date', '<=', $date)
-                ->where('end_date', '>=', $date)
-                ->exists();
-            if ($hasFullDayOff) continue;
+                $hasFullDayOff = ProviderTimeOff::where('user_id', $provider->id)
+                    ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
+                    ->where('start_date', '<=', $date)
+                    ->where('end_date', '>=', $date)
+                    ->exists();
+                if ($hasFullDayOff) continue;
 
-            $hasHourlyConflict = ProviderTimeOff::where('user_id', $provider->id)
-                ->where('type', ProviderTimeOff::TYPE_HOURLY)
-                ->whereDate('start_date', $date)
-                ->where('start_time', '<', $slotEnd->format('H:i:s'))
-                ->where('end_time', '>', $slotStart->format('H:i:s'))
-                ->exists();
-            if ($hasHourlyConflict) continue;
+                $hasHourlyConflict = ProviderTimeOff::where('user_id', $provider->id)
+                    ->where('type', ProviderTimeOff::TYPE_HOURLY)
+                    ->whereDate('start_date', $date)
+                    ->where('start_time', '<', $slotEnd->format('H:i:s'))
+                    ->where('end_time', '>', $slotStart->format('H:i:s'))
+                    ->exists();
+                if ($hasHourlyConflict) continue;
+            }
 
             $hasAppointmentConflict = Appointment::where('provider_id', $provider->id)
                 ->whereDate('appointment_date', $date)
