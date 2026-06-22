@@ -97,6 +97,10 @@ class NotificationController extends Controller
         );
 
         $user = request()->user();
+        $users=User::all();
+        $titleKey   = 'Test Notification';
+        $messageKey = 'هذه رسالة تجريبية من Backend Laravel لجميع المستخدمين.';
+        $this->notificationService->sendToPhoneUsersDatabase($users, $titleKey, $messageKey, [], []);
 
         $notifications = $user
             ->notifications()
