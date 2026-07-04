@@ -146,8 +146,10 @@ Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
 
     Route::prefix('notifications')->name('notifications.')->group(function () {
         Route::get('/', [NotificationController::class, 'index'])->name('index');
+        Route::get('/unread', [NotificationController::class, 'unread'])->name('unread');
         Route::get('/unread-count', [NotificationController::class, 'unreadCount'])->name('unread-count');
         Route::post('/{notificationId}/read', [NotificationController::class, 'markAsRead'])->name('mark-as-read');
+        Route::delete('/{notificationId}', [NotificationController::class, 'destroy'])->name('destroy');
     });
 
     // User-facing application settings (reminder channels, …).

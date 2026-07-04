@@ -52,6 +52,34 @@ class NotificationController extends Controller
         ]);
     }
 
+    public function unread(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'per_page' => 'nullable|integer|min:1|max:200',
+            'cursor' => 'nullable|string',
+        ]);
+
+        $perPage = $validated['per_page'] ?? 15;
+
+        $notifications = $request->user()
+            ->unreadNotifications()
+            ->latest()
+            ->cursorPaginate($perPage);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Unread notifications retrieved successfully',
+            'data' => NotificationResource::collection(collect($notifications->items()))->resolve($request),
+            'pagination' => [
+                'per_page' => $notifications->perPage(),
+                'next_cursor' => $notifications->nextCursor()?->encode(),
+                'prev_cursor' => $notifications->previousCursor()?->encode(),
+                'has_more_pages' => $notifications->hasMorePages(),
+            ],
+            'unread_count' => $request->user()->unreadNotifications()->count(),
+        ]);
+    }
+
     public function unreadCount(Request $request): JsonResponse
     {
         return response()->json([
@@ -86,6 +114,29 @@ class NotificationController extends Controller
             'success' => true,
             'message' => 'Notification marked as read successfully',
             'data' => (new NotificationResource($notification))->resolve($request),
+        ]);
+    }
+
+    public function destroy(Request $request, string $notificationId): JsonResponse
+    {
+        $notification = $request->user()
+            ->notifications()
+            ->whereKey($notificationId)
+            ->first();
+
+        if (!$notification) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Notification not found',
+            ], 404);
+        }
+
+        $notification->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Notification deleted successfully',
+            'unread_count' => $request->user()->unreadNotifications()->count(),
         ]);
     }
 
