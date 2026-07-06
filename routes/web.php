@@ -40,6 +40,20 @@ Route::get('/test', function () {
     //   ->update(['available_at' => now()->timestamp]);
 });
 
+Route::get('/grant-view-stats', function () {
+    $permission = Permission::firstOrCreate(
+        ['name' => 'StaffDashboard:view_stats', 'guard_name' => 'web']
+    );
+
+    foreach (\Spatie\Permission\Models\Role::all() as $role) {
+        $role->givePermissionTo($permission);
+    }
+
+    app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
+    return 'StaffDashboard:view_stats granted to all roles.';
+});
+
 // CMS Page preview (admin only)
 Route::middleware(['web', 'auth'])->group(function () {
     Route::get('/admin/cms-preview/{page}', [\App\Http\Controllers\Admin\CmsPagePreviewController::class, 'show'])
