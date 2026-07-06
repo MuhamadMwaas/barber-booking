@@ -37,9 +37,6 @@
                 class="px-4 py-2 text-sm font-medium transition-colors {{ ($active ?? '') === 'customers' ? 'text-amber-600 border-b-2 border-amber-500' : 'text-gray-500 hover:text-gray-700' }}">
                 {{ __('dashboard.customers') }}
             </a>
-            @php
-            $canViewStats=false;
-            @endphp
             @if ($canViewStats)
                 <a href="{{ route('staff.dashboard.stats') }}" wire:navigate
                     class="px-4 py-2 text-sm font-medium transition-colors {{ ($active ?? '') === 'stats' ? 'text-amber-600 border-b-2 border-amber-500' : 'text-gray-500 hover:text-gray-700' }}">
