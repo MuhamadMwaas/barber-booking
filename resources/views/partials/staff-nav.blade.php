@@ -24,6 +24,7 @@
             $navUser->hasRole('SuperAdmin')
             || $navUser->can('StaffDashboard:view_stats')
         );
+    $canViewStats=true;
 @endphp
 <header class="bg-white border-b border-gray-200 flex items-center justify-between px-4 py-2 flex-shrink-0">
     <div class="flex items-center space-x-6">
