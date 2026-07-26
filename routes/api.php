@@ -71,7 +71,7 @@ Route::post('/test/vonage-sms', function (Request $request, VonageSdkSmsService 
         return response()->json([
             'success' => false,
             'message' => $exception->getMessage(),
-        ], 502);
+        ], 502);ب
     }
 
     if ($result['skipped']) {

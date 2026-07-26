@@ -94,8 +94,9 @@ class ProfileController extends Controller
         }
 
         $request->validate([
-            'current_password' => 'nullable|string',
-            'confirmation' => 'required|accepted',
+            // Accounts created through OTP-only flows have no password to confirm,
+            // so the field is only mandatory when the account actually has one.
+            'current_password' => [Rule::requiredIf((bool) $user->password), 'string'],
         ]);
 
         if ($user->password && !Hash::check($request->current_password ?? '', $user->password)) {
