@@ -29,7 +29,6 @@ class AuthController extends Controller
     {
         $data = $request->validated();
         $registrationMethod = RegistrationMethod::from($data['registration_method']);
-        $registrationMethod = RegistrationMethod::from('email');
 
         $user = User::create([
             'first_name' => $data['first_name'],
@@ -131,39 +130,6 @@ class AuthController extends Controller
         $user->refreshTokens()->update(['revoked' => true]);
 
         return response()->json(['message' => 'Logged out']);
-    }
-
-    public function forgotPassword(Request $request, OtpService $otpService)
-    {
-        $request->validate(['email' => 'required|email']);
-        $user = User::query()->where('email', $request->email)->firstOrFail();
-        $otp = $otpService->generate($user);
-
-        $response = ['message' => 'OTP sent to email'];
-
-        if (config('app.debug')) {
-            $response['otp'] = $otp;
-        }
-
-        return response()->json($response);
-    }
-
-    public function resetPassword(Request $request, OtpService $otpService)
-    {
-        $request->validate([
-            'email' => 'required|email',
-            'otp' => 'required|string|size:6',
-            'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
-        ]);
-
-        if (!$otpService->validate($request->email, $request->otp)) {
-            return response()->json(['error' => 'Invalid or expired OTP'], 422);
-        }
-
-        $user = User::query()->where('email', $request->email)->firstOrFail();
-        $user->update(['password' => Hash::make($request->password)]);
-
-        return response()->json(['message' => 'Password reset successful']);
     }
 
     private function buildAuthenticatedResponse(User $user, Request $request): array

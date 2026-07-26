@@ -1,9 +1,15 @@
 <?php
 
 return [
-    'reset' => 'Your password has been reset.',
-    'sent' => 'We have emailed your password reset link.',
-    'throttled' => 'Please wait before retrying.',
-    'token' => 'This password reset token is invalid.',
-    'user' => 'We can\'t find a user with that email address.',
+    'reset' => 'تم تغيير كلمة المرور بنجاح.',
+    'sent' => 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.',
+    'throttled' => 'يرجى الانتظار قبل المحاولة مرة أخرى.',
+    'token' => 'رمز إعادة تعيين كلمة المرور غير صالح أو منتهي الصلاحية.',
+    'user' => 'لا يوجد حساب مطابق لهذه البيانات.',
+
+    // فلو إعادة التعيين عبر رمز التحقق (PasswordResetController).
+    'sent_email' => 'تم إرسال رمز إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.',
+    'sent_sms' => 'تم إرسال رمز إعادة تعيين كلمة المرور إلى رقم هاتفك.',
+    'otp_verified' => 'تم التحقق من الرمز. يمكنك الآن اختيار كلمة مرور جديدة.',
+    'cooldown' => 'يرجى الانتظار :seconds ثانية قبل طلب رمز جديد.',
 ];

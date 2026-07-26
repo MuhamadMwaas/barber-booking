@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\DevicesController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
+use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\PhoneVerificationController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProvidersController;
@@ -39,10 +40,21 @@ Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('refresh', [AuthController::class, 'refresh']);
     Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
-    Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+    // Forgot-password over email or SMS. Throttles are per IP; PasswordResetController
+    // adds a second, per-destination cooldown so SMS credit cannot be burned by a
+    // client that rotates its address.
+    Route::post('forgot-password', [PasswordResetController::class, 'forgotPassword'])
+        ->middleware('throttle:5,1')
+        ->name('api.password.forgot');
+    Route::post('password/verify-otp', [PasswordResetController::class, 'verifyOtp'])
+        ->middleware('throttle:10,1')
+        ->name('api.password.verify-otp');
+    Route::post('reset-password', [PasswordResetController::class, 'resetPassword'])
+        ->middleware('throttle:10,1')
+        ->name('api.password.reset');
+
     Route::post('request-otp', [OtpController::class, 'requestOtp']);
     Route::post('verify-otp', [OtpController::class, 'verifyOtp']);
-    Route::post('reset-password', [OtpController::class, 'resetPassword']);
     Route::post('google', [SocialAuthController::class, 'google']);
 
     // Google Authentication
@@ -71,7 +83,7 @@ Route::post('/test/vonage-sms', function (Request $request, VonageSdkSmsService 
         return response()->json([
             'success' => false,
             'message' => $exception->getMessage(),
-        ], 502);ب
+        ], 502);
     }
 
     if ($result['skipped']) {

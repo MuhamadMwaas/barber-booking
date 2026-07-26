@@ -11,7 +11,6 @@ use App\Services\AccountVerificationService;
 use App\Services\AuthTokenService;
 use App\Services\OtpService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -102,46 +101,6 @@ class OtpController extends Controller
             'refresh_expires_at' => $refresh['expires_at'],
             'token_type' => 'bearer',
         ], $this->verificationService->buildVerificationPayload($user, $registrationMethod)));
-    }
-
-    public function resetPassword(Request $request)
-    {
-        $request->validate([
-            'registration_method' => ['sometimes', Rule::enum(RegistrationMethod::class)],
-            'type' => 'sometimes|integer|in:' . OtpType::EMAIL_OTP->value . ',' . OtpType::SMS_OTP->value,
-        ]);
-
-        $registrationMethod = $this->resolveRegistrationMethod($request);
-        $type = $registrationMethod === RegistrationMethod::PHONE ? OtpType::SMS_OTP : OtpType::EMAIL_OTP;
-
-        $rules = [
-            'otp' => 'required|string',
-            'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::defaults()],
-        ];
-
-        if ($type === OtpType::EMAIL_OTP) {
-            $rules['email'] = 'required|email';
-        } else {
-            $rules['phone'] = 'required|string';
-        }
-
-        $validated = $request->validate($rules);
-
-        $identifier = $type === OtpType::EMAIL_OTP
-            ? $validated['email']
-            : $validated['phone'];
-
-        if (!$this->otpService->validate($identifier, $validated['otp'], $type)) {
-            return response()->json(['error' => 'Invalid or expired OTP'], 422);
-        }
-
-        $user = $type === OtpType::EMAIL_OTP
-            ? User::query()->where('email', $validated['email'])->firstOrFail()
-            : User::query()->where('phone', $validated['phone'])->firstOrFail();
-
-        $user->update(['password' => Hash::make($validated['password'])]);
-
-        return response()->json(['message' => 'Password reset successful']);
     }
 
     public function verifyEmailViaOtp(Request $request)

@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enum\OtpPurpose;
 use App\Enum\OtpType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
-use App\Models\Otp;
 use App\Models\User;
 use App\Services\AccountVerificationService;
 use App\Services\OtpService;
@@ -23,9 +23,6 @@ use Illuminate\Validation\ValidationException;
  */
 class PhoneVerificationController extends Controller
 {
-    /** Minimum delay between two SMS OTP requests for the same number. */
-    private const RESEND_COOLDOWN_SECONDS = 60;
-
     public function __construct(
         private OtpService $otpService,
         private AccountVerificationService $verificationService,
@@ -79,7 +76,11 @@ class PhoneVerificationController extends Controller
         }
 
         // (4) Throttle resends per number.
-        $remaining = $this->cooldownRemaining($user);
+        $remaining = $this->otpService->cooldownRemaining(
+            $user->phone,
+            OtpType::SMS_OTP,
+            OtpPurpose::ACCOUNT_VERIFICATION,
+        );
         if ($remaining > 0) {
             return response()->json([
                 'success' => false,
@@ -168,27 +169,5 @@ class PhoneVerificationController extends Controller
                 'phone' => ['This phone number is already in use by another account.'],
             ]);
         }
-    }
-
-    /**
-     * Seconds the user must still wait before another OTP may be sent, or 0.
-     */
-    private function cooldownRemaining(User $user): int
-    {
-        $lastOtp = Otp::query()
-            ->where('phone', $user->phone)
-            ->where('type', OtpType::SMS_OTP->value)
-            ->latest('created_at')
-            ->first();
-
-        if (!$lastOtp || !$lastOtp->created_at) {
-            return 0;
-        }
-
-        $elapsed = now()->getTimestamp() - $lastOtp->created_at->getTimestamp();
-
-        return $elapsed >= self::RESEND_COOLDOWN_SECONDS
-            ? 0
-            : self::RESEND_COOLDOWN_SECONDS - $elapsed;
     }
 }
