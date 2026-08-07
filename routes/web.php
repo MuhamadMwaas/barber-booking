@@ -16,6 +16,44 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
 
+/*
+|--------------------------------------------------------------------------
+| Staff Dashboard Subdomain
+|--------------------------------------------------------------------------
+|
+| dashboard.lookupfriseur.com
+|
+*/
+
+Route::domain('dashboard.lookupfriseur.com')
+    ->middleware([EnsureStaffDashboardAccess::class])
+    ->group(function () {
+
+        Route::livewire('/', \App\Livewire\StaffDashboard::class)
+            ->name('staff.dashboard');
+
+        Route::livewire('/customers', \App\Livewire\CustomerLookup::class)
+            ->name('staff.dashboard.customers');
+
+        Route::livewire('/stats', \App\Livewire\StaffStats::class)
+            ->name('staff.dashboard.stats');
+
+        Route::get('/language/{code}', function (string $code) {
+            $language = Language::query()
+                ->where('is_active', true)
+                ->where('code', $code)
+                ->firstOrFail();
+
+            session([
+                'locale' => $language->code,
+            ]);
+
+            return redirect()->back();
+        })->name('staff.dashboard.language');
+    });
+
+
+
 Route::get('/', function () {
     return view('welcome');
 });
@@ -114,4 +152,30 @@ Route::middleware(['web', EnsureStaffDashboardAccess::class])->group(function ()
 
         return redirect()->back();
     })->name('staff.dashboard.language');
+});
+
+Route::get('/internal/clear-cache', function (Request $request) {
+
+
+    $output = [];
+    $exitCode = 0;
+
+    exec(
+        'sudo /var/www/lookup.com/clear-my-cache.sh 2>&1',
+        $output,
+        $exitCode
+    );
+
+    if ($exitCode !== 0) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Cache clear failed',
+            'output' => $output,
+        ], 500);
+    }
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Cache cleared successfully',
+    ]);
 });
