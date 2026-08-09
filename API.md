@@ -10,6 +10,7 @@
 - [Base URL](#base-url)
 - [Authentication](#authentication)
 - [Headers المطلوبة](#headers-المطلوبة)
+- [لغة الاستجابة](#لغة-الاستجابة)
 - [Authentication API](#authentication-api)
 - [Profile API](#profile-api)
 - [Providers API](#providers-api)
@@ -123,6 +124,24 @@ Content-Type: application/json
 ```
 Content-Type: multipart/form-data
 ```
+
+### لغة الاستجابة
+
+يُحدّد الـ API لغة الطلب كاملاً بالأولوية التالية:
+
+1. Query parameter: `?lang=ar`
+2. Header: `Accept-Language: ar` أو `Accept-Language: de-DE,de;q=0.9`
+3. اللغة الافتراضية: `CMS_DEFAULT_LANGUAGE` (حالياً `ar`)
+
+مثال موحّد للتطبيق:
+
+```http
+GET {{base_url}}/api/services?lang=ar
+Accept-Language: de
+```
+
+في هذا المثال ستكون لغة الاستجابة `ar` لأن `lang` له أولوية أعلى من الـ header.
+القيمة القديمة `locale` مدعومة مؤقتاً للتوافق مع الطلبات السابقة، لكن يجب أن يستخدم التطبيق `lang` في أي تكامل جديد.
 
 ---
 

@@ -5,19 +5,16 @@ namespace App\Models;
 use App\Models\Translation\ServiceTranslation;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class Service extends Model
 {
     use HasFactory, SoftDeletes;
-
 
     protected $table = 'services';
 
@@ -35,12 +32,12 @@ class Service extends Model
         'icon_url',
         'is_featured',
     ];
+
     protected $appends = [
         'image_url',
         'translated_name',
 
     ];
-
 
     protected $casts = [
         'price' => 'decimal:2',
@@ -78,19 +75,20 @@ class Service extends Model
     {
         return $this->hasMany(AppointmentService::class, 'service_id');
     }
+
     public function appointments()
     {
         return $this->belongsToMany(Appointment::class, 'appointment_services')
-            ->withPivot([ 'duration_minutes', 'price', 'sequence_order'])
+            ->withPivot(['duration_minutes', 'price', 'sequence_order'])
             ->withTimestamps();
     }
+
     public function activeProviders()
     {
         return $this->providers()
             ->wherePivot('is_active', true)
             ->where('users.is_active', true);
     }
-
 
     // accessors
 
@@ -102,9 +100,9 @@ class Service extends Model
     public function getTranslatedNameAttribute(): string
     {
         $locale = app()->getLocale();
+
         return $this->getNameIn($locale);
     }
-
 
     public function getFormattedDurationAttribute(): string
     {
@@ -132,12 +130,12 @@ class Service extends Model
         return $query->where('is_featured', true);
     }
 
-
     // Translation methods
     public function translations(): HasMany
     {
         return $this->hasMany(ServiceTranslation::class);
     }
+
     public function translate(string $locale, array $attributes): ServiceTranslation
     {
         $language = Language::where('code', $locale)->firstOrFail();
@@ -152,7 +150,7 @@ class Service extends Model
     {
         $language = Language::where('code', $locale)->first();
 
-        if (!$language) {
+        if (! $language) {
             $language = Language::where('is_default', true)->first();
         }
 
@@ -161,11 +159,19 @@ class Service extends Model
 
     public function getNameIn(string $locale): string
     {
+        if ($this->relationLoaded('translations')) {
+            return $this->translations->firstWhere('language_code', $locale)?->name ?? $this->name;
+        }
+
         return $this->translation($locale)?->name ?? $this->name;
     }
 
     public function getDescriptionIn(string $locale): ?string
     {
+        if ($this->relationLoaded('translations')) {
+            return $this->translations->firstWhere('language_code', $locale)?->description ?? $this->description;
+        }
+
         return $this->translation($locale)?->description ?? $this->description;
     }
 
@@ -178,11 +184,13 @@ class Service extends Model
     {
         return $this->morphOne(File::class, 'fileable', 'instance_type', 'instance_id')->where('type', 'service_icon');
     }
+
     public function getImageUrlAttribute(): ?string
     {
         if ($this->image) {
             return $this->image->urlFile();
         }
+
         return null;
     }
 
@@ -190,6 +198,7 @@ class Service extends Model
     {
         return $this->morphMany(InvoiceItem::class, 'itemable');
     }
+
     public function updateProfileImage(UploadedFile $image, $relation): File
     {
         if ($this->$relation) {
@@ -218,7 +227,7 @@ class Service extends Model
         $image->storeAs($dir, $fileName, 'public');
 
         return $this->$relation()->create([
-            'name' => $name . '_' . $this->id,
+            'name' => $name.'_'.$this->id,
             'path' => $path,
             'disk' => 'public',
             'type' => $type,
@@ -227,5 +236,4 @@ class Service extends Model
             'key' => $relation,
         ]);
     }
-
 }

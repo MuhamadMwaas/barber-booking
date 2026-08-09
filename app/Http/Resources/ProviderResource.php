@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class ProviderResource extends JsonResource
@@ -9,7 +10,7 @@ class ProviderResource extends JsonResource
     /**
      * Transform the resource into an array.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param  Request  $request
      * @return array
      */
     public function toArray($request)
@@ -35,17 +36,16 @@ class ProviderResource extends JsonResource
                 return $this->services->map(function ($service) {
                     return [
                         'id' => $service->id,
-                        'name' => $service->name,
+                        'name' => $service->translated_name,
                         'translated_name' => $service->translated_name ?? $service->name,
                         'display_price' => $service->display_price,
                         'is_active' => $service->is_active,
                         'image_url' => $service->image_url,
-                        'is_featured'=> $this->is_featured,
+                        'is_featured' => $this->is_featured,
 
                         'booking_count' => $service->booking_count ?? 0,
                         'average_rating' => $service->average_rating ?? 0,
                         'review_count' => $service->review_count ?? 0,
-
 
                     ];
                 });

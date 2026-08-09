@@ -1,9 +1,15 @@
 <?php
 
 use App\Http\Middleware\EnforceJsonAcceptHeader;
+use App\Http\Middleware\EnsureEmailIsVerifiedViaOtp;
+use App\Http\Middleware\SetApiLocale;
+use App\Http\Middleware\SetLocaleFromSession;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Spatie\Permission\Middleware\PermissionMiddleware;
+use Spatie\Permission\Middleware\RoleMiddleware;
+use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -14,18 +20,19 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
 
-        $middleware->appendToGroup('web', \App\Http\Middleware\SetLocaleFromSession::class);
+        $middleware->appendToGroup('web', SetLocaleFromSession::class);
 
-           $middleware->group('api', [
+        $middleware->group('api', [
             EnforceJsonAcceptHeader::class,
+            SetApiLocale::class,
         ]);
         $middleware->trustProxies(at: '*');
         $middleware->alias([
-            'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
-            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
-            'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
-            'verified.otp' => \App\Http\Middleware\EnsureEmailIsVerifiedViaOtp::class,
-            'verified.customer' => \App\Http\Middleware\EnsureEmailIsVerifiedViaOtp::class,
+            'role' => RoleMiddleware::class,
+            'permission' => PermissionMiddleware::class,
+            'role_or_permission' => RoleOrPermissionMiddleware::class,
+            'verified.otp' => EnsureEmailIsVerifiedViaOtp::class,
+            'verified.customer' => EnsureEmailIsVerifiedViaOtp::class,
 
         ]);
     })

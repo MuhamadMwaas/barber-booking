@@ -15,7 +15,7 @@ class SliderController extends Controller
      * إرجاع سلايدر بمفتاحه مع شرائحه النشطة والمرئية حالياً.
      *
      * Query Parameters:
-     *   ?locale=ar|en|de  — تحديد اللغة (default: en)
+     *   ?lang=ar|en|de  — تحديد اللغة (or Accept-Language header)
      *
      * Caching: 5 دقائق على مستوى Model (Slider::getCachedByKey)
      * Cache-Control: 5 دقائق للبراوزر/CDN
@@ -61,21 +61,21 @@ class SliderController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data'    => [
-                    'key'   => $slider->key,
+                'data' => [
+                    'key' => $slider->key,
                     'items' => $items,
                 ],
                 'message' => 'Slider retrieved successfully.',
             ], 200, [
                 'Cache-Control' => 'public, max-age=300, stale-while-revalidate=600',
-                'Vary'          => 'Accept-Language',
+                'Vary' => 'Accept-Language',
             ]);
 
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve slider.',
-                'error'   => app()->isProduction() ? null : $e->getMessage(),
+                'error' => app()->isProduction() ? null : $e->getMessage(),
             ], 500);
         }
     }
@@ -83,26 +83,11 @@ class SliderController extends Controller
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /**
-     * تحديد اللغة من query param أو Accept-Language header
-     * مع fallback إلى 'en'
+     * The API middleware has already resolved the locale for this request.
      */
     private function resolveLocale(Request $request): string
     {
-        $supported = ['ar', 'en', 'de'];
-
-        // 1. Query param: ?locale=ar
-        $param = $request->query('locale');
-        if ($param && in_array($param, $supported, true)) {
-            return $param;
-        }
-
-        // 2. Accept-Language header (أول قيمة مدعومة)
-        $header = $request->getPreferredLanguage($supported);
-        if ($header) {
-            return $header;
-        }
-
-        return 'en';
+        return app()->getLocale();
     }
 
     /**
@@ -113,14 +98,14 @@ class SliderController extends Controller
         $translation = $item->getTranslation($locale);
 
         return [
-            'id'           => $item->id,
-            'sort_order'   => $item->sort_order,
-            'title'        => $translation?->title,
-            'subtitle'     => $translation?->subtitle,
-            'description'  => $translation?->description,
-            'image_url'    => $item->image_url,
-            'starts_at'    => $item->starts_at?->toIso8601String(),
-            'ends_at'      => $item->ends_at?->toIso8601String(),
+            'id' => $item->id,
+            'sort_order' => $item->sort_order,
+            'title' => $translation?->title,
+            'subtitle' => $translation?->subtitle,
+            'description' => $translation?->description,
+            'image_url' => $item->image_url,
+            'starts_at' => $item->starts_at?->toIso8601String(),
+            'ends_at' => $item->ends_at?->toIso8601String(),
             'is_permanent' => $item->isPermanent(),
         ];
     }

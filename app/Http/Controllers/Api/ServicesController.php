@@ -6,28 +6,24 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ServiceResource;
 use App\Http\Resources\SingleServiceResource;
 use App\Models\Service;
-use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ServicesController extends Controller
 {
-    /**
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function index(Request $request): JsonResponse
     {
         try {
-            $query = Service::with(['category:id,name','image',
-            'providers' => function ($query) {
-                $query->select('users.id', 'users.first_name', 'users.last_name')
-                    ->with('profile_image');
-                }
+            $query = Service::with(['translations', 'category:id,name', 'category.translations', 'image',
+                'providers' => function ($query) {
+                    $query->select('users.id', 'users.first_name', 'users.last_name')
+                        ->with('profile_image');
+                },
             ])
                 // ->withCount('reviews')
                 // ->withAvg('reviews as average_rating', 'rating')
                 ->active();
-
 
             if ($request->has('category_id')) {
                 $query->where('category_id', $request->category_id);
@@ -38,15 +34,14 @@ class ServicesController extends Controller
             }
 
             if ($request->has('search')) {
-                $query->where('name', 'like', '%' . $request->search . '%')
-                    ->orWhere('description', 'like', '%' . $request->search . '%');
+                $query->where('name', 'like', '%'.$request->search.'%')
+                    ->orWhere('description', 'like', '%'.$request->search.'%');
             }
 
             $sortBy = $request->get('sort_by', 'sort_order');
             $sortDirection = $request->get('sort_direction', 'asc');
 
             $query->orderBy($sortBy, $sortDirection);
-
 
             $perPage = $request->get('per_page', 15);
             $services = $query->paginate($perPage);
@@ -60,15 +55,14 @@ class ServicesController extends Controller
                     'per_page' => $services->perPage(),
                     'total' => $services->total(),
                 ],
-                'message' => 'Services retrieved successfully'
+                'message' => 'Services retrieved successfully',
             ], 200);
-
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve services',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -77,30 +71,29 @@ class ServicesController extends Controller
      * Display the specified service with complete information.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\JsonResponse
      */
     public function show($id): JsonResponse
     {
         try {
-            $service = Service::with(['category', 'providers', 'reviews.user'])
+            $service = Service::with(['translations', 'category.translations', 'providers', 'reviews.user'])
                 ->active()
                 ->findOrFail($id);
 
             return response()->json([
                 'success' => true,
                 'data' => new SingleServiceResource($service),
-                'message' => 'Service retrieved successfully'
+                'message' => 'Service retrieved successfully',
             ], 200);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        } catch (ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Service not found'
+                'message' => 'Service not found',
             ], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve service',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

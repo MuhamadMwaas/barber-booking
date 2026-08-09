@@ -5,8 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProviderResource;
 use App\Services\ProviderService;
-use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ProvidersController extends Controller
 {
@@ -17,10 +18,6 @@ class ProvidersController extends Controller
         $this->providerService = $providerService;
     }
 
-    /**
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function index(Request $request): JsonResponse
     {
         try {
@@ -45,47 +42,42 @@ class ProvidersController extends Controller
                     'per_page' => $providers->perPage(),
                     'total' => $providers->total(),
                 ],
-                'message' => 'Providers retrieved successfully'
+                'message' => 'Providers retrieved successfully',
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve providers',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
 
-    /**
-     * @param int $id
-     * @param Request $request
-     * @return JsonResponse
-     */
     public function show(int $id, Request $request): JsonResponse
     {
         try {
-            $locale = $request->get('locale');
-            $providerData = $this->providerService->getProviderDetailsWithServices($id, $locale);
+            $providerData = $this->providerService->getProviderDetailsWithServices($id, app()->getLocale());
 
             // Create a temporary resource with the enhanced data
             $provider = $providerData['provider'];
             $provider->services = $providerData['services'];
             $provider->total_booking_count = $providerData['total_booking_count'];
+
             return response()->json([
                 'success' => true,
                 'data' => new ProviderResource($provider),
-                'message' => 'Provider retrieved successfully'
+                'message' => 'Provider retrieved successfully',
             ], 200);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        } catch (ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Provider not found'
+                'message' => 'Provider not found',
             ], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve provider',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

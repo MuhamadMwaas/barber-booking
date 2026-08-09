@@ -112,8 +112,8 @@ Route::post('/test/vonage-sms', function (Request $request, VonageSdkSmsService 
 Route::get('/about-us', [AboutUsPageController::class, 'show'])->name('api.about-us.show');
 
 // ── Sliders ───────────────────────────────────────────────────────────────────
-// GET /api/sliders/{key}?locale=ar|en|de
-// مثال: /api/sliders/home?locale=ar
+// GET /api/sliders/{key}?lang=ar|en|de
+// مثال: /api/sliders/home?lang=ar
 Route::get('/sliders/{key}', [SliderController::class, 'show'])
     ->name('api.sliders.show')
     ->where('key', '[a-z0-9_\-]+');

@@ -14,9 +14,8 @@ class AboutUsPageController extends Controller
     /**
      * Return the active About Us page as a structured JSON response.
      *
-     * Supports optional ?locale=de|ar|en query param — when provided, each
-     * multilingual field is resolved to that single locale instead of returning
-     * the full translations object.
+     * Each multilingual field is resolved to the locale selected by the API
+     * middleware (?lang=de|ar|en or Accept-Language header).
      *
      * Cache: model-level 24-hour cache via AboutUsPage::getCached().
      * Cache-Control header: 1-hour browser/CDN cache, refreshed on each deploy.
@@ -26,7 +25,7 @@ class AboutUsPageController extends Controller
         try {
             $page = AboutUsPage::getCached();
 
-            if (!$page) {
+            if (! $page) {
                 return response()->json([
                     'success' => false,
                     'message' => 'About Us page is not available.',
@@ -35,45 +34,29 @@ class AboutUsPageController extends Controller
 
             $resource = new AboutUsPageResource($page);
 
-            $locale = $this->resolveLocale($request);
-            $data   = $resource->toArray($request);
-
-            if ($locale) {
-                $data = $this->localizeFields($data, $locale);
-            }
+            $locale = app()->getLocale();
+            $data = $resource->toArray($request);
+            $data = $this->localizeFields($data, $locale);
 
             return response()->json([
                 'success' => true,
-                'data'    => $data,
+                'data' => $data,
                 'message' => 'About Us page retrieved successfully.',
             ], 200, [
                 'Cache-Control' => 'public, max-age=3600, stale-while-revalidate=86400',
-                'Vary'          => 'Accept-Language',
+                'Vary' => 'Accept-Language',
             ]);
 
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to retrieve About Us page.',
-                'error'   => app()->isProduction() ? null : $e->getMessage(),
+                'error' => app()->isProduction() ? null : $e->getMessage(),
             ], 500);
         }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private function resolveLocale(Request $request): ?string
-    {
-        $requested = $request->query('locale');
-
-        if (!$requested) {
-            return null;
-        }
-
-        $supported = ['de', 'ar', 'en'];
-
-        return in_array($requested, $supported, true) ? $requested : null;
-    }
 
     /**
      * Recursively resolve multilingual arrays (keyed de/ar/en) to a single
@@ -81,13 +64,13 @@ class AboutUsPageController extends Controller
      */
     private function localizeFields(mixed $value, string $locale): mixed
     {
-        if (!is_array($value)) {
+        if (! is_array($value)) {
             return $value;
         }
 
         // Detect a translations object: has at least one of the supported locales
         $localeKeys = ['de', 'ar', 'en'];
-        $isTranslation = !empty(array_intersect($localeKeys, array_keys($value)));
+        $isTranslation = ! empty(array_intersect($localeKeys, array_keys($value)));
 
         // Guard: only resolve if ALL keys are locale keys (avoid resolving
         // mixed arrays like {value: ..., label: ..., icon: ...})
@@ -101,6 +84,6 @@ class AboutUsPageController extends Controller
         }
 
         // Recurse into every element
-        return array_map(fn($item) => $this->localizeFields($item, $locale), $value);
+        return array_map(fn ($item) => $this->localizeFields($item, $locale), $value);
     }
 }

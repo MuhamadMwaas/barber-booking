@@ -10,15 +10,16 @@ class CmsLanguageResolver
     /**
      * Resolves the requested language from:
      *   1. ?lang= query parameter
-     *   2. Accept-Language HTTP header
-     *   3. Fallback: default language from config
+     *   2. ?locale= query parameter (legacy API compatibility)
+     *   3. Accept-Language HTTP header
+     *   4. Fallback: default language from config
      */
     public function resolve(Request $request): string
     {
         $supported = array_keys(config('cms.supported_languages'));
-        $default   = config('cms.default_language', 'ar');
+        $default = config('cms.default_language', 'ar');
 
-        $queryLang = Str::lower( $request->query('lang'));
+        $queryLang = Str::lower($request->query('lang') ?? $request->query('locale'));
         if ($this->isSupported($queryLang, $supported)) {
             return $queryLang;
         }
@@ -42,7 +43,7 @@ class CmsLanguageResolver
             return null;
         }
 
-        $first    = explode(',', $header)[0] ?? null;
+        $first = explode(',', $header)[0] ?? null;
         $language = strtolower(trim(explode(';', $first)[0] ?? ''));
 
         if (str_contains($language, '-')) {

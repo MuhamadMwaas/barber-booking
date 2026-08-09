@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class ServiceResource extends JsonResource
@@ -9,15 +10,17 @@ class ServiceResource extends JsonResource
     /**
      * Transform the resource into an array.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param  Request  $request
      * @return array
      */
     public function toArray($request)
     {
+        $locale = app()->getLocale();
+
         return [
             'id' => $this->id,
-            'name' => $this->name,
-            'description' => $this->description,
+            'name' => $this->getNameIn($locale),
+            'description' => $this->getDescriptionIn($locale),
             'price' => $this->price,
             'discount_price' => $this->discount_price,
             'display_price' => $this->display_price,
@@ -31,7 +34,7 @@ class ServiceResource extends JsonResource
             'is_featured' => $this->is_featured,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
-            'average_rating' => $this->average_rating ? round((float)$this->average_rating, 1) : 0,
+            'average_rating' => $this->average_rating ? round((float) $this->average_rating, 1) : 0,
 
             // relationships
             'category' => new MinCategoryResource($this->whenLoaded('category')),
