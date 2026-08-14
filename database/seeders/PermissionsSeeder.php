@@ -74,8 +74,37 @@ class PermissionsSeeder extends Seeder
     ];
 
 
+    /**
+     * Abilities for models that are managed through a relation manager instead of
+     * a Resource of their own, so `discoverResources()` cannot find them.
+     *
+     * `ProviderTimeOff` backs the "Leave management" tab on the Providers resource
+     * (see {@see \App\Filament\Resources\Providers\RelationManagers\TimeOffsRelationManager}).
+     */
+    private const RELATION_ABILITIES = [
+        'ProviderTimeOff' => ['view', 'create', 'edit', 'delete'],
+    ];
+
     private const ROLES = [
         'SuperAdmin',
+    ];
+
+    /**
+     * Permissions that belong to exactly one role. The listed role is granted
+     * them, and every OTHER role (except SuperAdmin, which bypasses all checks)
+     * has them revoked — so re-running the seeder always restores the intended
+     * exclusivity even if a permission was handed out from the Roles screen.
+     *
+     * Provider leave management is admin-only: `manager` and `provider` must not
+     * be able to create, edit or delete a provider's leave.
+     */
+    private const EXCLUSIVE_PERMISSIONS = [
+        'admin' => [
+            'ProviderTimeOff:view',
+            'ProviderTimeOff:create',
+            'ProviderTimeOff:edit',
+            'ProviderTimeOff:delete',
+        ],
     ];
 
     // ─────────────────────────────────────────────
@@ -140,6 +169,9 @@ class PermissionsSeeder extends Seeder
             $status = $role->wasRecentlyCreated ? 'created' : 'updated';
             $this->command->info("  ✓ Role [{$roleName}] {$status} → synced with {$total} permissions");
         }
+
+        // ── 4b. Enforce single-role permissions ────
+        $this->applyExclusivePermissions();
 
         // ── 5. Summary ─────────────────────────────
         $this->command->line('');
@@ -219,7 +251,63 @@ class PermissionsSeeder extends Seeder
             }
         }
 
+        // ─ Relation managers ──────────────────────
+        foreach (self::RELATION_ABILITIES as $modelName => $abilities) {
+            foreach ($abilities as $ability) {
+                $permissions[] = "{$modelName}:{$ability}";
+            }
+        }
+
         return $permissions;
+    }
+
+    /**
+     * Grant each {@see EXCLUSIVE_PERMISSIONS} entry to its owning role and revoke
+     * it from every other role, so "only this role may do it" stays true across
+     * re-runs and manual edits from the Roles screen.
+     */
+    private function applyExclusivePermissions(): void
+    {
+        if (empty(self::EXCLUSIVE_PERMISSIONS)) {
+            return;
+        }
+
+        $this->command->line('');
+        $this->command->comment('Applying single-role permissions...');
+
+        foreach (self::EXCLUSIVE_PERMISSIONS as $roleName => $permissionNames) {
+            $owner = Role::where('name', $roleName)
+                ->where('guard_name', self::GUARD)
+                ->first();
+
+            if (! $owner) {
+                $this->command->warn("  ! Role [{$roleName}] not found — skipped " . count($permissionNames) . ' permission(s)');
+
+                continue;
+            }
+
+            $owner->givePermissionTo($permissionNames);
+            $this->command->info("  ✓ [{$roleName}] granted: " . implode(', ', $permissionNames));
+
+            // Everyone else loses them. SuperAdmin is exempt: it holds the full
+            // catalog by design and bypasses the checks anyway.
+            $others = Role::where('guard_name', self::GUARD)
+                ->whereNotIn('name', [$roleName, ...self::ROLES])
+                ->get();
+
+            foreach ($others as $role) {
+                $revoked = $role->permissions
+                    ->pluck('name')
+                    ->intersect($permissionNames);
+
+                if ($revoked->isEmpty()) {
+                    continue;
+                }
+
+                $role->revokePermissionTo($revoked->all());
+                $this->command->line("  − [{$role->name}] revoked: " . $revoked->implode(', '));
+            }
+        }
     }
 
     /**
