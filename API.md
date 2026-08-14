@@ -1138,30 +1138,60 @@ GET {{base_url}}/api/availability/provider?service_id={{service_id}}&provider_id
   "success": true,
   "message": "Provider availability retrieved successfully",
   "data": {
+    "is_available": true,
+    "reason_code": "available",
+    "unavailable_reason": null,
+    "leave_start_date": null,
+    "leave_end_date": null,
+    "provider": { "id": 3, "name": "Sarah Johnson" },
+    "service": { "id": 1, "name": "Hair Cut", "duration_minutes": 30 },
     "date": "2026-03-16",
-    "provider_id": 3,
-    "service_id": 1,
+    "day_name": "Monday",
+    "total_slots": 6,
     "available_slots": [
-      "09:00",
-      "09:30",
-      "10:00",
-      "10:30",
-      "14:00",
-      "14:30"
-    ],
-    "working_hours": {
-      "start": "09:00",
-      "end": "17:00"
-    }
+      { "start_time": "09:00", "end_time": "09:30", "display_time": "09:00 AM", "duration_minutes": 30 }
+    ]
   }
 }
 ```
+
+> ⚠️ **مهم للتطبيق:** الاستجابة تكون دائماً `200` حتى لو كان المزود **غير متاح**. لا تعتمد على status code وحده — اعتمد على `is_available`.
+> إذا كانت `is_available = false` يجب **عدم عرض المزود كمتاح** ولا عرض أي أوقات له.
+
+**Success Response — 200 (المزود في إجازة):**
+```json
+{
+  "success": true,
+  "message": "Provider availability retrieved successfully",
+  "data": {
+    "is_available": false,
+    "reason_code": "on_leave",
+    "unavailable_reason": "Provider 'Sarah Johnson' is on leave on 2026-03-16",
+    "leave_start_date": "2026-03-14",
+    "leave_end_date": "2026-03-20",
+    "date": "2026-03-16",
+    "total_slots": 0,
+    "available_slots": []
+  }
+}
+```
+
+**قيم `reason_code`:**
+
+| القيمة             | المعنى                                                | يُعرض كمتاح؟ |
+| ------------------ | ----------------------------------------------------- | ------------ |
+| `available`        | المزود متاح وهناك أوقات شاغرة                          | ✅            |
+| `on_leave`         | المزود في **إجازة يوم كامل** في هذا التاريخ            | ❌            |
+| `not_working_day`  | لا يوجد جدول عمل للمزود في هذا اليوم من الأسبوع        | ❌            |
+| `fully_booked`     | يوم عمل عادي لكن كل الأوقات محجوزة أو مغطاة بإجازة ساعية | ❌            |
+
+> **الإجازة الساعية (hourly):** لا تُخفي المزود بالكامل — تُحذف فقط الأوقات المتداخلة معها من `available_slots`. إذا غطّت الإجازة الساعية يوم العمل كاملاً يصبح `is_available = false` مع `reason_code = fully_booked`.
 
 **Error Response — 400:**
 ```json
 {
   "success": false,
-  "message": "Provider 'Sarah Johnson' does not work on Sunday"
+  "message": "Provider does not offer this service"
 }
 ```
 
@@ -1198,22 +1228,38 @@ GET {{base_url}}/api/availability/calendar?service_id={{service_id}}&provider_id
   "success": true,
   "message": "Availability calendar retrieved successfully",
   "data": {
-    "2026-03-16": {
-      "available": true,
-      "slots_count": 8
+    "service_id": 1,
+    "provider_id": 3,
+    "period": {
+      "start_date": "2026-03-16",
+      "end_date": "2026-03-31",
+      "month_name": "March 2026"
     },
-    "2026-03-17": {
-      "available": true,
-      "slots_count": 12
-    },
-    "2026-03-18": {
-      "available": false,
-      "slots_count": 0,
-      "reason": "Day off"
-    }
+    "calendar": [
+      {
+        "date": "2026-03-16",
+        "day_name": "Mon",
+        "day_number": 16,
+        "is_today": false,
+        "is_available": true,
+        "reason_code": "available",
+        "available_slots_count": 8
+      },
+      {
+        "date": "2026-03-17",
+        "day_name": "Tue",
+        "day_number": 17,
+        "is_today": false,
+        "is_available": false,
+        "reason_code": "on_leave",
+        "available_slots_count": 0
+      }
+    ]
   }
 }
 ```
+
+> `reason_code` يستخدم نفس القيم الموضحة في [Availability - Provider Slots](#1-availability---provider-slots). الأيام التي يكون فيها `is_available = false` يجب أن تظهر **معطّلة** في التقويم.
 
 **Error Response — 400 (نطاق أكبر من 31 يوماً):**
 ```json

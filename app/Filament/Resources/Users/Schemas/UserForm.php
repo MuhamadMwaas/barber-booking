@@ -41,13 +41,12 @@ class UserForm
                             ->maxSize(2048)
                             ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg'])
                             ->helperText(__('resources.user.profile_image_helper'))
-                            ->afterStateHydrated(function (FileUpload $component, $state, $record) {
-                                // Only set the existing image when initially loading the form
-                                if ($record && $record->profile_image && $record->profile_image->path && !$state) {
-                                    $component->state([$record->profile_image->path]);
-                                }
-                            })
-                            ->saveRelationshipsUsing(null)
+                            // The existing image is hydrated by the Edit page's
+                            // mutateFormDataBeforeFill(). Do not override
+                            // afterStateHydrated() here: that replaces Filament's own
+                            // hook, which keys the state by upload UUID and drops paths
+                            // that no longer exist on disk. Without it a stale path
+                            // survives alongside a new upload and gets picked instead.
                             ->dehydrated(false)
                             ->columnSpanFull(),
 

@@ -22,6 +22,12 @@ class ServiceAvailabilityService
 
     private const CACHE_DURATION = 1;
 
+    // Machine readable reasons returned to the app when a provider has no slots.
+    public const REASON_AVAILABLE = 'available';
+    public const REASON_NOT_WORKING_DAY = 'not_working_day';
+    public const REASON_ON_LEAVE = 'on_leave';
+    public const REASON_FULLY_BOOKED = 'fully_booked';
+
     /**
      * @param int $serviceId
      * @param string $date
@@ -45,17 +51,21 @@ class ServiceAvailabilityService
 
             // get free times for each providers
             $providersWithSlots = $providers->map(function ($provider) use ($service, $carbonDate) {
+                $availability = $this->getProviderDayAvailability($provider, $service, $carbonDate);
+
                 return [
                     'provider_id' => $provider->id,
                     'provider_name' => $provider->full_name,
                     'provider_avatar' => $provider->avatar,
                     'branch' => $this->formatBranchData($provider->branch),
                     'service_pricing' => $this->getProviderServicePricing($provider, $service),
-                    'available_slots' => $this->getProviderAvailableSlots($provider, $service, $carbonDate),
+                    'is_available' => $availability['is_available'],
+                    'reason_code' => $availability['reason_code'],
+                    'available_slots' => $availability['available_slots'],
                 ];
             })->filter(function ($provider) {
-
-                return count($provider['available_slots']) > 0;
+                // Providers on leave / off duty / fully booked are never listed as bookable.
+                return $provider['is_available'] && count($provider['available_slots']) > 0;
             })->values();
 
             return [
@@ -96,9 +106,15 @@ class ServiceAvailabilityService
                 throw new \InvalidArgumentException('Provider does not offer this service');
             }
 
-            $slots = $this->getProviderAvailableSlots($provider, $service, $carbonDate);
+            $availability = $this->getProviderDayAvailability($provider, $service, $carbonDate);
+            $slots = $availability['available_slots'];
 
             return [
+                'is_available' => $availability['is_available'],
+                'reason_code' => $availability['reason_code'],
+                'unavailable_reason' => $availability['reason'],
+                'leave_start_date' => $availability['leave_start_date'] ?? null,
+                'leave_end_date' => $availability['leave_end_date'] ?? null,
                 'provider' => [
                     'id' => $provider->id,
                     'name' => $provider->full_name,
@@ -158,11 +174,13 @@ class ServiceAvailabilityService
                 if ($providerId) {
                     $dayData = $this->getProviderAvailableSlotsByDate($serviceId, $providerId, $dateStr);
                     $availableSlots = $dayData['total_slots'];
+                    $reasonCode = $dayData['reason_code'];
                 } else {
                     $dayData = $this->getAvailableSlotsByDate($serviceId, $dateStr, $branchId);
                     $availableSlots = $dayData['providers']->sum(function ($provider) {
                         return count($provider['available_slots']);
                     });
+                    $reasonCode = $availableSlots > 0 ? self::REASON_AVAILABLE : self::REASON_FULLY_BOOKED;
                 }
 
                 $calendar[] = [
@@ -171,6 +189,7 @@ class ServiceAvailabilityService
                     'day_number' => $current->day,
                     'is_today' => $current->isToday(),
                     'is_available' => $availableSlots > 0,
+                    'reason_code' => $reasonCode,
                     'available_slots_count' => $availableSlots,
                 ];
             }
@@ -191,16 +210,18 @@ class ServiceAvailabilityService
     }
 
     /**
+     * Resolve a provider's availability for a single day, including WHY the
+     * provider is unavailable so the app can hide providers that are on leave
+     * instead of treating an empty slot list as a bookable provider.
+     *
      * @param User $provider
      * @param Service $service
      * @param Carbon $date
-     * @return array
+     * @return array{is_available: bool, reason_code: string, reason: string|null, available_slots: array}
      */
-    private function getProviderAvailableSlots(User $provider, Service $service, Carbon $date): array
+    private function getProviderDayAvailability(User $provider, Service $service, Carbon $date): array
     {
         $dayOfWeek = $date->dayOfWeek;
-        $dateStr = $date->format('Y-m-d');
-
 
         $workSchedule = ProviderScheduledWork::where('user_id', $provider->id)
             ->where('day_of_week', $dayOfWeek)
@@ -209,23 +230,62 @@ class ServiceAvailabilityService
             ->first();
 
         if (!$workSchedule) {
-            return [];
+            return $this->unavailable(
+                self::REASON_NOT_WORKING_DAY,
+                "Provider '{$provider->full_name}' does not work on " . $date->format('l')
+            );
         }
 
-        if ($this->hasFullDayTimeOff($provider, $date)) {
-            return [];
+        $fullDayTimeOff = $this->getFullDayTimeOff($provider, $date);
+
+        if ($fullDayTimeOff) {
+            return $this->unavailable(
+                self::REASON_ON_LEAVE,
+                "Provider '{$provider->full_name}' is on leave on " . $date->format('Y-m-d'),
+                [
+                    'leave_start_date' => Carbon::parse($fullDayTimeOff->start_date)->format('Y-m-d'),
+                    'leave_end_date' => Carbon::parse($fullDayTimeOff->end_date ?? $fullDayTimeOff->start_date)->format('Y-m-d'),
+                ]
+            );
         }
 
         // Get service duration
         $serviceDuration = $this->getEffectiveDuration($provider, $service);
 
         // Generate time slots
-        return $this->generateTimeSlots(
+        $slots = $this->generateTimeSlots(
             $provider,
             $date,
             $workSchedule,
             $serviceDuration
         );
+
+        if (empty($slots)) {
+            return $this->unavailable(
+                self::REASON_FULLY_BOOKED,
+                "Provider '{$provider->full_name}' has no free slots on " . $date->format('Y-m-d')
+            );
+        }
+
+        return [
+            'is_available' => true,
+            'reason_code' => self::REASON_AVAILABLE,
+            'reason' => null,
+            'available_slots' => $slots,
+        ];
+    }
+
+    /**
+     * Build an "unavailable" availability payload.
+     */
+    private function unavailable(string $reasonCode, string $reason, array $extra = []): array
+    {
+        return array_merge([
+            'is_available' => false,
+            'reason_code' => $reasonCode,
+            'reason' => $reason,
+            'available_slots' => [],
+        ], $extra);
     }
 
     /**
@@ -246,8 +306,8 @@ class ServiceAvailabilityService
         $slots = [];
         $dateStr = $date->format('Y-m-d');
 
-        $startTime = Carbon::parse($dateStr . ' ' . $workSchedule->start_time);
-        $endTime = Carbon::parse($dateStr . ' ' . $workSchedule->end_time);
+        $startTime = $this->combineDateAndTime($date, $workSchedule->start_time);
+        $endTime = $this->combineDateAndTime($date, $workSchedule->end_time);
 
         // $breakStart = $this->calculateBreakStart($startTime, $endTime, $workSchedule->break_minutes);
         // $breakEnd = $breakStart->copy()->addMinutes($workSchedule->break_minutes);
@@ -306,15 +366,16 @@ class ServiceAvailabilityService
     }
 
     /**
-     * Check if provider has full day time off
+     * Get the full day time off covering this date, if any.
+     * A missing end_date is treated as a single day leave.
      */
-    private function hasFullDayTimeOff(User $provider, Carbon $date): bool
+    private function getFullDayTimeOff(User $provider, Carbon $date): ?ProviderTimeOff
     {
         return ProviderTimeOff::where('user_id', $provider->id)
             ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
-            ->where('start_date', '<=', $date->format('Y-m-d'))
-            ->where('end_date', '>=', $date->format('Y-m-d'))
-            ->exists();
+            ->whereDate('start_date', '<=', $date->format('Y-m-d'))
+            ->whereRaw('COALESCE(end_date, start_date) >= ?', [$date->format('Y-m-d')])
+            ->first();
     }
 
     /**
@@ -338,7 +399,8 @@ class ServiceAvailabilityService
     {
         return ProviderTimeOff::where('user_id', $provider->id)
             ->where('type', ProviderTimeOff::TYPE_HOURLY)
-            ->whereDate('start_date', $date)
+            ->whereDate('start_date', '<=', $date->format('Y-m-d'))
+            ->whereRaw('COALESCE(end_date, start_date) >= ?', [$date->format('Y-m-d')])
             ->select('start_time', 'end_time')
             ->get();
     }
@@ -364,8 +426,12 @@ class ServiceAvailabilityService
 
         // Check hourly time offs
         foreach ($timeOffs as $timeOff) {
-            $timeOffStart = Carbon::parse($slotStart->format('Y-m-d') . ' ' . $timeOff->start_time);
-            $timeOffEnd = Carbon::parse($slotStart->format('Y-m-d') . ' ' . $timeOff->end_time);
+            if ($timeOff->start_time === null || $timeOff->end_time === null) {
+                continue;
+            }
+
+            $timeOffStart = $this->combineDateAndTime($slotStart, $timeOff->start_time);
+            $timeOffEnd = $this->combineDateAndTime($slotStart, $timeOff->end_time);
 
             if ($this->overlapsWithPeriod($slotStart, $slotEnd, $timeOffStart, $timeOffEnd)) {
                 return true;
@@ -373,6 +439,26 @@ class ServiceAvailabilityService
         }
 
         return false;
+    }
+
+    /**
+     * Combine a date with a time value.
+     *
+     * `provider_time_offs.start_time` / `end_time` are cast to Carbon on the
+     * model, so concatenating them into a date string produced a "double date
+     * specification" parse error. Always normalise the time part first.
+     *
+     * @param Carbon $date
+     * @param \DateTimeInterface|string $time
+     * @return Carbon
+     */
+    private function combineDateAndTime(Carbon $date, $time): Carbon
+    {
+        $timeString = $time instanceof \DateTimeInterface
+            ? $time->format('H:i:s')
+            : (string) $time;
+
+        return Carbon::parse($date->format('Y-m-d') . ' ' . $timeString);
     }
 
     /**

@@ -53,7 +53,19 @@ class File extends Model
     {
         /** @var FilesystemAdapter $storage */
         $storage = Storage::disk($this->disk);
-        return $storage->url($this->path);
+        $url = $storage->url($this->path);
+
+        // Some files keep a fixed name when replaced (service images are stored as
+        // "<service name>_<id>.<ext>"), so the URL of a new image is identical to
+        // the old one. Nginx sends no Cache-Control for these, which lets the
+        // browser serve its cached copy without revalidating — the new picture
+        // shows up on the edit page but the list keeps the old one. Tying the URL
+        // to the record's timestamp gives every replacement a fresh address.
+        if ($this->updated_at) {
+            $url .= (str_contains($url, '?') ? '&' : '?') . 'v=' . $this->updated_at->timestamp;
+        }
+
+        return $url;
     }
     public static function booted()
     {

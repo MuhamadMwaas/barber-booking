@@ -11,6 +11,8 @@ class EditCustomer extends EditUser
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
+        // parent:: also hydrates the profile picture into the upload field.
+        $data = parent::mutateFormDataBeforeFill($data);
         $data['role'] = 'customer';
 
         return $data;
@@ -18,8 +20,10 @@ class EditCustomer extends EditUser
 
     protected function afterSave(): void
     {
-        $this->record->syncRoles(['customer']);
+        // parent:: syncs the role from $data, stores the uploaded picture and
+        // refreshes the upload field with its permanent path.
+        $this->data['role'] = 'customer';
 
-        $this->handleProfileImageUpload();
+        parent::afterSave();
     }
 }

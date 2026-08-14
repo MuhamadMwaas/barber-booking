@@ -211,16 +211,8 @@ class User extends Authenticatable implements FilamentUser, HasName
 
     public function getProfileImageUrlAttribute(): ?string
     {
-        if ($this->profile_image) {
-            $url = $this->profile_image->urlFile();
-
-            if ($this->profile_image->updated_at) {
-                return $url . '?v=' . $this->profile_image->updated_at->timestamp;
-            }
-
-            return $url;
-        }
-        return null;
+        // urlFile() already appends the cache-busting version parameter.
+        return $this->profile_image?->urlFile();
     }
 
     /**
@@ -248,6 +240,13 @@ class User extends Authenticatable implements FilamentUser, HasName
         }
 
         $image->storeAs($dir, $fileName, 'public');
+
+        // The 'public' disk is configured with throw => false, so a failed write
+        // returns quietly. Without this check the File row below would point at a
+        // path that does not exist and every request for it would 404.
+        if (! Storage::disk('public')->exists($path)) {
+            throw new \RuntimeException("Failed to write profile image to {$path}.");
+        }
 
         $file = $this->profile_image()->create([
             'name'      => $name . '_' . $this->id,
