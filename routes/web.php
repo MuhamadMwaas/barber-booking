@@ -3,7 +3,6 @@
 use App\Http\Controllers\Api\SalonScheduleController;
 use App\Http\Controllers\Api\SocialApiAuthController;
 use App\Http\Controllers\AppointmentPrintController;
-use App\Http\Controllers\DailyReportController;
 use App\Http\Middleware\EnsureStaffDashboardAccess;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\GoogleAuthController;
@@ -26,39 +25,39 @@ use Spatie\Permission\Models\Permission;
 |
 */
 
-// Route::domain('dashboard.lookupfriseur.com')
-//     ->middleware([EnsureStaffDashboardAccess::class])
-//     ->group(function () {
+Route::domain('dashboard.lookupfriseur.com')
+    ->middleware([EnsureStaffDashboardAccess::class])
+    ->group(function () {
 
-//         Route::livewire('/', \App\Livewire\StaffDashboard::class)
-//             ->name('staff.dashboard');
+        Route::livewire('/', \App\Livewire\StaffDashboard::class)
+            ->name('staff.dashboard');
 
-//         Route::livewire('/customers', \App\Livewire\CustomerLookup::class)
-//             ->name('staff.dashboard.customers');
+        Route::livewire('/customers', \App\Livewire\CustomerLookup::class)
+            ->name('staff.dashboard.customers');
 
-//         Route::livewire('/stats', \App\Livewire\StaffStats::class)
-//             ->name('staff.dashboard.stats');
+        Route::livewire('/stats', \App\Livewire\StaffStats::class)
+            ->name('staff.dashboard.stats');
 
-//         Route::livewire('/reports', \App\Livewire\StaffReports::class)
-//             ->name('staff.dashboard.reports');
+        Route::livewire('/reports', \App\Livewire\StaffReports::class)
+            ->name('staff.dashboard.reports');
 
-//         // The printable Z-Report document itself (opens in its own tab).
-//         Route::get('/report', [DailyReportController::class, 'show'])
-//             ->name('staff.dashboard.report.print');
+        // The printable Z-Report document itself (opens in its own tab).
+        Route::get('/report', [DailyReportController::class, 'show'])
+            ->name('staff.dashboard.report.print');
 
-//         Route::get('/language/{code}', function (string $code) {
-//             $language = Language::query()
-//                 ->where('is_active', true)
-//                 ->where('code', $code)
-//                 ->firstOrFail();
+        Route::get('/language/{code}', function (string $code) {
+            $language = Language::query()
+                ->where('is_active', true)
+                ->where('code', $code)
+                ->firstOrFail();
 
-//             session([
-//                 'locale' => $language->code,
-//             ]);
+            session([
+                'locale' => $language->code,
+            ]);
 
-//             return redirect()->back();
-//         })->name('staff.dashboard.language');
-//     });
+            return redirect()->back();
+        })->name('staff.dashboard.language');
+    });
 
 
 
