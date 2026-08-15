@@ -1106,9 +1106,139 @@ GET {{base_url}}/api/services/{{service_id}}
 
 > Public endpoints — لا تتطلب Authentication
 
+### ⏱️ Rate Limiting
+
+هذه النقاط **عامة** ومكلفة على قاعدة البيانات، لذلك عليها حد لكل **عنوان IP**:
+
+| Endpoint | الحد | لماذا |
+| --- | --- | --- |
+| `GET /availability/service` | **60** / دقيقة | استعلام ليوم واحد |
+| `GET /availability/provider` | **60** / دقيقة | استعلام لمزوّد واحد ويوم واحد |
+| `GET /availability/calendar` | **30** / دقيقة | الأثقل — يضرب تكلفة اليوم الواحد بعدد أيام النطاق (حتى 31) |
+
+**الحدود مستقلة لكل مسار** — استهلاك حد التقويم لا يؤثر على المسارين الآخرين.
+
+كل استجابة تحمل الهيدرز التالية، استخدمها بدل التخمين:
+
+```
+X-RateLimit-Limit: 30
+X-RateLimit-Remaining: 12
+```
+
+**عند تجاوز الحد — `429 Too Many Requests`:**
+
+```json
+{ "message": "Too Many Attempts." }
+```
+
+مع هيدر `Retry-After` بالثواني (و `X-RateLimit-Reset` كـ Unix timestamp).
+
+**توصيات للتطبيق:**
+
+- لا تستدعِ `/availability/service` عند كل ضغطة على منتقي التاريخ — انتظر استقرار الاختيار (debounce ~300ms).
+- خبّئ نتيجة اليوم محلياً لدقيقة واحدة على الأقل (السيرفر نفسه يخبّئها دقيقة).
+- عند `429` اعرض رسالة لطيفة وأعد المحاولة بعد `Retry-After`، **ولا تعد المحاولة فوراً في حلقة**.
+- لا تجلب التقويم لعدة خدمات بالتوازي عند فتح الشاشة — الحد 30/دقيقة يُستهلك بسرعة.
+
 ---
 
-### 1. Availability - Provider Slots
+---
+
+### 1. Availability - Service Providers (المزوّدون المتاحون لخدمة في يوم)
+
+```
+GET /api/availability/service
+```
+
+**الوصف:** تعطيه **الخدمة والتاريخ فقط** فيرجّع لك **كل المزوّدين المتاحين** لتلك الخدمة في ذلك اليوم، ومع كل مزوّد أوقاته الشاغرة وسعره وفرعه — في طلب واحد.
+
+> 💡 يغني عن النمط القديم: `GET /providers?service_id=X` ثم استدعاء `/availability/provider` لكل مزوّد على حدة (N+1 طلب).
+
+**Authentication:** ❌ لا يتطلب
+
+**Query Parameters:**
+
+| Parameter    | Type    | Required | Description                                        |
+| ------------ | ------- | -------- | -------------------------------------------------- |
+| `service_id` | integer | ✅        | معرف الخدمة                                        |
+| `date`       | string  | ✅        | التاريخ بصيغة `Y-m-d` — اليوم أو مستقبلاً (يوم واحد) |
+| `branch_id`  | integer | ❌        | فلترة المزوّدين حسب الفرع                           |
+
+**Example Request:**
+```
+GET {{base_url}}/api/availability/service?service_id=3&date=2026-08-15&branch_id=1
+```
+
+**Success Response — 200:**
+```json
+{
+  "success": true,
+  "message": "Service availability retrieved successfully",
+  "data": {
+    "service": {
+      "id": 3,
+      "name": "Skin Fade Haircut",
+      "duration_minutes": 50,
+      "formatted_duration": "50m"
+    },
+    "date": "2026-08-15",
+    "day_name": "Saturday",
+    "formatted_date": "Saturday, August 15, 2026",
+    "is_today": true,
+    "is_tomorrow": false,
+    "last_bookable_date": "2026-08-25",
+    "total_providers": 2,
+    "providers": [
+      {
+        "provider_id": 3,
+        "provider_name": "Sarah Johnson",
+        "provider_avatar": "http://localhost:8000/storage/...",
+        "branch": { "id": 1, "name": "Main Branch" },
+        "service_pricing": {
+          "original_price": 35.0,
+          "effective_price": 35.0,
+          "has_discount": false,
+          "discount_amount": 0,
+          "discount_percentage": 0,
+          "currency": "EUR",
+          "formatted_price": "35.00 EUR"
+        },
+        "is_available": true,
+        "reason_code": "available",
+        "available_slots": [
+          {
+            "start_time": "10:00",
+            "end_time": "10:50",
+            "start_time_formatted": "10:00 AM",
+            "end_time_formatted": "10:50 AM",
+            "display_time": "10:00 AM",
+            "duration_minutes": 50
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**سلوك مهم:**
+
+- **المتاحون فقط.** أي مزوّد في إجازة، أو لا يعمل ذلك اليوم، أو كل أوقاته محجوزة — **لا يظهر في `providers` إطلاقاً**. لذلك كل عنصر في المصفوفة قابل للحجز فعلاً، و `is_available` فيه دائماً `true` (موجود للاتساق مع باقي endpoints).
+- `total_providers` = عدد المتاحين، وقد يكون `0` (يوم مغلق أو خارج نافذة الحجز) — والاستجابة تبقى `200`.
+- `last_bookable_date` = آخر تاريخ يقبله الحجز (`today + max_booking_days`). استخدمه لتعطيل التواريخ الأبعد في منتقي التاريخ.
+- الأوقات مُرتّبة تصاعدياً، وكلها تحترم قيود الحجز (انظر التنبيه أسفل القسم).
+
+**Error Response — 422 (تاريخ في الماضي أو صيغة خاطئة):**
+```json
+{
+  "message": "The date field must be a date after or equal to today.",
+  "errors": { "date": ["The date field must be a date after or equal to today."] }
+}
+```
+
+---
+
+### 2. Availability - Provider Slots
 
 ```
 GET /api/availability/provider
@@ -1178,14 +1308,32 @@ GET {{base_url}}/api/availability/provider?service_id={{service_id}}&provider_id
 
 **قيم `reason_code`:**
 
-| القيمة             | المعنى                                                | يُعرض كمتاح؟ |
-| ------------------ | ----------------------------------------------------- | ------------ |
-| `available`        | المزود متاح وهناك أوقات شاغرة                          | ✅            |
-| `on_leave`         | المزود في **إجازة يوم كامل** في هذا التاريخ            | ❌            |
-| `not_working_day`  | لا يوجد جدول عمل للمزود في هذا اليوم من الأسبوع        | ❌            |
-| `fully_booked`     | يوم عمل عادي لكن كل الأوقات محجوزة أو مغطاة بإجازة ساعية | ❌            |
+| القيمة                     | المعنى                                                        | يُعرض كمتاح؟ |
+| -------------------------- | ------------------------------------------------------------- | ------------ |
+| `available`                | المزود متاح وهناك أوقات شاغرة                                  | ✅            |
+| `on_leave`                 | المزود في **إجازة يوم كامل** في هذا التاريخ                    | ❌            |
+| `not_working_day`          | لا يوجد جدول عمل للمزود في هذا اليوم من الأسبوع                | ❌            |
+| `fully_booked`             | يوم عمل عادي لكن كل الأوقات محجوزة أو مغطاة بإجازة ساعية         | ❌            |
+| `outside_booking_window`   | التاريخ أبعد من `max_booking_days` — **لا يمكن حجزه أصلاً**     | ❌            |
 
 > **الإجازة الساعية (hourly):** لا تُخفي المزود بالكامل — تُحذف فقط الأوقات المتداخلة معها من `available_slots`. إذا غطّت الإجازة الساعية يوم العمل كاملاً يصبح `is_available = false` مع `reason_code = fully_booked`.
+
+> **`outside_booking_window`:** يأتي مع حقل `last_bookable_date`. يجب أن تظهر هذه التواريخ **معطّلة** في منتقي التاريخ لا "محجوزة بالكامل".
+
+---
+
+### ⚠️ ضمانة الاتساق مع الحجز — اقرأها قبل بناء شاشة الحجز
+
+كل endpoints التوفّر تطبّق **نفس محددات الحجز** التي يطبّقها `POST /api/bookings`، فلا يُعرض أبداً وقت سيرفضه الحجز لاحقاً:
+
+| المحدِّد | السلوك في التوفّر |
+| --- | --- |
+| `book_buffer` | أي وقت يبدأ قبل `now + book_buffer` **يُحذف** من `available_slots`. لو كانت المهلة كبيرة بما يكفي لتمتد إلى الغد، تُحذف أوقات الغد أيضاً. |
+| `max_booking_days` | أي تاريخ بعد `today + max_booking_days` يرجع `is_available = false` و `reason_code = outside_booking_window`. |
+
+**الأوقات مبنية على شبكة الدوام:** `shift_start + k × duration`. مثال — دوام يبدأ 10:00 وخدمة مدتها 50 دقيقة: `10:00, 10:50, 11:40, 12:30…`. الشبكة **نفسها في كل الأيام** بما فيها اليوم الحالي؛ الفرق الوحيد في اليوم الحالي أن الأوقات التي مضت (أو الأقرب من `book_buffer`) محذوفة.
+
+> **باقي القيود** — الحد اليومي للحجوزات (`max_daily_bookings`)، ومنع تكرار نفس الخدمة، وتسلسل الخدمات في الحجز متعدد الخدمات — تخصّ **الطلب نفسه** لا توفّر المزوّد، ولا يمكن للتوفّر التنبؤ بها. تعامل مع `422` من `POST /bookings` كالمعتاد.
 
 **Error Response — 400:**
 ```json
@@ -1197,7 +1345,7 @@ GET {{base_url}}/api/availability/provider?service_id={{service_id}}&provider_id
 
 ---
 
-### 2. Availability - Calendar
+### 3. Availability - Calendar
 
 ```
 GET /api/availability/calendar
@@ -1259,7 +1407,9 @@ GET {{base_url}}/api/availability/calendar?service_id={{service_id}}&provider_id
 }
 ```
 
-> `reason_code` يستخدم نفس القيم الموضحة في [Availability - Provider Slots](#1-availability---provider-slots). الأيام التي يكون فيها `is_available = false` يجب أن تظهر **معطّلة** في التقويم.
+> `reason_code` يستخدم نفس القيم الموضحة في [Availability - Provider Slots](#2-availability---provider-slots). الأيام التي يكون فيها `is_available = false` يجب أن تظهر **معطّلة** في التقويم.
+>
+> عند استدعاء التقويم **بدون** `provider_id`، الأيام خارج نافذة الحجز ترجع `outside_booking_window` بدل `fully_booked`.
 
 **Error Response — 400 (نطاق أكبر من 31 يوماً):**
 ```json

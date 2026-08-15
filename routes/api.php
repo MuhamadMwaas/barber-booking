@@ -121,8 +121,26 @@ Route::get('/sliders/{key}', [SliderController::class, 'show'])
 Route::get('/providers', [ProvidersController::class, 'index']);
 Route::get('/providers/{id}', [ProvidersController::class, 'show']);
 
-Route::get('/availability/provider', [AvailabilityController::class, 'getProviderAvailability']);
-Route::get('/availability/calendar', [AvailabilityController::class, 'getAvailabilityCalendar']);
+// Availability lookups are public AND the most expensive reads in the API: every
+// provider × day pair runs its own schedule/leave/appointment queries, so a single
+// calendar call without `provider_id` fans out to hundreds of queries. Unthrottled
+// that is a cheap way to flatten the database, hence a per-IP limit on each.
+//
+// The limits are deliberately generous rather than tight: these routes are
+// unauthenticated, so the throttle key is the IP address, and mobile carriers put
+// large numbers of real customers behind a single CGNAT address. A browsing user
+// needs only a handful of calls per minute; the cap is there to stop scripts, not
+// to police normal use.
+Route::get('/availability/service', [AvailabilityController::class, 'getServiceAvailability'])
+    ->middleware('throttle:40,1')
+    ->name('api.availability.service');
+Route::get('/availability/provider', [AvailabilityController::class, 'getProviderAvailability'])
+    ->middleware('throttle:40,1')
+    ->name('api.availability.provider');
+// Half the allowance: this one multiplies the per-day cost by up to 31 days.
+Route::get('/availability/calendar', [AvailabilityController::class, 'getAvailabilityCalendar'])
+    ->middleware('throttle:30,1')
+    ->name('api.availability.calendar');
 
 // Services Routes
 Route::prefix('services')->name('services.')->group(function () {

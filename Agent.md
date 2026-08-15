@@ -419,7 +419,7 @@ All booking validation rules, called by BookingService.
 Calculates available time slots for the customer-facing booking interface.
 
 **`getAvailableSlotsByDate(serviceId, date, branchId)`**
-Returns all providers who offer the service with their available time slots for the given date.
+Returns all providers who offer the service with their available time slots for the given date. Providers with no bookable slot (on leave, not a work day, fully booked, or the date is past the booking window) are **filtered out entirely**. Exposed as `GET /api/availability/service`.
 
 **`getProviderAvailableSlotsByDate(serviceId, providerId, date)`**
 Returns available slots for a specific provider on a specific date.
@@ -429,16 +429,19 @@ Returns a calendar view showing which dates have available slots (max 31 days).
 
 **Slot Generation Algorithm (`generateTimeSlots`):**
 1. Get provider's work schedule for the day (`ProviderScheduledWork`)
-2. If no schedule or full-day time off → return empty
-3. Start from shift start time
-4. For today: skip past time slots, align to next service-duration boundary
+2. If date is past `today + max_booking_days` → `outside_booking_window`, return empty
+3. If no schedule or full-day time off → return empty
+4. Start from shift start time — the grid is always `shift_start + k × duration`, **identical on every day including today**
 5. Get existing appointments and hourly time offs
 6. Iterate: for each potential slot (start → start + service_duration):
+   - Skip if it starts before `now + book_buffer` (this is what excludes today's past slots)
    - Check no overlap with existing appointments
    - Check no overlap with hourly time offs
    - If clear → add to available slots
 7. Advance by `service_duration + SLOT_BUFFER` (buffer is currently 0)
 8. Stop when remaining time < service_duration
+
+**Booking-constraint parity:** `book_buffer` and `max_booking_days` are enforced here as well as in `BookingValidationService`, so availability never offers a slot the booking call would reject. `max_daily_bookings`, duplicate-service and sequential-timing rules are request-level and remain booking-only.
 
 **Conflict Detection (`hasConflict`):** Two periods overlap if `start1 < end2 AND start2 < end1`
 
@@ -540,8 +543,11 @@ Simple wrapper around `get_setting()` helper. Reads from `salon_settings` table.
 | GET | /api/services/{id} | ServicesController@show | Service details |
 | GET | /api/providers | ProvidersController@index | List providers |
 | GET | /api/providers/{id} | ProvidersController@show | Provider details |
-| GET | /api/availability/provider | AvailabilityController | Available slots for a provider/service/date |
-| GET | /api/availability/calendar | AvailabilityController | Calendar view of availability |
+| GET | /api/availability/service | AvailabilityController | **All available providers** for a service on one date, each with slots + pricing (throttle 60/min) |
+| GET | /api/availability/provider | AvailabilityController | Available slots for a provider/service/date (throttle 60/min) |
+| GET | /api/availability/calendar | AvailabilityController | Calendar view of availability (throttle 30/min — heaviest) |
+
+> **Rate limiting:** the availability routes are the only public reads that are throttled, because each provider × day pair issues its own schedule/leave/appointment queries — a 31-day calendar without `provider_id` fans out to ~800 queries. Limits are per IP (these routes are unauthenticated) and deliberately generous, since carrier CGNAT puts many real customers behind one address. The other public reads (`/services`, `/providers`, `/sliders`, `/about-us`) are still unthrottled.
 
 ### 5.2 Auth Endpoints
 

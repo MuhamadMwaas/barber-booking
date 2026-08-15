@@ -27,6 +27,40 @@ class ServiceAvailabilityService
     public const REASON_NOT_WORKING_DAY = 'not_working_day';
     public const REASON_ON_LEAVE = 'on_leave';
     public const REASON_FULLY_BOOKED = 'fully_booked';
+    public const REASON_OUTSIDE_BOOKING_WINDOW = 'outside_booking_window';
+
+    /**
+     * The two booking limits this service has to honour so that it never offers a
+     * slot {@see \App\Services\BookingValidationService} would go on to reject:
+     *
+     *  - `book_buffer`      minimum minutes between "now" and the slot start;
+     *  - `max_booking_days` how far ahead a date may be booked at all.
+     *
+     * Both are read per call rather than cached on the instance because a salon
+     * admin can change them at any moment from the settings screen.
+     */
+    private function bookBufferMinutes(): int
+    {
+        return max(0, (int) get_setting('book_buffer', 60));
+    }
+
+    /**
+     * The earliest instant a slot may start. Slots before it are dropped because
+     * the booking request would fail the minimum-advance check.
+     */
+    private function earliestBookableTime(): Carbon
+    {
+        return Carbon::now()->addMinutes($this->bookBufferMinutes());
+    }
+
+    /**
+     * The last date that may be booked. Mirrors the `max_booking_days` guard in
+     * BookingValidationService::validateBasicData().
+     */
+    public function lastBookableDate(): Carbon
+    {
+        return Carbon::today()->addDays(max(0, (int) get_setting('max_booking_days', 10)));
+    }
 
     /**
      * @param int $serviceId
@@ -69,11 +103,20 @@ class ServiceAvailabilityService
             })->values();
 
             return [
+                'service' => [
+                    'id' => $service->id,
+                    'name' => $service->name,
+                    'duration_minutes' => $service->duration_minutes,
+                    'formatted_duration' => $this->formatDuration($service->duration_minutes),
+                ],
                 'date' => $carbonDate->format('Y-m-d'),
                 'day_name' => $carbonDate->format('l'),
                 'formatted_date' => $carbonDate->format('l, F d, Y'),
                 'is_today' => $carbonDate->isToday(),
                 'is_tomorrow' => $carbonDate->isTomorrow(),
+                // Surfaced so the app can grey out dates the booking call would
+                // refuse instead of discovering the limit only on submit.
+                'last_bookable_date' => $this->lastBookableDate()->format('Y-m-d'),
                 'total_providers' => $providersWithSlots->count(),
                 'providers' => $providersWithSlots,
             ];
@@ -166,6 +209,7 @@ class ServiceAvailabilityService
 
         $calendar = [];
         $current = $start->copy();
+        $lastBookableDate = $this->lastBookableDate();
 
         while ($current->lte($end)) {
             if ($current->gte(Carbon::today())) {
@@ -180,7 +224,15 @@ class ServiceAvailabilityService
                     $availableSlots = $dayData['providers']->sum(function ($provider) {
                         return count($provider['available_slots']);
                     });
-                    $reasonCode = $availableSlots > 0 ? self::REASON_AVAILABLE : self::REASON_FULLY_BOOKED;
+                    // Without a provider the per-provider reasons collapse into one
+                    // day-level code. "Beyond the booking window" has to win over
+                    // the generic empty-day code, otherwise a date nobody is even
+                    // allowed to book reads as `fully_booked` in the app.
+                    $reasonCode = match (true) {
+                        $availableSlots > 0 => self::REASON_AVAILABLE,
+                        $current->gt($lastBookableDate) => self::REASON_OUTSIDE_BOOKING_WINDOW,
+                        default => self::REASON_FULLY_BOOKED,
+                    };
                 }
 
                 $calendar[] = [
@@ -221,6 +273,18 @@ class ServiceAvailabilityService
      */
     private function getProviderDayAvailability(User $provider, Service $service, Carbon $date): array
     {
+        // Checked before the work schedule: a date past the booking window can
+        // never be booked no matter how free the provider looks on it.
+        $lastBookableDate = $this->lastBookableDate();
+
+        if ($date->gt($lastBookableDate)) {
+            return $this->unavailable(
+                self::REASON_OUTSIDE_BOOKING_WINDOW,
+                'Cannot book more than ' . (int) get_setting('max_booking_days', 10) . ' days in advance',
+                ['last_bookable_date' => $lastBookableDate->format('Y-m-d')]
+            );
+        }
+
         $dayOfWeek = $date->dayOfWeek;
 
         $workSchedule = ProviderScheduledWork::where('user_id', $provider->id)
@@ -304,7 +368,6 @@ class ServiceAvailabilityService
         int $serviceDuration
     ): array {
         $slots = [];
-        $dateStr = $date->format('Y-m-d');
 
         $startTime = $this->combineDateAndTime($date, $workSchedule->start_time);
         $endTime = $this->combineDateAndTime($date, $workSchedule->end_time);
@@ -312,18 +375,23 @@ class ServiceAvailabilityService
         // $breakStart = $this->calculateBreakStart($startTime, $endTime, $workSchedule->break_minutes);
         // $breakEnd = $breakStart->copy()->addMinutes($workSchedule->break_minutes);
 
-        // Don't show past time slots for today
-         $now = Carbon::now();
-        if ($date->isToday()) {
+        // Slots always sit on the shift's own grid (shift_start + k × duration).
+        //
+        // Today used to be special-cased onto a grid measured from MIDNIGHT
+        // instead, which silently produced different start times than every other
+        // day whenever the duration does not divide the hour — a 50 minute service
+        // on a 09:00 shift offered 09:00/09:50 tomorrow but 09:10/10:00 today, and
+        // the 09:10 grid does not even align with the shift. Keeping one grid and
+        // simply skipping the slots that start too soon fixes that and is what
+        // applies `book_buffer` correctly.
+        //
+        // The cutoff is `now + book_buffer`, not `now`: BookingValidationService
+        // rejects anything closer than that, so offering it here would hand the
+        // customer a slot the booking call is guaranteed to refuse. A buffer large
+        // enough to reach into tomorrow trims tomorrow too, which is why this is
+        // not limited to `isToday()`.
+        $earliestStart = $this->earliestBookableTime();
 
-            $minutesSinceStartOfDay = $now->diffInMinutes($now->copy()->startOfDay());
-            $nextSlotMinutes = ceil($minutesSinceStartOfDay / $serviceDuration) * $serviceDuration;
-            $nextAvailableTime = $now->copy()->startOfDay()->addMinutes($nextSlotMinutes);
-
-            if ($startTime->lt($nextAvailableTime)) {
-                $startTime = $nextAvailableTime;
-            }
-        }
         $currentTime = $startTime->copy();
 
         // Get existing appointments
@@ -341,7 +409,7 @@ class ServiceAvailabilityService
             // }
 
             // Check if slot is available
-            $isAvailable = !$this->hasConflict(
+            $isAvailable = $currentTime->gte($earliestStart) && !$this->hasConflict(
                 $currentTime,
                 $slotEnd,
                 $existingAppointments,
@@ -485,14 +553,20 @@ class ServiceAvailabilityService
     }
 
 
+    /**
+     * `activeProviders()` joins `provider_service`, and BOTH that pivot and the
+     * `users` table carry an `is_active` column — so every column added here has
+     * to be table-qualified or MySQL rejects the query as ambiguous. The active
+     * filter itself is already applied by the relationship (pivot + user), which
+     * is why only the branch filter remains.
+     */
     private function getServiceProviders(Service $service, ?int $branchId = null): Collection
     {
         $query = $service->activeProviders()
-            ->with('branch')
-            ->where('is_active', true);
+            ->with('branch');
 
         if ($branchId) {
-            $query->where('branch_id', $branchId);
+            $query->where('users.branch_id', $branchId);
         }
 
         return $query->get();
@@ -532,8 +606,18 @@ class ServiceAvailabilityService
             ->where('service_id', $service->id)
             ->first();
 
-        $effectivePrice = $pivot->custom_price ?? $service->effective_price;
-        $originalPrice = $service->price;
+        // `$service->effective_price` does not exist — neither a column nor an
+        // accessor — so this used to resolve to null for every provider without a
+        // `custom_price`, reporting the service as free with a 100% discount. The
+        // resolution order mirrors BookingService::resolveServicePrice() so the
+        // quoted price matches what the booking will actually charge.
+        $effectivePrice = (float) ($pivot?->custom_price ?? $service->price);
+
+        if ($service->discount_price && $service->discount_price < $effectivePrice) {
+            $effectivePrice = (float) $service->discount_price;
+        }
+
+        $originalPrice = (float) $service->price;
         $hasDiscount = $effectivePrice < $originalPrice;
 
         return [
@@ -541,7 +625,9 @@ class ServiceAvailabilityService
             'effective_price' => (float) $effectivePrice,
             'has_discount' => $hasDiscount,
             'discount_amount' => $hasDiscount ? ($originalPrice - $effectivePrice) : 0,
-            'discount_percentage' => $hasDiscount ? round((($originalPrice - $effectivePrice) / $originalPrice) * 100, 2) : 0,
+            'discount_percentage' => ($hasDiscount && $originalPrice > 0)
+                ? round((($originalPrice - $effectivePrice) / $originalPrice) * 100, 2)
+                : 0,
             'currency' => 'EUR',
             'formatted_price' => number_format($effectivePrice, 2) . ' EUR',
         ];

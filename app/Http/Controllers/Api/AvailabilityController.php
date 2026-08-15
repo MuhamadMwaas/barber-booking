@@ -17,19 +17,68 @@ class AvailabilityController extends Controller
     }
 
     /**
+     * Providers who can actually take this service on a given day.
+     *
+     * The counterpart to {@see getProviderAvailability()}: instead of asking
+     * "is provider X free?", the app asks "who is free?" and gets back only the
+     * providers with at least one bookable slot, each with their own slots and
+     * pricing — one request instead of one per provider.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function getServiceAvailability(Request $request): JsonResponse
+    {
+        // Validated OUTSIDE the try: `validate()` throws ValidationException, and
+        // the generic `catch (\Exception)` below would turn Laravel's 422 into a
+        // 500 with the field error buried in an `error` string.
+        $request->validate([
+            'service_id' => 'required|integer|exists:services,id',
+            'date'       => 'required|date_format:Y-m-d|after_or_equal:today',
+            'branch_id'  => 'nullable|integer|exists:branchs,id',
+        ]);
+
+        try {
+            $availability = $this->availabilityService->getAvailableSlotsByDate(
+                $request->get('service_id'),
+                $request->get('date'),
+                $request->get('branch_id')
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $availability,
+                'message' => 'Service availability retrieved successfully'
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve service availability',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * @param Request $request
      * @return JsonResponse
      */
     public function getProviderAvailability(Request $request): JsonResponse
     {
-        try {
-            $request->validate([
-                'service_id' => 'required|integer|exists:services,id',
-                'provider_id' => 'required|integer|exists:users,id',
-                'date' => 'required|date_format:Y-m-d|after_or_equal:today',
-                'branch_id'   => 'nullable|integer'
-            ]);
+        // Outside the try — see the note in getServiceAvailability().
+        $request->validate([
+            'service_id' => 'required|integer|exists:services,id',
+            'provider_id' => 'required|integer|exists:users,id',
+            'date' => 'required|date_format:Y-m-d|after_or_equal:today',
+            'branch_id'   => 'nullable|integer'
+        ]);
 
+        try {
             $serviceId = $request->get('service_id');
             $providerId = $request->get('provider_id');
             $date = $request->get('date');
@@ -65,15 +114,16 @@ class AvailabilityController extends Controller
      */
     public function getAvailabilityCalendar(Request $request): JsonResponse
     {
-        try {
-            $request->validate([
-                'service_id' => 'required|integer|exists:services,id',
-                'provider_id'=> 'nullable|integer|exists:users,id',
-                'start_date' => 'required|date_format:Y-m-d|after_or_equal:today',
-                'end_date'   => 'required|date_format:Y-m-d|after_or_equal:start_date',
-                'branch_id'  => 'nullable|integer|exists:branchs,id',
-            ]);
+        // Outside the try — see the note in getServiceAvailability().
+        $request->validate([
+            'service_id' => 'required|integer|exists:services,id',
+            'provider_id'=> 'nullable|integer|exists:users,id',
+            'start_date' => 'required|date_format:Y-m-d|after_or_equal:today',
+            'end_date'   => 'required|date_format:Y-m-d|after_or_equal:start_date',
+            'branch_id'  => 'nullable|integer|exists:branchs,id',
+        ]);
 
+        try {
             $serviceId = $request->get('service_id');
             $providerId = $request->get('provider_id');
             $startDate = $request->get('start_date');

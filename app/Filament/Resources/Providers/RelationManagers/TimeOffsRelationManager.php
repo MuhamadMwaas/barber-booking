@@ -20,6 +20,7 @@ use Filament\Forms\Components\TimePicker;
 use Filament\Schemas\Components\Grid;
 use Filament\Forms\Components\Radio;
 use Filament\Support\Enums\FontWeight;
+use Illuminate\Auth\Access\Response;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -50,33 +51,52 @@ class TimeOffsRelationManager extends RelationManager
         return static::allowed('view');
     }
 
+    /**
+     * Filament makes every relation manager read-only when it is rendered on a
+     * `ViewRecord` page, which is exactly where this tab lives (ViewProvider).
+     * That read-only flag denies Create/Edit/Delete *before* their `visible()`
+     * closures ever run, which is why only "View" showed up on the row. The
+     * abilities below are the real gate, so the blanket flag is switched off.
+     */
+    public function isReadOnly(): bool
+    {
+        return false;
+    }
+
     // Filament's own relation-manager authorization hooks. They are wired to the
     // same abilities so nothing can slip through a path that bypasses the
-    // per-action `visible()` checks below.
+    // per-action `visible()` checks below. Filament resolves action authorization
+    // through these `get*AuthorizationResponse()` methods (not through `can*()`),
+    // so they are the ones that have to be overridden.
 
-    protected function canCreate(): bool
+    protected function getCreateAuthorizationResponse(): Response
     {
-        return static::allowed('create');
+        return static::response('create');
     }
 
-    protected function canEdit(Model $record): bool
+    protected function getEditAuthorizationResponse(Model $record): Response
     {
-        return static::allowed('edit');
+        return static::response('edit');
     }
 
-    protected function canView(Model $record): bool
+    protected function getViewAuthorizationResponse(Model $record): Response
     {
-        return static::allowed('view');
+        return static::response('view');
     }
 
-    protected function canDelete(Model $record): bool
+    protected function getDeleteAuthorizationResponse(Model $record): Response
     {
-        return static::allowed('delete');
+        return static::response('delete');
     }
 
-    protected function canDeleteAny(): bool
+    protected function getDeleteAnyAuthorizationResponse(): Response
     {
-        return static::allowed('delete');
+        return static::response('delete');
+    }
+
+    protected static function response(string $ability): Response
+    {
+        return static::allowed($ability) ? Response::allow() : Response::deny();
     }
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string

@@ -12,10 +12,18 @@
       "search__files(*)",
       "Bash([ -s \"$f\" ])",
       "PowerShell(*)",
-      "PowerShell(cd d:\\\\Coding\\\\BarberBooking; Get-Content $env:TEMP\\\\pre.txt -Tail 30; echo \"=== STATUS ===\"; git stash list; git status --short | Select-Object -First 5)"
+      "PowerShell(cd d:\\\\Coding\\\\BarberBooking; Get-Content $env:TEMP\\\\pre.txt -Tail 30; echo \"=== STATUS ===\"; git stash list; git status --short | Select-Object -First 5)",
+      "Bash(composer show *)",
+      "Bash(cp \"C:/Users/HP/AppData/Local/Temp/claude/d--Coding-BarberBooking/c3db6504-4c75-4a9f-ac83-36706e57224b/scratchpad/ShowErrTest.php\" tests/Feature/Booking/ShowErrTest.php)",
+      "Bash(./vendor/bin/pest tests/Feature/Booking/ShowErrTest.php)",
+      "Bash(rm -f tests/Feature/Booking/OwnershipProbeTest.php)",
+      "Bash(./vendor/bin/pest tests/Feature/Booking/)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "D:\\Coding\\BarberBooking\\tests\\Feature\\Booking"
+    ]
   },
   "mcpServers": {
     "laravel-boost": {

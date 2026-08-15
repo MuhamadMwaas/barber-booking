@@ -72,6 +72,10 @@ class RoleSeeder extends Seeder
             // Staff Dashboard — full operational control
             'StaffDashboard:access', 'StaffDashboard:view_admin',
             'StaffDashboard:view_stats',
+            // Daily Report (Z-Report). Management-only: it exposes every
+            // employee's takings, so `provider` deliberately does NOT get it —
+            // an admin can still grant it per-role from the Roles screen.
+            'StaffDashboard:view_reports',
             'StaffDashboard:create_booking',
             // Force booking (override availability window) — management only.
             'StaffDashboard:force_booking',

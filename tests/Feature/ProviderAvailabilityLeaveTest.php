@@ -21,28 +21,41 @@ class ProviderAvailabilityLeaveTest extends TestCase
 
     private Service $service;
 
-    /** The Tuesday used across the tests — always in the future. */
+    /**
+     * The Tuesday used across the tests — always in the future, and always
+     * inside the `max_booking_days` window (default 10).
+     *
+     * It used to be `today()->addWeek()->next(TUESDAY)`, which lands 8-14 days
+     * out depending on which weekday the suite runs on. Availability now refuses
+     * dates past the booking window with `outside_booking_window`, so on the
+     * long end of that range these tests would fail on some days of the week and
+     * pass on others.
+     */
     private string $date;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->date = Carbon::today()->addWeek()->next(Carbon::TUESDAY)->format('Y-m-d');
+        $this->date = Carbon::today()->next(Carbon::TUESDAY)->format('Y-m-d');
 
         $this->provider = User::factory()->create(['is_active' => true]);
 
         $category = ServiceCategory::create([
             'name' => 'Hair',
             'is_active' => true,
+            'sort_order' => 1,
         ]);
 
         $this->service = Service::create([
             'category_id' => $category->id,
             'name' => 'Hair Cut',
+            'description' => 'Hair Cut',
             'price' => 50,
             'duration_minutes' => 60,
             'is_active' => true,
+            'sort_order' => 1,
+            'color_code' => '#000000',
         ]);
 
         DB::table('provider_service')->insert([

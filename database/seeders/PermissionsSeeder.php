@@ -52,6 +52,10 @@ class PermissionsSeeder extends Seeder
             'access',
             'view_admin',
             'view_stats',
+            // Daily Report (Z-Report): a salon-wide financial report covering
+            // EVERY employee's takings, so it is management-only by default and
+            // is deliberately separate from `view_stats`.
+            'view_reports',
             'create_booking',
             // Force booking: bypass the provider availability window (working day,
             // working hours, full-day & hourly time-off) for a single booking.

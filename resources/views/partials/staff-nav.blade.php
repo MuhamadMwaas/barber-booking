@@ -24,6 +24,13 @@
             $navUser->hasRole('SuperAdmin')
             || $navUser->can('StaffDashboard:view_stats')
         );
+    // The "Reports" tab (printable Z-Report) is gated by StaffDashboard:view_reports.
+    // It is management-only by default because it exposes every employee's takings.
+    $canViewReports = $navUser
+        && (
+            $navUser->hasRole('SuperAdmin')
+            || $navUser->can('StaffDashboard:view_reports')
+        );
 @endphp
 <header class="bg-white border-b border-gray-200 flex items-center justify-between px-4 py-2 flex-shrink-0">
     <div class="flex items-center space-x-6">
@@ -41,6 +48,12 @@
                 <a href="{{ route('staff.dashboard.stats') }}" wire:navigate
                     class="px-4 py-2 text-sm font-medium transition-colors {{ ($active ?? '') === 'stats' ? 'text-amber-600 border-b-2 border-amber-500' : 'text-gray-500 hover:text-gray-700' }}">
                     {{ __('dashboard.stats.tab') }}
+                </a>
+            @endif
+            @if ($canViewReports)
+                <a href="{{ route('staff.dashboard.reports') }}" wire:navigate
+                    class="px-4 py-2 text-sm font-medium transition-colors {{ ($active ?? '') === 'reports' ? 'text-amber-600 border-b-2 border-amber-500' : 'text-gray-500 hover:text-gray-700' }}">
+                    {{ __('z_report.tab') }}
                 </a>
             @endif
             @if ($canViewAdmin)
