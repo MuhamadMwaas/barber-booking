@@ -6,6 +6,7 @@ use App\Http\Controllers\AppointmentPrintController;
 use App\Http\Middleware\EnsureStaffDashboardAccess;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\DailyReportController;
 use App\Http\Controllers\InvoiceTemplateController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PrintController;
