@@ -265,3 +265,41 @@ Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
     Route::get('/print/logs', [PrintController::class, 'logs'])
         ->name('api.print.logs');
 });
+
+Route::get('/test/email', function (Request $request) {
+
+    $payload = $request->validate([
+        'email' => ['required', 'email', 'max:255'],
+    ]);
+
+    $to = $payload['email'];
+
+    try {
+        Mail::raw(
+            'This is a test email from ' . config('app.name') . ' at ' . now()->toDateTimeString() . '. If you received this, email service is working correctly.',
+            function ($message) use ($to) {
+                $message->to($to)->subject('Test Email - ' . config('app.name') . ' - ' . now()->format('Y-m-d H:i:s'));
+            }
+        );
+    } catch (\Throwable $exception) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to send email: ' . $exception->getMessage(),
+            'mailer' => config('mail.default'),
+            'to' => $to,
+        ], 502);
+    }
+
+    // When mailer is `log` or `array` no real email is sent - warn the tester
+    $mailer = config('mail.default');
+    $isRealMailer = ! in_array($mailer, ['log', 'array']);
+
+    return response()->json([
+        'success' => true,
+        'message' => $isRealMailer ? 'Test email sent successfully.' : 'Test email was logged (MAIL_MAILER=' . $mailer . ' - no real email sent). Set MAIL_MAILER=smtp to actually send.',
+        'to' => $to,
+        'mailer' => $mailer,
+        'from' => config('mail.from'),
+        'sent_at' => now()->toDateTimeString(),
+    ]);
+});
