@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img" aria-label="LOOK UP FRISEUR">
+  <defs>
+    <linearGradient id="bgchair10" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111111"/>
+      <stop offset="55%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </linearGradient>
+    <radialGradient id="glowchair10" cx="50%" cy="42%" r="62%">
+      <stop offset="0%" stop-color="#d9a928" stop-opacity="0.20"/>
+      <stop offset="60%" stop-color="#d9a928" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#d9a928" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bgchair10)"/>
+  <rect width="1200" height="900" fill="url(#glowchair10)"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="898.5" fill="none" stroke="#d9a928" stroke-opacity="0.28" stroke-width="1.5"/>
+  <g transform="translate(483.00 306.00) scale(2.3400)" fill="none" stroke="#d9a928" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.85">
+    
+      <path d="M26 46 h48 v20 a10 10 0 0 1 -10 10 h-28 a10 10 0 0 1 -10 -10 Z"/>
+      <path d="M34 46 V28 a8 8 0 0 1 8 -8 h16 a8 8 0 0 1 8 8 v18"/>
+      <path d="M50 76 v10 M34 86 h32"/>
+  </g>
+  <text x="600" y="657" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="55.8" letter-spacing="19.80" fill="#d9a928" fill-opacity="0.45">LOOK UP FRISEUR</text>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="560" viewBox="0 0 680 560" role="img" aria-label="LOOK UP">
+  <defs>
+    <linearGradient id="bgmirror7" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111111"/>
+      <stop offset="55%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </linearGradient>
+    <radialGradient id="glowmirror7" cx="50%" cy="42%" r="62%">
+      <stop offset="0%" stop-color="#d9a928" stop-opacity="0.20"/>
+      <stop offset="60%" stop-color="#d9a928" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#d9a928" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="680" height="560" fill="url(#bgmirror7)"/>
+  <rect width="680" height="560" fill="url(#glowmirror7)"/>
+  <rect x="0.75" y="0.75" width="678.5" height="558.5" fill="none" stroke="#d9a928" stroke-opacity="0.28" stroke-width="1.5"/>
+  <g transform="translate(267.20 190.40) scale(1.4560)" fill="none" stroke="#d9a928" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.85">
+    
+      <ellipse cx="50" cy="42" rx="24" ry="28"/>
+      <path d="M50 70 v14 M36 84 h28"/>
+      <path d="M40 34 a14 14 0 0 1 12 -8"/>
+  </g>
+  <text x="340" y="409" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34.7" letter-spacing="12.32" fill="#d9a928" fill-opacity="0.45">LOOK UP</text>
+</svg>

@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\SocialAuthController;
 use App\Services\VonageSdkSmsService;
 use App\Http\Controllers\PrintController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/user', function (Request $request) {
@@ -70,7 +71,7 @@ Route::prefix('auth')->group(function () {
 });
 
 Route::post('/test/vonage-sms', function (Request $request, VonageSdkSmsService $sms) {
-    abort_unless(app()->environment('local') || config('app.debug'), 404);
+    // abort_unless(app()->environment('local') || config('app.debug'), 404);
 
     $payload = $request->validate([
         'phone' => ['required', 'string', 'max:20'],
@@ -100,6 +101,48 @@ Route::post('/test/vonage-sms', function (Request $request, VonageSdkSmsService 
         'from' => $result['from'],
         'message_ids' => $result['message_ids'],
         'remaining_balance' => $result['remaining_balance'],
+    ]);
+});
+
+// ── Test Email (GET link for quick browser testing) ───────────────────────
+// Usage: GET /api/test/email?email=test@example.com
+// Only works when APP_ENV=local or APP_DEBUG=true (like vonage test)
+Route::get('/test/email', function (Request $request) {
+    abort_unless(app()->environment('local') || config('app.debug'), 404);
+
+    $payload = $request->validate([
+        'email' => ['required', 'email', 'max:255'],
+    ]);
+
+    $to = $payload['email'];
+
+    try {
+        Mail::raw(
+            'This is a test email from ' . config('app.name') . ' at ' . now()->toDateTimeString() . '. If you received this, email service is working correctly.',
+            function ($message) use ($to) {
+                $message->to($to)->subject('Test Email - ' . config('app.name') . ' - ' . now()->format('Y-m-d H:i:s'));
+            }
+        );
+    } catch (\Throwable $exception) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to send email: ' . $exception->getMessage(),
+            'mailer' => config('mail.default'),
+            'to' => $to,
+        ], 502);
+    }
+
+    // When mailer is `log` or `array` no real email is sent - warn the tester
+    $mailer = config('mail.default');
+    $isRealMailer = ! in_array($mailer, ['log', 'array']);
+
+    return response()->json([
+        'success' => true,
+        'message' => $isRealMailer ? 'Test email sent successfully.' : 'Test email was logged (MAIL_MAILER=' . $mailer . ' - no real email sent). Set MAIL_MAILER=smtp to actually send.',
+        'to' => $to,
+        'mailer' => $mailer,
+        'from' => config('mail.from'),
+        'sent_at' => now()->toDateTimeString(),
     ]);
 });
 

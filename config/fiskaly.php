@@ -3,6 +3,22 @@
 return [
     /*
     |--------------------------------------------------------------------------
+    | Master Switch — TSE / Fiskaly
+    |--------------------------------------------------------------------------
+    |
+    | Single kill switch for the whole German TSE (KassenSichV) integration.
+    | While this is false the app NEVER talks to Fiskaly: invoices are
+    | finalized and printed without a TSE signature, and the receipt QR code
+    | (which carries the TSE payload) is not rendered at all.
+    |
+    | Everything below stays configured so re-enabling is a one-line change:
+    | set FISKALY_ENABLED=true once the TSS/Client credentials are real.
+    |
+    */
+    'enabled' => env('FISKALY_ENABLED', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Fiskaly API Credentials
     |--------------------------------------------------------------------------
     |

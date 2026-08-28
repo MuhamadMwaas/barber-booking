@@ -330,9 +330,16 @@ class TemplateBuilderService
      */
     public function generateQrCode(array $properties): string
     {
+        // The receipt QR code exists to carry the TSE payload. While TSE is
+        // switched off there is nothing legitimate to encode, so render nothing
+        // at all — the qr-code blade skips the block on an empty string.
+        if (!config('fiskaly.enabled')) {
+            return '';
+        }
+
         try {
             // Get QR data from Fiskaly if available
-            $qrData = $this->invoice->invoice_data['fiskaly_qr_code'] ?? "aHR0cHM6Ly9jaGF0Z3B0LmNvbS8=";
+            $qrData = $this->invoice->invoice_data['fiskaly_qr_code'] ?? "";
 
             if (!$qrData) {
                 // Generate basic QR code with invoice info

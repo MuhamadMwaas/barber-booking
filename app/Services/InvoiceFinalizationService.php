@@ -36,7 +36,9 @@ class InvoiceFinalizationService
         DB::beginTransaction();
 
         try {
-            $tseData = $applyTse
+            // The master switch wins over the per-call $applyTse flag: while
+            // FISKALY_ENABLED=false no caller can request a TSE signature.
+            $tseData = ($applyTse && config('fiskaly.enabled'))
                 ? $this->applyTSESignature($invoice, $paymentType, $amountPaid)
                 : $this->createPlaceholderTSE();
 

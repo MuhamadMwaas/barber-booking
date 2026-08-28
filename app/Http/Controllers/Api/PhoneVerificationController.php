@@ -100,9 +100,11 @@ class PhoneVerificationController extends Controller
 
         // Testing convenience: while there is no real SMS gateway to deliver the
         // code, return it in the response so the flow can be tested. As soon as
-        // Vonage is enabled (VONAGE_SMS_ENABLED=true) the code is sent by SMS and
-        // is NO LONGER exposed here. `app.debug` keeps it available locally too.
-        $smsEnabled = (bool) config('services.vonage.enabled', false);
+        // the SMS channel is enabled (SMS_ENABLED=true) the code is sent by SMS
+        // and is NO LONGER exposed here — this reads the same master switch the
+        // gateway itself obeys, so the two can never disagree, whichever provider
+        // SMS_DRIVER points at. `app.debug` keeps it available locally too.
+        $smsEnabled = (bool) config('sms.enabled', false);
         if (!$smsEnabled || config('app.debug')) {
             $response['otp'] = $otp;
         }

@@ -56,6 +56,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Staff Dashboard Host
+    |--------------------------------------------------------------------------
+    |
+    | Where the Staff Dashboard is served from. Set it to a bare hostname (e.g.
+    | "dashboard.lookupfriseur.com") to serve the dashboard at the ROOT of that
+    | subdomain. Leave it null/empty — the local default — to serve it under a
+    | "/dashboard" path prefix on the normal application host instead.
+    |
+    | Either way the routes are registered ONCE, so route('staff.dashboard.*')
+    | always points at the host this environment actually serves.
+    |
+    */
+
+    'staff_dashboard_domain' => env('STAFF_DASHBOARD_DOMAIN'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

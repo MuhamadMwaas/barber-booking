@@ -109,6 +109,19 @@ class FiskalyService
      */
     public function signInvoice(Invoice $invoice): array
     {
+        // TSE is switched off (FISKALY_ENABLED=false). Return without touching
+        // the network or the invoice, and without throwing — callers treat a
+        // thrown exception as "signing failed" and warn the cashier, which is
+        // wrong while the integration is intentionally disabled.
+        if (!config('fiskaly.enabled')) {
+            return [
+                'success' => false,
+                'disabled' => true,
+                'invoice_id' => $invoice->id,
+                'message' => 'Fiskaly/TSE is disabled (FISKALY_ENABLED=false).',
+            ];
+        }
+
         $tssId = config('fiskaly.tss.id');
         $clientId = config('fiskaly.client.id');
 
