@@ -9,14 +9,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('otps', function (Blueprint $table) {
-            $table->string('email')->nullable()->change();
+            // $table->string('email')->nullable()->change();
         });
     }
 
     public function down(): void
     {
         Schema::table('otps', function (Blueprint $table) {
-            $table->string('email')->nullable(false)->change();
+            // $table->string('email')->nullable(false)->change();
         });
     }
 };
