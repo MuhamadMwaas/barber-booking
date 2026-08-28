@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="560" viewBox="0 0 420 560" role="img" aria-label="LOOK UP">
+  <defs>
+    <linearGradient id="bgchair5" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111111"/>
+      <stop offset="55%" stop-color="#0a0a0a"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </linearGradient>
+    <radialGradient id="glowchair5" cx="50%" cy="42%" r="62%">
+      <stop offset="0%" stop-color="#d9a928" stop-opacity="0.20"/>
+      <stop offset="60%" stop-color="#d9a928" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#d9a928" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="420" height="560" fill="url(#bgchair5)"/>
+  <rect width="420" height="560" fill="url(#glowchair5)"/>
+  <rect x="0.75" y="0.75" width="418.5" height="558.5" fill="none" stroke="#d9a928" stroke-opacity="0.28" stroke-width="1.5"/>
+  <g transform="translate(155.40 208.60) scale(1.0920)" fill="none" stroke="#d9a928" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="0.85">
+    
+      <path d="M26 46 h48 v20 a10 10 0 0 1 -10 10 h-28 a10 10 0 0 1 -10 -10 Z"/>
+      <path d="M34 46 V28 a8 8 0 0 1 8 -8 h16 a8 8 0 0 1 8 8 v18"/>
+      <path d="M50 76 v10 M34 86 h32"/>
+  </g>
+  <text x="210" y="372" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="26.0" letter-spacing="9.24" fill="#d9a928" fill-opacity="0.45">LOOK UP</text>
+</svg>

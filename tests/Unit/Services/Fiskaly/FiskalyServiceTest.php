@@ -42,6 +42,9 @@ class FiskalyServiceTest extends TestCase
         );
 
         config([
+            // These tests exercise the Fiskaly integration itself, so they opt
+            // in explicitly. The app-wide default is FISKALY_ENABLED=false.
+            'fiskaly.enabled' => true,
             'fiskaly.tss.id' => 'test-tss-id',
             'fiskaly.tss.description' => 'Test TSS',
             'fiskaly.client.id' => 'test-client-id',
@@ -100,6 +103,22 @@ class FiskalyServiceTest extends TestCase
         $result = $this->fiskalyService->signInvoice($invoice);
 
         $this->assertTrue($result['success']);
+    }
+
+    /** @test */
+    public function it_skips_signing_entirely_when_tse_is_disabled()
+    {
+        config(['fiskaly.enabled' => false]);
+
+        // A plain (unsaved) model: if the guard failed to short-circuit, the
+        // strict collaborator mocks below would reject the unexpected calls.
+        $invoice = new Invoice();
+        $invoice->id = 1;
+
+        $result = $this->fiskalyService->signInvoice($invoice);
+
+        $this->assertFalse($result['success']);
+        $this->assertTrue($result['disabled']);
     }
 
     /** @test */

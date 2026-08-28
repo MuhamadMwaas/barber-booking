@@ -8,14 +8,15 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\DailyReportController;
 use App\Http\Controllers\InvoiceTemplateController;
+use App\Http\Controllers\LandingController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PrintController;
 use App\Models\Language;
 use App\Models\Invoice;
 use App\Services\TaxCalculatorService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Spatie\Permission\Models\Permission;
 
 /*
 |--------------------------------------------------------------------------
@@ -26,7 +27,17 @@ use Spatie\Permission\Models\Permission;
 |
 */
 
-Route::domain('dashboard.lookupfriseur.com')
+// Registered ONCE. Previously this block existed twice — once under
+// Route::domain('dashboard.lookufriseur.com') with paths /reports, /stats … and
+// once under a /dashboard prefix — and BOTH used the same route names. Laravel
+// keeps a single name → route lookup, so route('staff.dashboard.reports') always
+// resolved to the SUBDOMAIN variant and produced http://<host>/reports, which
+// 404s on the local/main host. Driving the domain from config keeps one set of
+// names that is always correct for the host this environment serves.
+$staffDashboardDomain = config('app.staff_dashboard_domain');
+
+Route::domain($staffDashboardDomain ?: null)
+    ->prefix($staffDashboardDomain ? '' : 'dashboard')
     ->middleware([EnsureStaffDashboardAccess::class])
     ->group(function () {
 
@@ -62,16 +73,41 @@ Route::domain('dashboard.lookupfriseur.com')
 
 
 
-Route::get('/', function () {
-    return view('welcome');
-});
+/*
+|--------------------------------------------------------------------------
+| Public Marketing Site
+|--------------------------------------------------------------------------
+|
+| The landing page and the app-download page it links to. Content for both
+| lives in `landing_sections` and is edited from the "Landing Page" screen in
+| the admin panel. The active language comes from SetLocaleFromSession, which
+| the /language/{code} route below writes to.
+|
+*/
+
+Route::get('/', [LandingController::class, 'index'])
+    ->name('landing');
+
+Route::get('/app', [LandingController::class, 'app'])
+    ->name('landing.app');
+
+Route::get('/language/{code}', [LandingController::class, 'switchLanguage'])
+    ->name('landing.language');
+
+// Legal / informational pages (Impressum, Datenschutz, AGB). The content is the
+// same `cms_pages` payload the mobile app reads; this route renders it inside
+// the public site so the footer links resolve to a real page.
+Route::get('/page/{slug}', [LandingController::class, 'page'])
+    ->name('landing.page');
 
 Route::get('/test', function () {
 
-    $perm = Permission::firstOrCreate(
-        ['name' => 'view_stats', 'guard_name' => 'web']
-    );
-    dd($perm);
+    // NOTE: this route used to open with
+    //   Permission::firstOrCreate(['name' => 'view_stats', 'guard_name' => 'web']);
+    // which minted an UNPREFIXED `view_stats` permission (the real one is
+    // `StaffDashboard:view_stats`). Because the Roles screen groups permissions by
+    // the prefix before ":", that stray row showed up as its own junk tab and
+    // matched nothing in the code. Removed — do not reintroduce.
     $LineTypeRegistry= app(\App\Services\InvoiceTemplate\LineTypeRegistry::class);
     dd($LineTypeRegistry->getGroupedOptionsForSelect());
 
@@ -86,19 +122,11 @@ Route::get('/test', function () {
     //   ->update(['available_at' => now()->timestamp]);
 });
 
-Route::get('/grant-view-stats', function () {
-    $permission = Permission::firstOrCreate(
-        ['name' => 'StaffDashboard:view_stats', 'guard_name' => 'web']
-    );
-
-    foreach (\Spatie\Permission\Models\Role::all() as $role) {
-        $role->givePermissionTo($permission);
-    }
-
-    app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
-
-    return 'StaffDashboard:view_stats granted to all roles.';
-});
+// REMOVED: GET /grant-view-stats — an UNAUTHENTICATED route that granted
+// StaffDashboard:view_stats to EVERY role (customers included) and cleared the
+// permission cache. Anyone who hit the URL silently undid whatever the admin had
+// just revoked on the Roles screen, which is exactly the "I can't deny this
+// permission" symptom. Grant permissions from /admin/roles instead.
 
 // CMS Page preview (admin only)
 Route::middleware(['web', 'auth'])->group(function () {
@@ -140,34 +168,9 @@ Route::middleware(['auth'])->group(function () {
         ->name('appointment.print');
 });
 
-Route::middleware(['web', EnsureStaffDashboardAccess::class])->group(function () {
-    Route::livewire('/dashboard', \App\Livewire\StaffDashboard::class)
-        ->name('staff.dashboard');
-
-    Route::livewire('/dashboard/customers', \App\Livewire\CustomerLookup::class)
-        ->name('staff.dashboard.customers');
-
-    Route::livewire('/dashboard/stats', \App\Livewire\StaffStats::class)
-        ->name('staff.dashboard.stats');
-
-    Route::livewire('/dashboard/reports', \App\Livewire\StaffReports::class)
-        ->name('staff.dashboard.reports');
-
-    // The printable Z-Report document itself (opens in its own tab).
-    Route::get('/dashboard/report', [DailyReportController::class, 'show'])
-        ->name('staff.dashboard.report.print');
-
-    Route::get('/dashboard/language/{code}', function (string $code) {
-        $language = Language::query()
-            ->where('is_active', true)
-            ->where('code', $code)
-            ->firstOrFail();
-
-        session(['locale' => $language->code]);
-
-        return redirect()->back();
-    })->name('staff.dashboard.language');
-});
+// NOTE: the duplicate /dashboard/* group that used to live here was merged into
+// the single config-driven group at the top of this file. Do not re-add it — two
+// groups sharing the same route names is what broke route('staff.dashboard.*').
 
 Route::get('/internal/clear-cache', function (Request $request) {
 

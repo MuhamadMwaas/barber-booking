@@ -1,0 +1,341 @@
+/*
+|--------------------------------------------------------------------------
+| LOOK UP FRISEUR — public landing page stylesheet
+|--------------------------------------------------------------------------
+|
+| Compiled separately from the admin bundle (resources/css/app.css) so the
+| marketing site never ships Filament's CSS and vice versa. The entry point is
+| registered in vite.config.js.
+|
+| The whole page is built from the design's own palette: pure black ground,
+| a single gold accent, and warm off-white type. Everything below is either a
+| design token (@theme) or a component class used by the Blade partials — no
+| ad-hoc colours live in the markup.
+|
+| RTL: every directional rule uses logical properties (inline-start/end,
+| margin-inline, etc.) so switching to Arabic mirrors the layout with no
+| separate stylesheet. The few genuinely visual mirrors (decorative arc,
+| arrow glyphs) are handled explicitly near the bottom of this file.
+*/
+
+@import 'tailwindcss';
+
+@source '../views/landing/**/*.blade.php';
+@source '../views/layouts/landing.blade.php';
+
+@theme {
+    /* ── Palette (sampled from the approved design) ───────────────── */
+    --color-ink:         #000000;
+    --color-ink-soft:    #0a0a0a;
+    --color-ink-raised:  #111111;
+    --color-ink-line:    #1e1e1e;
+
+    --color-gold:        #d9a928;
+    --color-gold-bright: #f0c552;
+    --color-gold-deep:   #a87f16;
+
+    --color-cream:       #f2f2f2;
+    --color-mist:        #b3b3b3;
+    --color-ash:         #808080;
+
+    /* ── Typography ───────────────────────────────────────────────── */
+    --font-display: "Oswald", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+    --font-sans:    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    --font-arabic:  "Cairo", "Segoe UI", Tahoma, sans-serif;
+
+    /* ── Motion ───────────────────────────────────────────────────── */
+    --ease-lp: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/*
+| Base
+*/
+@layer base {
+    html {
+        scroll-behavior: smooth;
+        /* Sticky navbar height, so #anchor jumps are not hidden behind it. */
+        scroll-padding-top: 6rem;
+    }
+
+    body.lp-body {
+        background-color: var(--color-ink);
+        color: var(--color-cream);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+    }
+
+    /* Arabic gets a typeface that actually has the glyphs, headings included. */
+    [dir="rtl"] body.lp-body,
+    [dir="rtl"] .lp-display {
+        font-family: var(--font-arabic);
+    }
+
+    ::selection {
+        background-color: var(--color-gold);
+        color: var(--color-ink);
+    }
+
+    /* Keyboard focus must stay visible on a black ground. */
+    :focus-visible {
+        outline: 2px solid var(--color-gold);
+        outline-offset: 3px;
+    }
+}
+
+/*
+| Components
+*/
+@layer components {
+
+    /* ── Layout ───────────────────────────────────────────────────── */
+
+    .lp-container {
+        @apply mx-auto w-full max-w-[1180px] px-5 sm:px-8;
+    }
+
+    .lp-section {
+        @apply py-16 sm:py-20 lg:py-24;
+    }
+
+    /* ── Type ─────────────────────────────────────────────────────── */
+
+    .lp-display {
+        font-family: var(--font-display);
+        @apply font-semibold uppercase leading-[0.95];
+        letter-spacing: 0.01em;
+    }
+
+    /* Small gold label above every section heading ("UNSERE LEISTUNGEN"). */
+    .lp-eyebrow {
+        @apply inline-flex items-center gap-2 text-[0.7rem] font-semibold uppercase;
+        letter-spacing: 0.28em;
+        color: var(--color-gold);
+    }
+
+    .lp-title {
+        font-family: var(--font-display);
+        @apply text-3xl font-medium leading-tight sm:text-4xl lg:text-[2.6rem];
+        color: var(--color-cream);
+    }
+
+    .lp-lead {
+        @apply text-[0.95rem] leading-relaxed sm:text-base;
+        color: var(--color-mist);
+    }
+
+    /* The short gold rule under section headings. */
+    .lp-rule {
+        @apply mt-5 h-px w-24;
+        background-image: linear-gradient(to right, transparent, var(--color-gold), transparent);
+    }
+
+    /* ── Buttons ──────────────────────────────────────────────────── */
+
+    .lp-btn {
+        @apply inline-flex items-center justify-center gap-2.5 rounded-md px-7 py-3.5
+               text-[0.75rem] font-semibold uppercase transition-all duration-300 ease-out;
+        letter-spacing: 0.16em;
+    }
+
+    .lp-btn-gold {
+        background-image: linear-gradient(135deg, var(--color-gold-bright), var(--color-gold));
+        color: var(--color-ink);
+        box-shadow: 0 8px 26px -12px rgb(217 169 40 / 0.75);
+    }
+
+    .lp-btn-gold:hover {
+        box-shadow: 0 14px 34px -12px rgb(217 169 40 / 0.95);
+        transform: translateY(-2px);
+    }
+
+    .lp-btn-outline {
+        @apply border;
+        border-color: rgb(217 169 40 / 0.45);
+        color: var(--color-cream);
+        background-color: rgb(217 169 40 / 0.04);
+    }
+
+    .lp-btn-outline:hover {
+        border-color: var(--color-gold);
+        color: var(--color-gold);
+        background-color: rgb(217 169 40 / 0.1);
+        transform: translateY(-2px);
+    }
+
+    .lp-btn-sm {
+        @apply px-5 py-2.5 text-[0.68rem];
+        letter-spacing: 0.14em;
+    }
+
+    /* ── Surfaces ─────────────────────────────────────────────────── */
+
+    /* Shared card treatment: near-black panel, hairline gold edge that warms
+       on hover. Used by service cards, feature boxes and the info strip. */
+    .lp-panel {
+        @apply rounded-xl border transition-all duration-300;
+        background-image: linear-gradient(160deg, var(--color-ink-raised), var(--color-ink));
+        border-color: rgb(217 169 40 / 0.16);
+    }
+
+    .lp-panel:hover {
+        border-color: rgb(217 169 40 / 0.42);
+        box-shadow: 0 22px 50px -30px rgb(217 169 40 / 0.55);
+    }
+
+    /* Circular gold icon badge (service cards, feature boxes, info strip). */
+    .lp-badge {
+        @apply inline-flex shrink-0 items-center justify-center rounded-full border;
+        border-color: rgb(217 169 40 / 0.4);
+        background-color: rgb(217 169 40 / 0.1);
+        color: var(--color-gold);
+    }
+
+    .lp-badge-lg { @apply size-12; }
+    .lp-badge-md { @apply size-11; }
+
+    /* ── Navigation ───────────────────────────────────────────────── */
+
+    .lp-nav-link {
+        @apply relative py-1 text-[0.72rem] font-medium uppercase transition-colors duration-200;
+        letter-spacing: 0.18em;
+        color: var(--color-mist);
+    }
+
+    .lp-nav-link::after {
+        content: "";
+        @apply absolute inset-x-0 -bottom-1 h-px origin-center scale-x-0 transition-transform duration-300;
+        background-color: var(--color-gold);
+    }
+
+    .lp-nav-link:hover {
+        color: var(--color-gold);
+    }
+
+    .lp-nav-link:hover::after,
+    .lp-nav-link.is-active::after {
+        @apply scale-x-100;
+    }
+
+    .lp-nav-link.is-active {
+        color: var(--color-gold);
+    }
+
+    /* ── Forms ────────────────────────────────────────────────────── */
+
+    .lp-input {
+        @apply w-full rounded-md border bg-transparent px-4 py-3 text-sm transition-colors duration-200;
+        border-color: rgb(217 169 40 / 0.22);
+        color: var(--color-cream);
+    }
+
+    .lp-input::placeholder { color: var(--color-ash); }
+
+    .lp-input:focus {
+        border-color: var(--color-gold);
+        outline: none;
+    }
+
+    /* ── Decoration ───────────────────────────────────────────────── */
+
+    /* Soft gold bloom used behind the hero and the CTA banner. */
+    .lp-glow {
+        @apply pointer-events-none absolute rounded-full blur-[110px];
+        z-index: 0;
+        background-color: rgb(217 169 40 / 0.16);
+    }
+
+    /* The thin gold arc that sweeps behind the hero photo in the design. */
+    .lp-arc {
+        @apply pointer-events-none absolute rounded-full border;
+        z-index: 0;
+        border-color: rgb(217 169 40 / 0.18);
+    }
+
+    /* "MEHR ERFAHREN →" style inline link. */
+    .lp-more {
+        @apply inline-flex items-center gap-1.5 text-[0.68rem] font-semibold uppercase transition-colors duration-200;
+        letter-spacing: 0.18em;
+        color: var(--color-gold);
+    }
+
+    .lp-more:hover { color: var(--color-gold-bright); }
+
+    .lp-more svg { @apply transition-transform duration-300; }
+
+    .lp-more:hover svg { transform: translateX(3px); }
+}
+
+/*
+| Utilities
+*/
+@layer utilities {
+
+    /* Gold gradient fill for the big hero wordmark. */
+    .lp-text-gold-grad {
+        background-image: linear-gradient(
+            160deg,
+            var(--color-gold-bright) 0%,
+            var(--color-gold) 45%,
+            var(--color-gold-deep) 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+    }
+
+    /* Hairline separator that fades out at both ends. */
+    .lp-hairline {
+        background-image: linear-gradient(to right, transparent, rgb(217 169 40 / 0.28), transparent);
+    }
+
+    /* Reveal-on-scroll, driven by resources/js/landing.js. The initial hidden
+       state is scoped to .lp-reveal-ready, which only that script adds — so with
+       JS disabled the content renders fully visible instead of blank. */
+    .lp-reveal-ready .lp-reveal {
+        opacity: 0;
+        transform: translateY(22px);
+        transition: opacity 0.7s var(--ease-lp), transform 0.7s var(--ease-lp);
+    }
+
+    .lp-reveal-ready .lp-reveal.is-visible {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/*
+| Directional mirrors
+|
+| Logical properties cover the layout; these are the pieces whose *drawing*
+| has a direction and must be flipped by hand in RTL.
+*/
+[dir="rtl"] .lp-arc            { transform: scaleX(-1); }
+[dir="rtl"] .lp-more svg       { transform: scaleX(-1); }
+[dir="rtl"] .lp-more:hover svg { transform: scaleX(-1) translateX(3px); }
+
+/* Latin tracking values look wrong on Arabic script, which is joined. */
+[dir="rtl"] .lp-eyebrow  { letter-spacing: 0.08em; }
+[dir="rtl"] .lp-display  { letter-spacing: 0; }
+[dir="rtl"] .lp-btn      { letter-spacing: 0.04em; }
+[dir="rtl"] .lp-nav-link { letter-spacing: 0.04em; }
+[dir="rtl"] .lp-more     { letter-spacing: 0.06em; }
+
+/*
+| Respect the visitor's motion preference — the reveal animation and every
+| hover lift are decorative.
+*/
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+
+    .lp-reveal-ready .lp-reveal {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+    }
+
+    .lp-btn:hover,
+    .lp-panel:hover {
+        transform: none;
+    }
+}

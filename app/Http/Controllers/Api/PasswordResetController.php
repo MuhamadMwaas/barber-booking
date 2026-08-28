@@ -204,7 +204,7 @@ class PasswordResetController extends Controller
             return true;
         }
 
-        return $channel === OtpType::SMS_OTP && !config('services.vonage.enabled', false);
+        return $channel === OtpType::SMS_OTP && !config('sms.enabled', false);
     }
 
     private function success(string $message): JsonResponse

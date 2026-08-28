@@ -37,6 +37,7 @@ class DatabaseSeeder extends Seeder
             PrivacyPolicyPageSeeder::class,
             TermsConditionsPageSeeder::class,
             ImpressumPageSeeder::class,
+            LandingPageSeeder::class,
         ]);
 
 

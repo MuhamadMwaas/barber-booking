@@ -175,7 +175,34 @@ class UserForm
                                     ->required(fn (string $context): bool => $context === 'create')
                                     ->dehydrateStateUsing(fn ($state) => Hash::make($state))
                                     ->dehydrated(fn ($state) => filled($state))
-                                    ->rule(Password::default())
+                                    // Policy: >= 9 chars, Latin (ASCII) characters only, at
+                                    // least one A-Z uppercase and at least one digit.
+                                    // Password::min(9)->numbers() covers the length + digit
+                                    // with Laravel's own localized messages; the closure adds
+                                    // the two checks Laravel has no builder for.
+                                    // mixedCase() is deliberately NOT used — it would also
+                                    // demand a lowercase letter, which the policy never asks for.
+                                    ->rules([
+                                        'string',
+                                        Password::min(9)->numbers(),
+                                        fn (): \Closure => function (string $attribute, $value, \Closure $fail): void {
+                                            // Left blank while editing = "keep current password",
+                                            // so there is nothing to validate.
+                                            if (blank($value)) {
+                                                return;
+                                            }
+
+                                            // Printable ASCII only. Blocks Arabic, Cyrillic,
+                                            // emoji and every other non-Latin script.
+                                            if (! preg_match('/^[\x21-\x7E]+$/', (string) $value)) {
+                                                $fail(__('resources.user.password_latin_only'));
+                                            }
+
+                                            if (! preg_match('/[A-Z]/', (string) $value)) {
+                                                $fail(__('resources.user.password_uppercase'));
+                                            }
+                                        },
+                                    ])
                                     ->autocomplete('new-password')
                                     ->helperText(__('resources.user.password_helper'))
                                     ->maxLength(255)

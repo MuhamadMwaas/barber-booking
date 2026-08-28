@@ -36,7 +36,7 @@
     <div class="flex items-center space-x-6">
         <h1 class="text-lg font-bold text-gray-800 tracking-tight">{{ config('app.name') }}</h1>
         <nav class="flex space-x-1">
-            <a href="/dashboard" wire:navigate
+            <a href="{{ route('staff.dashboard') }}" wire:navigate
                 class="px-4 py-2 text-sm font-medium transition-colors {{ ($active ?? '') === 'calendar' ? 'text-amber-600 border-b-2 border-amber-500' : 'text-gray-500 hover:text-gray-700' }}">
                 {{ __('dashboard.calendar') }}
             </a>
@@ -117,7 +117,7 @@
             <div x-show="languageOpen" x-cloak @click.outside="languageOpen = false" x-transition
                 class="absolute {{ app()->getLocale() === 'ar' ? 'left-0' : 'right-0' }} mt-2 w-52 rounded-lg border bg-white py-1 shadow-xl z-50">
                 @foreach ($activeLanguages as $language)
-                    <a href="{{ url('/dashboard/language/' . $language['code']) }}"
+                    <a href="{{ route('staff.dashboard.language', ['code' => $language['code']]) }}"
                         class="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-50 {{ app()->getLocale() === $language['code'] ? 'font-semibold text-amber-600' : 'text-gray-700' }}">
                         <span>{{ $language['native_name'] ?: $language['name'] }}</span>
                         <span class="text-xs uppercase text-gray-400">{{ $language['code'] }}</span>

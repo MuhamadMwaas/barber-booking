@@ -97,6 +97,10 @@ class AdminPanelProvider extends PanelProvider {
             ])
             ->authMiddleware([
                 Authenticate::class,
+                // Makes StaffDashboard:view_admin actually enforce entry to /admin.
+                // Runs after Authenticate (so the login page is unaffected) and
+                // redirects denied staff to the Staff Dashboard.
+                \App\Http\Middleware\EnsureCanViewAdminPanel::class,
             ])->databaseNotifications()
             ->renderHook(
                 'panels::styles.before',

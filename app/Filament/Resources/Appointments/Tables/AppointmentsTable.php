@@ -396,7 +396,6 @@ class AppointmentsTable
                         try {
                             $invoiceService = app(InvoiceService::class);
                             $invoicePaymentService = app(\App\Services\Payments\InvoicePaymentService::class);
-                            $fiskalyService = app(\App\Services\Fiskaly\FiskalyService::class);
 
                             // Step 1: Get or create invoice
 
@@ -470,17 +469,21 @@ class AppointmentsTable
                                 return $invoice->fresh();
                             });
 
-                            // Step 6: Sign invoice with Fiskaly (OUTSIDE transaction for offline support)
+                            // Step 6: Sign invoice with Fiskaly (OUTSIDE transaction for offline support).
+                            // Skipped entirely while TSE is switched off (FISKALY_ENABLED=false):
+                            // no network call, no "signing failed" warning for the cashier.
                             $fiskalyWarning = false;
 
-                            try {
-                                $fiskalyService->signInvoice($invoice);
-                            } catch (\Exception $fiskalyException) {
-                                $fiskalyWarning = true;
-                                \Illuminate\Support\Facades\Log::warning('[Fiskaly] Signing failed', [
-                                    'invoice_id' => $invoice->id,
-                                    'error' => $fiskalyException->getMessage(),
-                                ]);
+                            if (config('fiskaly.enabled')) {
+                                try {
+                                    app(\App\Services\Fiskaly\FiskalyService::class)->signInvoice($invoice);
+                                } catch (\Exception $fiskalyException) {
+                                    $fiskalyWarning = true;
+                                    \Illuminate\Support\Facades\Log::warning('[Fiskaly] Signing failed', [
+                                        'invoice_id' => $invoice->id,
+                                        'error' => $fiskalyException->getMessage(),
+                                    ]);
+                                }
                             }
 
                             // Step 7: Show appropriate notification

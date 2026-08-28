@@ -82,7 +82,9 @@ return [
 
         // Helpers
         'profile_image_helper' => 'JPG or PNG image, maximum 2MB',
-        'password_helper' => 'Password must be at least 8 characters',
+        'password_helper' => 'At least 9 characters, Latin letters only, including at least one uppercase letter (A-Z) and one number.',
+        'password_latin_only' => 'The password may only contain Latin letters, numbers and symbols — Arabic or any other script is not accepted.',
+        'password_uppercase' => 'The password must contain at least one uppercase letter (A-Z).',
         'role_helper' => 'Define the user role in the system',
         'branch_helper' => 'Optional - Only for managers and service providers',
         'locale_helper' => 'Preferred user interface language',

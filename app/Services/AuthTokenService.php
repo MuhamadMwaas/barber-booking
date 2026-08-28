@@ -15,9 +15,9 @@ class AuthTokenService
 
         $expiresAt = Carbon::now()->addMinutes($minutes);
 
-        // $tokenModel = $token->accessToken;
-        // $tokenModel->expires_at = $expiresAt;
-        // $tokenModel->save();
+        $tokenModel = $token->accessToken;
+        $tokenModel->expires_at = $expiresAt;
+        $tokenModel->save();
         return ['access_token' => $accessToken, 'expires_at' => $expiresAt->toDateTimeString()];
     }
 
