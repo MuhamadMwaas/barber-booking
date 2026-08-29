@@ -105,7 +105,7 @@ class PhoneVerificationController extends Controller
         // gateway itself obeys, so the two can never disagree, whichever provider
         // SMS_DRIVER points at. `app.debug` keeps it available locally too.
         $smsEnabled = (bool) config('sms.enabled', false);
-        if (!$smsEnabled || config('app.debug')) {
+        if ( config('app.debug')) {
             $response['otp'] = $otp;
         }
 

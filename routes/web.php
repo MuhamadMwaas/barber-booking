@@ -102,24 +102,7 @@ Route::get('/page/{slug}', [LandingController::class, 'page'])
 
 Route::get('/test', function () {
 
-    // NOTE: this route used to open with
-    //   Permission::firstOrCreate(['name' => 'view_stats', 'guard_name' => 'web']);
-    // which minted an UNPREFIXED `view_stats` permission (the real one is
-    // `StaffDashboard:view_stats`). Because the Roles screen groups permissions by
-    // the prefix before ":", that stray row showed up as its own junk tab and
-    // matched nothing in the code. Removed — do not reintroduce.
-    $LineTypeRegistry= app(\App\Services\InvoiceTemplate\LineTypeRegistry::class);
-    dd($LineTypeRegistry->getGroupedOptionsForSelect());
 
-
-    $TaxCalculatorService = app(TaxCalculatorService::class);
-
-    $tax_result = $TaxCalculatorService->extractTax(200, 19);
-    dd($tax_result);
-    $net = $tax_result['net'];
-    //      DB::table('jobs')
-    //   ->where('id', 5)
-    //   ->update(['available_at' => now()->timestamp]);
 });
 
 // REMOVED: GET /grant-view-stats — an UNAUTHENTICATED route that granted
