@@ -2,7 +2,10 @@
 
 namespace App\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Command;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use App\Filament\Auth\StaffLoginResponse;
 use App\Services\Landing\LandingContent;
@@ -51,6 +54,23 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // The `api` limiter backs `$middleware->throttleApi()` in bootstrap/app.php.
+        // Laravel 11 dropped RouteServiceProvider — where this used to live — so
+        // calling throttleApi() without redefining it made EVERY /api/* request die
+        // with MissingRateLimiterException ("Rate limiter [api] is not defined"),
+        // i.e. a blanket HTTP 500 on the whole mobile API. Do not remove.
         //
+        // Authenticated callers are keyed by user id so one device cannot spend
+        // another's budget; anonymous callers fall back to IP. That IP is only
+        // trustworthy because bootstrap/app.php pins trustProxies to loopback
+        // (CFG-02) — if a real proxy is ever put in front, fix that first or this
+        // key becomes attacker-chosen again.
+        //
+        // This is the outer ceiling only. The tighter per-route limits in
+        // routes/api.php (throttle:5,1 on login, throttle:6,1 on OTP …) still apply
+        // on top of it and are what actually protect the sensitive endpoints.
+        RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
+        });
     }
 }
