@@ -3,12 +3,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Models\RefreshToken;
 use App\Models\User;
+use App\Rules\PasswordRequirements;
+use App\Rules\PhoneNumber;
 use App\Services\AccountDeletionService;
+use App\Support\ImageUploadRules;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
 {
@@ -28,10 +31,13 @@ class ProfileController extends Controller
         $data = $request->validate([
             'first_name' => 'sometimes|string|max:255',
             'last_name' => 'sometimes|string|max:255',
-            'phone' => ['sometimes', 'string', 'max:20', Rule::unique('users', 'phone')->ignore($user->id)],
+            // AUTH-07: validated on the number's digits, not on the punctuation
+            // a human typed around them. See App\Rules\PhoneNumber.
+            'phone' => ['sometimes', 'string', 'max:20', new PhoneNumber, Rule::unique('users', 'phone')->ignore($user->id)],
             'address' => 'sometimes|string|max:500',
             'city' => 'sometimes|string|max:255',
-            'image' => 'sometimes|image|max:2048',
+            // AUTH-06: size alone does not bound a decode. See ImageUploadRules.
+            'image' => ImageUploadRules::profileImage(),
         ]);
 
         if ($request->hasFile('image')) {
@@ -70,7 +76,7 @@ class ProfileController extends Controller
     {
         $request->validate([
                 'current_password' => 'required',
-                'password' => ['required', 'confirmed', Password::min(8)->mixedCase()->numbers()]
+                'password' => ['required', 'string', 'confirmed', new PasswordRequirements],
         ]);
         $user = $request->user();
         if (!Hash::check($request->current_password??"", $user->password)) {
@@ -78,8 +84,14 @@ class ProfileController extends Controller
         }
         $user->password = bcrypt($request->password??"");
         $user->save();
+        // Changing a password is the first thing a user does when they suspect
+        // their account is compromised, so it has to end every session an
+        // attacker might be holding: access tokens AND refresh tokens, on this
+        // device and on every other one. The current device is included on
+        // purpose - a session that survives the change is a session that was
+        // never proven to belong to whoever just supplied the new password.
         $user->tokens()->delete();
-        $user->refreshTokens()->update(['revoked' => true]);
+        RefreshToken::revokeAllFor($user->id, RefreshToken::REASON_PASSWORD_CHANGE);
         return response()->json(['message' => 'Password updated']);
     }
 

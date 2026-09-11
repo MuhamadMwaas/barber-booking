@@ -6,6 +6,7 @@ use App\Http\Controllers\AppointmentPrintController;
 use App\Http\Middleware\EnsureStaffDashboardAccess;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\Auth\StaffAuthController;
 use App\Http\Controllers\DailyReportController;
 use App\Http\Controllers\InvoiceTemplateController;
 use App\Http\Controllers\LandingController;
@@ -38,25 +39,38 @@ $staffDashboardDomain = config('app.staff_dashboard_domain');
 
 Route::domain($staffDashboardDomain ?: null)
     ->prefix($staffDashboardDomain ? '' : 'dashboard')
-    ->middleware([EnsureStaffDashboardAccess::class])
     ->group(function () {
 
-        Route::livewire('/', \App\Livewire\StaffDashboard::class)
-            ->name('staff.dashboard');
+        /*
+        |----------------------------------------------------------------------
+        | Dashboard authentication — OUTSIDE EnsureStaffDashboardAccess
+        |----------------------------------------------------------------------
+        |
+        | The dashboard used to have no auth of its own: guests were bounced to
+        | the Filament panel's login on the MAIN domain, and the logout button
+        | posted to the panel's logout. That put signing in and out inside the
+        | panel's `authMiddleware`, so adding EnsureCanViewAdminPanel there made
+        | revoking `StaffDashboard:view_admin` silently disable a provider's
+        | LOGOUT button — the redirect fired before Filament's logout handler
+        | ran and the session survived. See StaffAuthController for the full
+        | account, including the cross-subdomain redirect loop it also fixes.
+        |
+        | These three routes are on the dashboard's own domain but deliberately
+        | outside the gate: a login page behind a login gate is a loop, and a
+        | logout behind a permission gate is a trap.
+        |
+        */
+        Route::get('/login', [StaffAuthController::class, 'showLogin'])
+            ->name('staff.dashboard.login');
 
-        Route::livewire('/customers', \App\Livewire\CustomerLookup::class)
-            ->name('staff.dashboard.customers');
+        Route::post('/login', [StaffAuthController::class, 'login'])
+            ->name('staff.dashboard.login.attempt');
 
-        Route::livewire('/stats', \App\Livewire\StaffStats::class)
-            ->name('staff.dashboard.stats');
+        Route::post('/logout', [StaffAuthController::class, 'logout'])
+            ->name('staff.dashboard.logout');
 
-        Route::livewire('/reports', \App\Livewire\StaffReports::class)
-            ->name('staff.dashboard.reports');
-
-        // The printable Z-Report document itself (opens in its own tab).
-        Route::get('/report', [DailyReportController::class, 'show'])
-            ->name('staff.dashboard.report.print');
-
+        // Language switching is available to guests too, so the login page can
+        // be read in the employee's own language before they are anybody.
         Route::get('/language/{code}', function (string $code) {
             $language = Language::query()
                 ->where('is_active', true)
@@ -69,6 +83,25 @@ Route::domain($staffDashboardDomain ?: null)
 
             return redirect()->back();
         })->name('staff.dashboard.language');
+
+        Route::middleware([EnsureStaffDashboardAccess::class])->group(function () {
+
+            Route::livewire('/', \App\Livewire\StaffDashboard::class)
+                ->name('staff.dashboard');
+
+            Route::livewire('/customers', \App\Livewire\CustomerLookup::class)
+                ->name('staff.dashboard.customers');
+
+            Route::livewire('/stats', \App\Livewire\StaffStats::class)
+                ->name('staff.dashboard.stats');
+
+            Route::livewire('/reports', \App\Livewire\StaffReports::class)
+                ->name('staff.dashboard.reports');
+
+            // The printable Z-Report document itself (opens in its own tab).
+            Route::get('/report', [DailyReportController::class, 'show'])
+                ->name('staff.dashboard.report.print');
+        });
     });
 
 
@@ -100,8 +133,8 @@ Route::get('/language/{code}', [LandingController::class, 'switchLanguage'])
 Route::get('/page/{slug}', [LandingController::class, 'page'])
     ->name('landing.page');
 
-Route::get('/test', function () {
-
+Route::get('/test', function (Request $request) {
+    dd($request->ip());
 
 });
 

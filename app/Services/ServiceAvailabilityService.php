@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enum\AppointmentStatus;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\Appointment;
@@ -441,21 +440,22 @@ class ServiceAvailabilityService
     {
         return ProviderTimeOff::where('user_id', $provider->id)
             ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
-            ->whereDate('start_date', '<=', $date->format('Y-m-d'))
-            ->whereRaw('COALESCE(end_date, start_date) >= ?', [$date->format('Y-m-d')])
+            ->coveringDate($date->format('Y-m-d'))
             ->first();
     }
 
     /**
-     * Get provider's appointments for a specific date
+     * Appointments that occupy this provider's time on $date.
+     *
+     * Delegates to Appointment::scopeBlocksProviderTime() — the same scope the
+     * booking layer enforces — so a slot is never shown as free and then
+     * rejected on submit, and never hidden with nothing real behind it.
      */
     private function getProviderAppointments(User $provider, Carbon $date): Collection
     {
         return Appointment::where('provider_id', $provider->id)
             ->whereDate('appointment_date', $date)
-            ->whereIn('status', [
-                AppointmentStatus::PENDING,
-            ])
+            ->blocksProviderTime()
             ->select('start_time', 'end_time')
             ->get();
     }
@@ -465,11 +465,12 @@ class ServiceAvailabilityService
      */
     private function getProviderHourlyTimeOffs(User $provider, Carbon $date): Collection
     {
+        // The dates are selected too: blocksWindow() needs them to tell a start
+        // day from a middle day of a multi-day leave.
         return ProviderTimeOff::where('user_id', $provider->id)
             ->where('type', ProviderTimeOff::TYPE_HOURLY)
-            ->whereDate('start_date', '<=', $date->format('Y-m-d'))
-            ->whereRaw('COALESCE(end_date, start_date) >= ?', [$date->format('Y-m-d')])
-            ->select('start_time', 'end_time')
+            ->coveringDate($date->format('Y-m-d'))
+            ->select('type', 'start_date', 'end_date', 'start_time', 'end_time')
             ->get();
     }
 
@@ -492,16 +493,14 @@ class ServiceAvailabilityService
             }
         }
 
-        // Check hourly time offs
+        // Check hourly time offs.
+        //
+        // Delegated to the model so the booking layer runs the identical rule
+        // (BOOK-04). This also carries the multi-day meaning: an hourly leave
+        // spanning several days is ONE continuous absence, so its middle days are
+        // fully blocked rather than only losing the same window each morning.
         foreach ($timeOffs as $timeOff) {
-            if ($timeOff->start_time === null || $timeOff->end_time === null) {
-                continue;
-            }
-
-            $timeOffStart = $this->combineDateAndTime($slotStart, $timeOff->start_time);
-            $timeOffEnd = $this->combineDateAndTime($slotStart, $timeOff->end_time);
-
-            if ($this->overlapsWithPeriod($slotStart, $slotEnd, $timeOffStart, $timeOffEnd)) {
+            if ($timeOff->blocksWindow($slotStart, $slotEnd)) {
                 return true;
             }
         }
@@ -601,9 +600,19 @@ class ServiceAvailabilityService
 
     private function getProviderServicePricing(User $provider, Service $service): array
     {
+        // `is_active` is part of the lookup so this matches
+        // BookingService::getEffectivePrice() exactly. It was missing here, so
+        // an INACTIVE pivot row could set the QUOTED price while the booking
+        // layer ignored that row and CHARGED the base price — the customer sees
+        // one number in the app and is asked for another at the counter.
+        //
+        // `(provider_id, service_id)` is now UNIQUE (MON-03 / DB-01) too: with
+        // two rows for one pair, `->first()` returns whichever the database
+        // feels like, and the two layers could each pick a different one.
         $pivot = DB::table('provider_service')
             ->where('provider_id', $provider->id)
             ->where('service_id', $service->id)
+            ->where('is_active', true)
             ->first();
 
         // `$service->effective_price` does not exist — neither a column nor an

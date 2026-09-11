@@ -25,4 +25,23 @@ return [
     'otp_verified' => 'Code verified. You can now choose a new password.',
     'cooldown' => 'Please wait :seconds seconds before requesting a new code.',
 
+    'requirements' => [
+        'title' => 'Password requirements',
+        'minimum_length' => 'At least :min characters',
+        'latin_only' => 'Latin characters only',
+        'uppercase' => 'At least one uppercase letter (A-Z)',
+        'number' => 'At least one number',
+        'edit_helper' => 'Leave blank to keep the current password.',
+        'state' => [
+            'met' => 'requirement met',
+            'unmet' => 'requirement not met',
+        ],
+        'validation' => [
+            'minimum_length' => 'The password must contain at least :min characters.',
+            'latin_only' => 'Use Latin letters, numbers, and symbols only, without spaces.',
+            'uppercase' => 'The password must contain at least one uppercase letter (A-Z).',
+            'number' => 'The password must contain at least one number.',
+        ],
+    ],
+
 ];

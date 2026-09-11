@@ -2,16 +2,18 @@
 
 namespace App\Filament\Resources\Users\Schemas;
 
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Grid;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Toggle;
+use App\Filament\Forms\Components\PasswordConfirmationInput;
+use App\Filament\Forms\Components\PasswordInput;
+use App\Support\ImageUploadRules;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
+use Spatie\Permission\Models\Role;
 
 class UserForm
 {
@@ -38,8 +40,13 @@ class UserForm
                             ->disk('public')
                             ->directory('temp/uploads')
                             ->visibility('public')
-                            ->maxSize(2048)
-                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg'])
+                            // AUTH-06: the same ceilings the API enforces. The
+                            // dimensions rule is the one that matters — maxSize
+                            // bounds the bytes uploaded, not the pixels they
+                            // decode into.
+                            ->maxSize(ImageUploadRules::maxKilobytes())
+                            ->acceptedFileTypes(ImageUploadRules::mimeTypes())
+                            ->rules([ImageUploadRules::dimensions()])
                             ->helperText(__('resources.user.profile_image_helper'))
                             // The existing image is hydrated by the Edit page's
                             // mutateFormDataBeforeFill(). Do not override
@@ -113,7 +120,7 @@ class UserForm
                                 Select::make('role')
                                     ->label(__('resources.user.role'))
                                     ->placeholder(__('resources.user.select_role'))
-                                    ->options(fn () => \Spatie\Permission\Models\Role::where('guard_name', 'web')
+                                    ->options(fn () => Role::where('guard_name', 'web')
                                         ->when($isCustomerMode, fn ($query) => $query->where('name', 'customer'))
                                         ->when(! $isCustomerMode, fn ($query) => $query->whereNotIn('name', $excludedRoles))
                                         ->pluck('name', 'name')
@@ -168,53 +175,16 @@ class UserForm
 
                         Grid::make(2)
                             ->schema([
-                                TextInput::make('password')
+                                PasswordInput::make('password')
                                     ->label(__('resources.user.password'))
-                                    ->password()
-                                    ->revealable()
                                     ->required(fn (string $context): bool => $context === 'create')
-                                    ->dehydrateStateUsing(fn ($state) => Hash::make($state))
-                                    ->dehydrated(fn ($state) => filled($state))
-                                    // Policy: >= 9 chars, Latin (ASCII) characters only, at
-                                    // least one A-Z uppercase and at least one digit.
-                                    // Password::min(9)->numbers() covers the length + digit
-                                    // with Laravel's own localized messages; the closure adds
-                                    // the two checks Laravel has no builder for.
-                                    // mixedCase() is deliberately NOT used — it would also
-                                    // demand a lowercase letter, which the policy never asks for.
-                                    ->rules([
-                                        'string',
-                                        Password::min(9)->numbers(),
-                                        fn (): \Closure => function (string $attribute, $value, \Closure $fail): void {
-                                            // Left blank while editing = "keep current password",
-                                            // so there is nothing to validate.
-                                            if (blank($value)) {
-                                                return;
-                                            }
+                                    ->helperText(fn (string $context): ?string => $context === 'edit'
+                                        ? __('passwords.requirements.edit_helper')
+                                        : null),
 
-                                            // Printable ASCII only. Blocks Arabic, Cyrillic,
-                                            // emoji and every other non-Latin script.
-                                            if (! preg_match('/^[\x21-\x7E]+$/', (string) $value)) {
-                                                $fail(__('resources.user.password_latin_only'));
-                                            }
-
-                                            if (! preg_match('/[A-Z]/', (string) $value)) {
-                                                $fail(__('resources.user.password_uppercase'));
-                                            }
-                                        },
-                                    ])
-                                    ->autocomplete('new-password')
-                                    ->helperText(__('resources.user.password_helper'))
-                                    ->maxLength(255)
-                                    ->confirmed(),
-
-                                TextInput::make('password_confirmation')
+                                PasswordConfirmationInput::make('password_confirmation')
                                     ->label(__('resources.user.password_confirmation'))
-                                    ->password()
-                                    ->revealable()
-                                    ->required(fn (string $context): bool => $context === 'create')
-                                    ->dehydrated(false)
-                                    ->maxLength(255),
+                                    ->required(fn (string $context): bool => $context === 'create'),
                             ]),
                     ])
                     ->collapsible()

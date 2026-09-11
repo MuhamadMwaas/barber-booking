@@ -135,7 +135,13 @@ class AppointmentSeeder extends Seeder
             Log::info("Calculated tax: $taxAmount, net amount: $net, tax rate: $taxRate%");
             Log::info('---');
         $appointment = Appointment::create([
-            'number' => 'APT-' . strtoupper(uniqid()),
+            // `number` is deliberately omitted: Appointment::creating() fills it
+            // via BookingService::generateAppointmentNumber(), which retries on
+            // collision. This used to be `'APT-' . strtoupper(uniqid())` — and
+            // uniqid() is microsecond-based, so a tight seeding loop can repeat
+            // it. `appointments.number` is now UNIQUE (MON-03 / DB-01), which
+            // would turn that into a hard seeder failure, and the seeded format
+            // no longer matched what production writes either.
             'customer_id' => $data['customer']->id,
             'provider_id' => $data['provider']->id,
             'appointment_date' => $appointmentDate,

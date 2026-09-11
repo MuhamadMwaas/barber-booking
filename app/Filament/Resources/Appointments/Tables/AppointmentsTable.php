@@ -6,9 +6,14 @@ use App\Enum\AppointmentStatus;
 use App\Enum\BookingSource;
 use App\Enum\PaymentStatus;
 use App\Models\Appointment;
-use App\Services\InvoiceService;
+use App\Models\PaymentMethod;
+use App\Services\InvoiceFinalizationService;
+use App\Services\TaxCalculatorService;
+use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -24,8 +29,6 @@ use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\HtmlString;
-use Filament\Tables\Columns\Layout\Grid;
-use Filament\Actions\ActionGroup;
 
 class AppointmentsTable
 {
@@ -54,14 +57,14 @@ class AppointmentsTable
 
                 TextColumn::make('customer_display') // اسم افتراضي للعمود
                     ->label(__('resources.appointment.customer_name'))
-                    ->state(fn($record) => $record->customer_name) // من الـ accessor
+                    ->state(fn ($record) => $record->customer_name) // من الـ accessor
                     ->description(function ($record) {
                         return $record->customer_phone
                             ?? $record->customer_email
                             ?? __('resources.user.not_provided');
                     })
 
-                    ->searchable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $search) {
+                    ->searchable(query: function (Builder $query, string $search) {
                         $query->where(function ($q) use ($search) {
                             $q->where('customer_name', 'like', "%{$search}%")
                                 ->orWhere('customer_email', 'like', "%{$search}%")
@@ -76,23 +79,23 @@ class AppointmentsTable
                         });
                     })
 
-                    ->sortable(query: function (\Illuminate\Database\Eloquent\Builder $query, string $direction) {
-                        $usersFullName = <<<SQL
+                    ->sortable(query: function (Builder $query, string $direction) {
+                        $usersFullName = <<<'SQL'
             (SELECT CONCAT(u.first_name, ' ', u.last_name)
              FROM users u
              WHERE u.id = appointments.customer_id)
         SQL;
 
                         $query->orderByRaw(
-                            "COALESCE(customer_name, {$usersFullName}) " . ($direction === 'asc' ? 'asc' : 'desc')
+                            "COALESCE(customer_name, {$usersFullName}) ".($direction === 'asc' ? 'asc' : 'desc')
                         );
                     })
-                    ->weight(\Filament\Support\Enums\FontWeight::SemiBold),
+                    ->weight(FontWeight::SemiBold),
                 // مزود الخدمة
                 ImageColumn::make('provider.profile_image_url')
                     ->label(__('resources.appointment.provider'))
                     ->circular()
-                    ->defaultImageUrl(fn($record) => 'https://ui-avatars.com/api/?name=' . urlencode($record->provider->full_name) . '&color=10b981&background=d1fae5')
+                    ->defaultImageUrl(fn ($record) => 'https://ui-avatars.com/api/?name='.urlencode($record->provider->full_name).'&color=10b981&background=d1fae5')
                     ->size(40),
 
                 TextColumn::make('provider.full_name')
@@ -100,7 +103,7 @@ class AppointmentsTable
                     ->searchable(['first_name', 'last_name'])
                     ->sortable(['first_name', 'last_name'])
                     ->weight(FontWeight::SemiBold)
-                    ->description(fn($record) => $record->provider->branch->name ?? __('resources.no_branch')),
+                    ->description(fn ($record) => $record->provider->branch->name ?? __('resources.no_branch')),
 
                 // الخدمات
                 TextColumn::make('services_list')
@@ -113,8 +116,8 @@ class AppointmentsTable
                         return new HtmlString(
                             $record->services->map(function ($service) {
                                 return '<span style="display: inline-block; padding: 2px 8px; margin: 2px; background: '.$service->color_code.'; border-radius: 4px; font-size: 0.75rem;">'
-                                    . htmlspecialchars($service->pivot->service_name)
-                                    . '</span>';
+                                    .htmlspecialchars($service->pivot->service_name)
+                                    .'</span>';
                             })->join('')
                         );
                     })
@@ -127,7 +130,7 @@ class AppointmentsTable
                     ->date('M d, Y')
                     ->sortable()
                     ->icon('heroicon-o-calendar')
-                    ->description(fn($record) => $record->start_time->format('h:i A') . ' - ' . $record->end_time->format('h:i A')),
+                    ->description(fn ($record) => $record->start_time->format('h:i A').' - '.$record->end_time->format('h:i A')),
 
                 // المدة
                 TextColumn::make('duration_minutes')
@@ -135,6 +138,7 @@ class AppointmentsTable
                     ->formatStateUsing(function ($state) {
                         $hours = floor($state / 60);
                         $minutes = $state % 60;
+
                         return $hours > 0
                             ? "{$hours}h {$minutes}m"
                             : "{$minutes}m";
@@ -152,8 +156,9 @@ class AppointmentsTable
                     ->color('success')
                     ->description(function ($record) {
                         if ($record->tax_amount > 0) {
-                            return __('resources.appointment.includes_tax') . ': EUR ' . number_format($record->tax_amount, 2);
+                            return __('resources.appointment.includes_tax').': EUR '.number_format($record->tax_amount, 2);
                         }
+
                         return null;
                     }),
 
@@ -161,19 +166,19 @@ class AppointmentsTable
                 TextColumn::make('status')
                     ->label(__('resources.appointment.status'))
                     ->badge()
-                    ->formatStateUsing(fn(AppointmentStatus $state) => match ($state) {
+                    ->formatStateUsing(fn (AppointmentStatus $state) => match ($state) {
                         AppointmentStatus::PENDING => __('resources.appointment.pending'),
                         AppointmentStatus::COMPLETED => __('resources.appointment.completed'),
                         AppointmentStatus::USER_CANCELLED => __('resources.appointment.user_cancelled'),
                         AppointmentStatus::ADMIN_CANCELLED => __('resources.appointment.admin_cancelled'),
                     })
-                    ->color(fn(AppointmentStatus $state) => match ($state) {
+                    ->color(fn (AppointmentStatus $state) => match ($state) {
                         AppointmentStatus::PENDING => 'warning',
                         AppointmentStatus::COMPLETED => 'success',
                         AppointmentStatus::USER_CANCELLED => 'danger',
                         AppointmentStatus::ADMIN_CANCELLED => 'gray',
                     })
-                    ->icon(fn(AppointmentStatus $state) => match ($state) {
+                    ->icon(fn (AppointmentStatus $state) => match ($state) {
                         AppointmentStatus::PENDING => 'heroicon-o-clock',
                         AppointmentStatus::COMPLETED => 'heroicon-o-check-circle',
                         AppointmentStatus::USER_CANCELLED => 'heroicon-o-x-circle',
@@ -194,7 +199,7 @@ class AppointmentsTable
                 TextColumn::make('payment_status')
                     ->label(__('resources.appointment.payment_status'))
                     ->badge()
-                    ->formatStateUsing(fn(PaymentStatus $state) => match ($state) {
+                    ->formatStateUsing(fn (PaymentStatus $state) => match ($state) {
                         PaymentStatus::PENDING => __('resources.appointment.payment_pending'),
                         PaymentStatus::PAID_ONLINE => __('resources.appointment.paid_online'),
                         PaymentStatus::PAID_ONSTIE_CASH => __('resources.appointment.paid_cash'),
@@ -203,13 +208,13 @@ class AppointmentsTable
                         PaymentStatus::REFUNDED => __('resources.appointment.refunded'),
                         PaymentStatus::PARTIALLY_REFUNDED => __('resources.appointment.partially_refunded'),
                     })
-                    ->color(fn(PaymentStatus $state) => match ($state) {
+                    ->color(fn (PaymentStatus $state) => match ($state) {
                         PaymentStatus::PENDING => 'warning',
                         PaymentStatus::PAID_ONLINE, PaymentStatus::PAID_ONSTIE_CASH, PaymentStatus::PAID_ONSTIE_CARD => 'success',
                         PaymentStatus::FAILED => 'danger',
                         PaymentStatus::REFUNDED, PaymentStatus::PARTIALLY_REFUNDED => 'gray',
                     })
-                    ->icon(fn(PaymentStatus $state) => match ($state) {
+                    ->icon(fn (PaymentStatus $state) => match ($state) {
                         PaymentStatus::PENDING => 'heroicon-o-clock',
                         PaymentStatus::PAID_ONLINE, PaymentStatus::PAID_ONSTIE_CASH, PaymentStatus::PAID_ONSTIE_CARD => 'heroicon-o-check-badge',
                         PaymentStatus::FAILED => 'heroicon-o-x-circle',
@@ -262,7 +267,7 @@ class AppointmentsTable
                 SelectFilter::make('booking_source')
                     ->label('Booking Source')
                     ->options([
-                        BookingSource::ONLINE->value    => BookingSource::ONLINE->label(),
+                        BookingSource::ONLINE->value => BookingSource::ONLINE->label(),
                         BookingSource::IN_PERSON->value => BookingSource::IN_PERSON->label(),
                     ]),
 
@@ -288,8 +293,8 @@ class AppointmentsTable
                     ->trueLabel(__('resources.appointment.upcoming'))
                     ->falseLabel(__('resources.appointment.past'))
                     ->queries(
-                        true: fn($query) => $query->where('start_time', '>', now()),
-                        false: fn($query) => $query->where('start_time', '<', now()),
+                        true: fn ($query) => $query->where('start_time', '>', now()),
+                        false: fn ($query) => $query->where('start_time', '<', now()),
                     ),
 
                 // فلتر حجوزات اليوم
@@ -299,37 +304,38 @@ class AppointmentsTable
                     ->trueLabel(__('resources.appointment.today_only'))
                     ->falseLabel(__('resources.appointment.not_today'))
                     ->queries(
-                        true: fn($query) => $query->whereDate('appointment_date', today()),
-                        false: fn($query) => $query->whereDate('appointment_date', '!=', today()),
+                        true: fn ($query) => $query->whereDate('appointment_date', today()),
+                        false: fn ($query) => $query->whereDate('appointment_date', '!=', today()),
                     ),
 
                 // فلتر حسب نطاق التاريخ والوقت
                 Filter::make('date_range')
                     ->form([
-                        \Filament\Forms\Components\DatePicker::make('from_date')
+                        DatePicker::make('from_date')
                             ->label(__('resources.appointment.from_date')),
-                        \Filament\Forms\Components\DatePicker::make('to_date')
+                        DatePicker::make('to_date')
                             ->label(__('resources.appointment.to_date')),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
                             ->when(
                                 $data['from_date'],
-                                fn(Builder $query, $date): Builder => $query->whereDate('start_time', '>=', $date),
+                                fn (Builder $query, $date): Builder => $query->whereDate('start_time', '>=', $date),
                             )
                             ->when(
                                 $data['to_date'],
-                                fn(Builder $query, $date): Builder => $query->whereDate('end_time', '<=', $date),
+                                fn (Builder $query, $date): Builder => $query->whereDate('end_time', '<=', $date),
                             );
                     })
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
                         if ($data['from_date'] ?? null) {
-                            $indicators[] = __('resources.appointment.from_date') . ': ' . \Carbon\Carbon::parse($data['from_date'])->format('M d, Y');
+                            $indicators[] = __('resources.appointment.from_date').': '.Carbon::parse($data['from_date'])->format('M d, Y');
                         }
                         if ($data['to_date'] ?? null) {
-                            $indicators[] = __('resources.appointment.to_date') . ': ' . \Carbon\Carbon::parse($data['to_date'])->format('M d, Y');
+                            $indicators[] = __('resources.appointment.to_date').': '.Carbon::parse($data['to_date'])->format('M d, Y');
                         }
+
                         return $indicators;
                     }),
             ])
@@ -339,29 +345,48 @@ class AppointmentsTable
                     ->label(__('resources.appointment.mark_as_paid'))
                     ->icon('heroicon-o-currency-dollar')
                     ->color('success')
-                    // ->visible(fn($record) => $record->payment_status === PaymentStatus::PENDING
-                    //     && $record->status !== AppointmentStatus::ADMIN_CANCELLED
-                    //     && $record->status !== AppointmentStatus::USER_CANCELLED)
-                    ->fillForm(fn($record) => [
-                        'amount_paid' => $record?->total_amount, // أو total_amount ?? 0
-                        'calculated_subtotal' => $record?->subtotal,
-                        'calculated_tax' => $record?->tax_amount,
-                        'payment_method_id' => \App\Models\PaymentMethod::query()
+                    ->visible(fn ($record) => $record->payment_status === PaymentStatus::PENDING
+                        && ! in_array($record->status, [
+                            AppointmentStatus::ADMIN_CANCELLED,
+                            AppointmentStatus::USER_CANCELLED,
+                            AppointmentStatus::NO_SHOW,
+                        ], true))
+                    ->fillForm(function ($record): array {
+                        // A linked booking has one invoice, so its suggested price
+                        // is the gross sum of parent + children, not this row alone.
+                        $amount = (string) $record->linkedGroup()->sum('total_amount');
+                        $breakdown = app(TaxCalculatorService::class)->extractTax(
+                            $amount,
+                            (string) get_setting('tax_rate', 19),
+                            2
+                        );
+
+                        return [
+                            'amount_paid' => $amount,
+                            'calculated_subtotal' => $breakdown['net'],
+                            'calculated_tax' => $breakdown['tax'],
+                            'payment_method_id' => PaymentMethod::query()
                                 ->where('status', true)
-                                ->where('type', \App\Models\PaymentMethod::TYPE_CASH)
+                                ->where('type', PaymentMethod::TYPE_CASH)
                                 ->value('id'),
-                    ])
+                        ];
+                    })
                     ->schema([
                         Select::make('payment_method_id')
                             ->label(__('resources.appointment.payment_method'))
-                            ->options(fn() => \App\Models\PaymentMethod::query()
+                            ->options(fn () => PaymentMethod::query()
                                 ->where('status', true)
+                                ->whereIn('type', [
+                                    PaymentMethod::TYPE_CASH,
+                                    PaymentMethod::TYPE_CREDIT_CARD,
+                                    PaymentMethod::TYPE_DEBIT_CARD,
+                                ])
                                 ->pluck('name', 'id')
                                 ->toArray())
                             ->required()
-                            ->default(fn() => \App\Models\PaymentMethod::query()
+                            ->default(fn () => PaymentMethod::query()
                                 ->where('status', true)
-                                ->where('type', \App\Models\PaymentMethod::TYPE_CASH::value)
+                                ->where('type', PaymentMethod::TYPE_CASH)
                                 ->value('id'))
                             ->columnSpanFull(),
 
@@ -370,144 +395,51 @@ class AppointmentsTable
                             ->numeric()
                             ->prefix('EUR')
                             ->suffix(__('resources.provider_resource.includes_tax_suffix'))
-                            ->default(fn($record) => $record->total_amount)
+                            ->default(fn ($record) => $record->linkedGroup()->sum('total_amount'))
                             ->required()
                             ->afterStateUpdated(function ($state, $set) {
-                                if ($state) {
-                                    // حساب الضريبة العكسية (19%)
-                                    $taxRate = 19;
-                                    $subtotal = $state / (1 + ($taxRate / 100));
-                                    $taxAmount = $state - $subtotal;
+                                if ($state !== null && $state !== '') {
+                                    $breakdown = app(TaxCalculatorService::class)->extractTax(
+                                        (string) $state,
+                                        (string) get_setting('tax_rate', 19),
+                                        2
+                                    );
 
-                                    $set('calculated_subtotal', round($subtotal, 2));
-                                    $set('calculated_tax', round($taxAmount, 2));
+                                    $set('calculated_subtotal', $breakdown['net']);
+                                    $set('calculated_tax', $breakdown['tax']);
                                 }
                             })
                             ->helperText(
-                                fn($get) =>
-                                $get('calculated_subtotal')
-                                ? __('resources.provider_resource.breakdown') . ': ' .
-                                __('resources.provider_resource.subtotal') . ' EUR ' . number_format($get('calculated_subtotal'), 2) . ' + ' .
-                                __('resources.provider_resource.tax') . ' (19%) EUR ' . number_format($get('calculated_tax'), 2)
+                                fn ($get) => $get('calculated_subtotal')
+                                ? __('resources.provider_resource.breakdown').': '.
+                                __('resources.provider_resource.subtotal').' EUR '.number_format($get('calculated_subtotal'), 2).' + '.
+                                __('resources.provider_resource.tax').' ('.get_setting('tax_rate', 19).'%) EUR '.number_format($get('calculated_tax'), 2)
                                 : __('resources.provider_resource.amount_paid_helper')
                             ),
                     ])
                     ->action(function ($record, array $data) {
                         try {
-                            $invoiceService = app(InvoiceService::class);
-                            $invoicePaymentService = app(\App\Services\Payments\InvoicePaymentService::class);
-
-                            // Step 1: Get or create invoice
-
-                                $invoice = $record->invoice;
-
-                                if (!$invoice) {
-                                    // Create draft invoice
-                                    $invoice = $invoiceService->createDtaftInvoiceFromAppointment(
-                                        appointment: $record,
-                                        paymentType: PaymentStatus::PAID_ONSTIE_CASH->value,
-                                        amountPaid: $data['amount_paid'],
-                                        notes: null,
-                                        adjustedDuration: null,
-                                        amountIncludesTax: true
-                                    );
-                                }
-
-                            // Transaction for payment operations only
-                            $invoice = \Illuminate\Support\Facades\DB::transaction(function () use ($record, $data, $invoiceService,$invoice, $invoicePaymentService) {
-
-
-                                // Step 2: Convert DRAFT to PENDING if needed
-                                if ($invoice->status === \App\Enum\InvoiceStatus::DRAFT) {
-                                    $invoice->update(['status' => \App\Enum\InvoiceStatus::PENDING]);
-                                    $invoice->refresh();
-                                }
-
-                                // Step 2b: Apply the final amount through the single source of
-                                // truth. Records the discount (items total - amount paid) and
-                                // reconciles net/tax/total on the discounted gross, so the printed
-                                // receipt shows the same breakdown as the StaffDashboard path.
-                                $invoice = $invoiceService->applyFinalAmount($invoice, (float) $data['amount_paid']);
-
-                                // Step 3: Determine PaymentStatus based on PaymentMethod type
-                                $paymentMethod = \App\Models\PaymentMethod::find($data['payment_method_id']);
-                                $paymentStatus = match ($paymentMethod->type) {
-                                    \App\Models\PaymentMethod::TYPE_CASH => PaymentStatus::PAID_ONSTIE_CASH,
-                                    \App\Models\PaymentMethod::TYPE_CREDIT_CARD,
-                                    \App\Models\PaymentMethod::TYPE_DEBIT_CARD => PaymentStatus::PAID_ONSTIE_CARD,
-                                    default => PaymentStatus::PAID_ONSTIE_CASH,
-                                };
-
-                                // Step 4: Create payment record for the reconciled (post-discount) total.
-                                $payment = $invoicePaymentService->createFromInvoice(
-                                    invoice: $invoice,
-                                    amount: (float) $invoice->total_amount,
-                                    paymentMethod: $data['payment_method_id'],
-                                    status: $paymentStatus,
-                                    metadata: [
-                                        'appointment_id' => $record->id,
-                                        'appointment_number' => $record->number,
-                                        'paid_at' => now()->toIso8601String(),
-                                        'paid_by' => \Illuminate\Support\Facades\Auth::user()?->full_name ?? 'System',
-                                    ]
+                            $invoice = app(InvoiceFinalizationService::class)
+                                ->finalizeAppointmentPayment(
+                                    appointment: $record,
+                                    paymentMethod: (int) $data['payment_method_id'],
+                                    finalAmount: (float) $data['amount_paid'],
+                                    notes: null,
+                                    source: 'filament_appointments',
                                 );
 
-                                // Step 4b: Ensure a sequential invoice number once PAID.
-                                // (InvoicePaymentService flips the status but does not assign a number.)
-                                $invoice->refresh();
-                                if ($invoice->status === \App\Enum\InvoiceStatus::PAID && empty($invoice->invoice_number)) {
-                                    $invoice->update(['invoice_number' => \App\Models\Invoice::generateInvoiceNumber()]);
-                                }
+                            Notification::make()
+                                ->title(__('resources.appointment.payment_success'))
+                                ->body(__('resources.appointment.invoice_created').': '.$invoice->invoice_number)
+                                ->success()
+                                ->duration(8000)
+                                ->send();
 
-                                // Step 5: Update appointment status
-                                $record->update([
-                                    'status' => AppointmentStatus::COMPLETED,
-                                    'payment_status' => $paymentStatus,
-                                    'payment_method' => $paymentMethod->name,
-                                ]);
-
-                                return $invoice->fresh();
-                            });
-
-                            // Step 6: Sign invoice with Fiskaly (OUTSIDE transaction for offline support).
-                            // Skipped entirely while TSE is switched off (FISKALY_ENABLED=false):
-                            // no network call, no "signing failed" warning for the cashier.
-                            $fiskalyWarning = false;
-
-                            if (config('fiskaly.enabled')) {
-                                try {
-                                    app(\App\Services\Fiskaly\FiskalyService::class)->signInvoice($invoice);
-                                } catch (\Exception $fiskalyException) {
-                                    $fiskalyWarning = true;
-                                    \Illuminate\Support\Facades\Log::warning('[Fiskaly] Signing failed', [
-                                        'invoice_id' => $invoice->id,
-                                        'error' => $fiskalyException->getMessage(),
-                                    ]);
-                                }
-                            }
-
-                            // Step 7: Show appropriate notification
-                            if ($fiskalyWarning) {
-                                Notification::make()
-                                    ->title(__('resources.appointment.payment_success'))
-                                    ->body(__('resources.appointment.payment_done_fiskaly_failed'))
-                                    ->warning()
-                                    ->duration(8000)
-                                    ->send();
-                            } else {
-                                Notification::make()
-                                    ->title(__('resources.appointment.payment_success'))
-                                    ->body(__('resources.appointment.invoice_created') . ': ' . $invoice->invoice_number)
-                                    ->success()
-                                    ->duration(8000)
-                                    ->send();
-                            }
-
-                        } catch (\Exception $e) {
+                        } catch (\Throwable $e) {
                             Notification::make()
                                 ->title(__('resources.appointment.payment_error'))
                                 ->body($e->getMessage())
-                                 ->duration(8000)
+                                ->duration(8000)
                                 ->danger()
                                 ->send();
                         }
@@ -521,77 +453,76 @@ class AppointmentsTable
                     // ->visible(function($record){
                     //     return $record->end_time > now();
                     // })
-                    ->fillForm(fn($record) => [
+                    ->fillForm(fn ($record) => [
                         'adjusted_duration' => $record->duration_minutes,
                         'start_time_display' => $record->start_time->format('h:i A'),
                         'start_time_value' => $record->start_time->format('Y-m-d H:i:s'),
                         'adjusted_end_time' => $record->end_time->format('H:i'),
                         'duration_display' => $record->duration_minutes,
                     ])->schema([
-                            Hidden::make('start_time_value'),
+                        Hidden::make('start_time_value'),
 
-                            TextInput::make('start_time_display')
-                                ->label(__('resources.appointment.start_time'))
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->columnSpan(1),
+                        TextInput::make('start_time_display')
+                            ->label(__('resources.appointment.start_time'))
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->columnSpan(1),
 
-                            TimePicker::make('adjusted_end_time')
-                                ->label(__('resources.appointment.end_time'))
-                                ->seconds(false)
-                                ->required()
-                                ->helperText(__('resources.appointment.end_time_helper'))
-                                ->live(debounce: 500)
-                                ->afterStateUpdated(function ($state, $set, $get, $record) {
-                                    if ($state && $get('start_time_value')) {
-                                        $startTime = \Carbon\Carbon::parse($get('start_time_value'));
-                                        $endTimeParts = explode(':', $state);
+                        TimePicker::make('adjusted_end_time')
+                            ->label(__('resources.appointment.end_time'))
+                            ->seconds(false)
+                            ->required()
+                            ->helperText(__('resources.appointment.end_time_helper'))
+                            ->live(debounce: 500)
+                            ->afterStateUpdated(function ($state, $set, $get, $record) {
+                                if ($state && $get('start_time_value')) {
+                                    $startTime = Carbon::parse($get('start_time_value'));
+                                    $endTimeParts = explode(':', $state);
 
-                                        $newEndTime = $startTime->copy()
-                                            ->setTime((int) $endTimeParts[0], (int) $endTimeParts[1], 0);
+                                    $newEndTime = $startTime->copy()
+                                        ->setTime((int) $endTimeParts[0], (int) $endTimeParts[1], 0);
 
-                                        $durationMinutes = $startTime->diffInMinutes($newEndTime);
+                                    $durationMinutes = $startTime->diffInMinutes($newEndTime);
 
-                                        $set('adjusted_duration', $durationMinutes);
-                                        $set('duration_display', $durationMinutes);
-                                    }
-                                })
-                                ->columnSpan(1),
+                                    $set('adjusted_duration', $durationMinutes);
+                                    $set('duration_display', $durationMinutes);
+                                }
+                            })
+                            ->columnSpan(1),
 
-                            TextInput::make('duration_display')
-                                ->label(__('resources.appointment.duration'))
-                                ->disabled()
-                                ->dehydrated(false)
-                                ->suffix('min')
-                                ->columnSpan(1),
+                        TextInput::make('duration_display')
+                            ->label(__('resources.appointment.duration'))
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->suffix('min')
+                            ->columnSpan(1),
 
-                            Hidden::make('adjusted_duration'),
-                        ])->action(function ($record, array $data) {
-                            try {
+                        Hidden::make('adjusted_duration'),
+                    ])->action(function ($record, array $data) {
+                        try {
 
-                                $adjustedDuration = $data['adjusted_duration'] ?? $record->duration_minutes;
+                            $adjustedDuration = $data['adjusted_duration'] ?? $record->duration_minutes;
 
-                                $record->update([
-                                    'duration_minutes' => $adjustedDuration,
-                                    'end_time' => $record->end_time->setTimeFromTimeString($data['adjusted_end_time']),
+                            $record->update([
+                                'duration_minutes' => $adjustedDuration,
+                                'end_time' => $record->end_time->setTimeFromTimeString($data['adjusted_end_time']),
 
-                                ]);
+                            ]);
 
-                                Notification::make()
-                                    ->title(__('resources.appointment.duration_updated'))
-                                    ->body(__('resources.appointment.duration_updated_message'))
-                                    ->success()
-                                    ->send();
+                            Notification::make()
+                                ->title(__('resources.appointment.duration_updated'))
+                                ->body(__('resources.appointment.duration_updated_message'))
+                                ->success()
+                                ->send();
 
-
-                            } catch (\Exception $e) {
-                                Notification::make()
-                                    ->title(__('resources.appointment.payment_error'))
-                                    ->body($e->getMessage())
-                                    ->danger()
-                                    ->send();
-                            }
-                        })
+                        } catch (\Exception $e) {
+                            Notification::make()
+                                ->title(__('resources.appointment.payment_error'))
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    })
                     ->modalWidth('2xl'),
 
                 Action::make('print_invoice')
@@ -599,62 +530,60 @@ class AppointmentsTable
                     ->icon('heroicon-o-printer')
                     ->color('gray')
                     ->url(fn (Appointment $record): ?string => $record->invoice
-                        ? route('invoice.print', ['invoice' => $record->invoice])
-                        : null)
+                    ? route('invoice.print', ['invoice' => $record->invoice])
+                    : null)
                     ->openUrlInNewTab()
                     ->visible(fn (Appointment $record): bool => $record->canPrintInvoice()),
 
-
-
                 ActionGroup::make([
                     Action::make('view')
-                        ->label(__('resources.view'))
-                        ->icon('heroicon-o-eye')
-                        ->url(fn($record) => route('filament.admin.resources.appointments.view', ['record' => $record])),
+                    ->label(__('resources.view'))
+                    ->icon('heroicon-o-eye')
+                    ->url(fn ($record) => route('filament.admin.resources.appointments.view', ['record' => $record])),
 
                     Action::make('edit')
-                        ->label(__('resources.edit'))
-                        ->icon('heroicon-o-pencil')
-                        ->url(fn($record) => route('filament.admin.resources.appointments.edit', ['record' => $record])),
+                    ->label(__('resources.edit'))
+                    ->icon('heroicon-o-pencil')
+                    ->url(fn ($record) => route('filament.admin.resources.appointments.edit', ['record' => $record])),
 
                     Action::make('cancel')
-                        ->label(__('main.cancel'))
-                        ->icon('heroicon-o-x-circle')
-                        ->color('danger')
-                        ->visible(fn($record) => $record->status === AppointmentStatus::PENDING)
-                        ->requiresConfirmation()
-                        ->modalHeading(__('resources.appointment.cancel_confirmation'))
-                        ->modalDescription(__('resources.appointment.cancel_description'))
-                        ->form([
-                            Textarea::make('cancellation_reason')
-                                ->label(__('resources.appointment.cancellation_reason'))
-                                ->required()
-                                ->rows(3)
-                                ->maxLength(500),
-                        ])
-                        ->action(function ($record, array $data) {
-                            $record->update([
-                                'status' => AppointmentStatus::ADMIN_CANCELLED,
-                                'cancellation_reason' => $data['cancellation_reason'],
-                                'cancelled_at' => now(),
-                            ]);
+                    ->label(__('main.cancel'))
+                    ->icon('heroicon-o-x-circle')
+                    ->color('danger')
+                    ->visible(fn ($record) => $record->status === AppointmentStatus::PENDING)
+                    ->requiresConfirmation()
+                    ->modalHeading(__('resources.appointment.cancel_confirmation'))
+                    ->modalDescription(__('resources.appointment.cancel_description'))
+                    ->form([
+                        Textarea::make('cancellation_reason')
+                            ->label(__('resources.appointment.cancellation_reason'))
+                            ->required()
+                            ->rows(3)
+                            ->maxLength(500),
+                    ])
+                    ->action(function ($record, array $data) {
+                        $record->update([
+                            'status' => AppointmentStatus::ADMIN_CANCELLED,
+                            'cancellation_reason' => $data['cancellation_reason'],
+                            'cancelled_at' => now(),
+                        ]);
 
-                            Notification::make()
-                                ->title(__('resources.appointment.cancelled_successfully'))
-                                ->success()
-                                ->send();
-                        }),
+                        Notification::make()
+                            ->title(__('resources.appointment.cancelled_successfully'))
+                            ->success()
+                            ->send();
+                    }),
                 ]),
 
             ])
             ->bulkActions([
                 BulkActionGroup::make([
                     Action::make('delete')
-                        ->label(__('resources.delete'))
-                        ->icon('heroicon-o-trash')
-                        ->color('danger')
-                        ->requiresConfirmation()
-                        ->action(fn($records) => $records->each->delete()),
+                    ->label(__('resources.delete'))
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->action(fn ($records) => $records->each->delete()),
                 ]),
             ])
             ->poll('30s') // تحديث تلقائي كل 30 ثانية لمراقبة الحجوزات الجديدة

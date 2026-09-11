@@ -166,6 +166,15 @@ return [
         'provider_name' => 'Provider Name',
     ],
     'appointment' => [
+        'reminders' => 'تذكيرات الموعد',
+        'no_reminders' => 'لم يضبط الزبون تذكيراً لهذا الحجز.',
+        'reminder_lead' => 'قبل :hours ساعة',
+        'reminder_no_channel' => 'لا توجد قناة مفعّلة',
+        'reminder_status' => [
+            'pending' => 'مجدول',
+            'sent' => 'أُرسل',
+            'cancelled' => 'ملغى',
+        ],
         'label' => 'حجز',
         'plural_label' => 'الحجوزات',
         'navigation_label' => 'الحجوزات',

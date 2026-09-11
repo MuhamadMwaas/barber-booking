@@ -75,6 +75,22 @@ class AppointmentResource extends JsonResource
             'created_at' => $this->created_at->format('Y-m-d H:i:s'),
             'updated_at' => $this->updated_at->format('Y-m-d H:i:s'),
 
+            /*
+             * The live reminder, so the booking screen can render its toggle and
+             * dropdown from the same payload it already fetches.
+             *
+             * `whenLoaded` on purpose: callers that do not eager-load
+             * `activeReminder` omit the key entirely instead of firing one query
+             * per appointment down a list. A loaded-but-empty relation yields
+             * null, which is the app's "toggle is off".
+             */
+            'reminder' => $this->whenLoaded(
+                'activeReminder',
+                fn () => $this->activeReminder
+                    ? new AppointmentReminderResource($this->activeReminder)
+                    : null
+            ),
+
             'is_upcoming' => $this->start_time > now(),
             'is_past' => $this->start_time < now(),
             'is_cancelled' => in_array($this->status->value, [-1, -2]),

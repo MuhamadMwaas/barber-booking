@@ -76,22 +76,60 @@ class InvoiceItem extends Model
 
     // Methods
 
+    /**
+     * إعادة اشتقاق ضريبة البند وإجماليه.
+     *
+     * ═══════════════════════════════════════════════════════════════════
+     * القاعدة (MON-01): الـ GROSS هو الحقيقة. إذا كان `total_amount`
+     * مخزَّناً فلا يُعاد بناؤه من الصافي أبداً — الضريبة تُستخرج منه عكسياً.
+     * ═══════════════════════════════════════════════════════════════════
+     *
+     * الاستخراج العكسي **دالة غير عكوسة**: عدة قيم gross تنتج نفس الـ net
+     * المقرَّب، فلا يمكن استرجاع الـ gross الأصلي من الـ net. النسخة السابقة
+     * كانت تفعل ذلك بـ `addTax($net)` فتُفقد سنتاً في كل سعر تقريباً:
+     *
+     *     gross 50.00 → net 42.01 → رجوعاً للـ gross: 49.99  ← فُقد 0.01
+     *     gross 19.00 → net 15.96 → رجوعاً للـ gross: 18.99  ← فُقد 0.01
+     *
+     * وبما أن هذه الدالة تُنادى في `static::saving`، فأي حفظ لبند فاتورة —
+     * حتى فاتورة مُنهاة ومطبوعة — كان يُصغّرها سنتاً. المسارَان الحاليان
+     * اللذان ينشئان البنود ملفوفان بـ `withoutEvents()` فكان العطل خامداً،
+     * لكن الأمان لا يجوز أن يعتمد على أن يتذكّر كل مسار مستقبلي ذلك.
+     *
+     * السلوك:
+     *   • `total_amount` موجود  → يُحفظ كما هو، وتُستخرج الضريبة منه عكسياً.
+     *   • `total_amount` مفقود  → بند بُني من صافٍ فقط، فيُشتق الإجمالي أمامياً.
+     *
+     * لتغيير سعر بندٍ قائم: اكتب `total_amount` الجديد (الـ gross). كتابة
+     * `unit_price` وحده لن تغيّر الإجمالي — وهذا مقصود.
+     */
     public function calculateTotal(): void
     {
-        // المبلغ الصافي للبند = الكمية × سعر الوحدة (net) — بـ bcmath بدل ضرب float
+        $tax  = app(TaxCalculatorService::class);
+        $rate = (string) ($this->tax_rate ?? 0);
+
+        $storedGross = (string) ($this->total_amount ?? 0);
+
+        // الـ gross مخزَّن ⇒ هو المرجع. استخرج الضريبة منه ولا تلمسه.
+        if (is_numeric($storedGross) && bccomp($storedGross, '0', 2) > 0) {
+            $result = $tax->extractTax($storedGross, $rate, 2);
+
+            $this->tax_amount   = $result['tax'];
+            $this->total_amount = $result['gross']; // == $storedGross مقرَّباً لمنزلتين
+
+            return;
+        }
+
+        // لا gross بعد: البند بُني من سعر وحدة صافٍ، فنشتق الإجمالي أمامياً.
         $netSubtotal = bcmul(
             (string) ($this->quantity ?? 1),
             (string) ($this->unit_price ?? 0),
             2
         );
 
-        // unit_price مُخزَّن دائماً كصافي (net)، فنعيد بناء الإجمالي بإضافة الضريبة.
-        // addTax يضمن: التقريب لمنزلتين + تطابق net + tax = gross تماماً (لا فرق سنت).
-        // يتعامل مع tax_rate = 0/null داخلياً (يرجع ضريبة 0 وإجمالي = الصافي).
-        $result = app(TaxCalculatorService::class)
-            ->addTax($netSubtotal, (string) ($this->tax_rate ?? 0), 2);
+        $result = $tax->addTax($netSubtotal, $rate, 2);
 
-        $this->tax_amount = $result['tax'];
+        $this->tax_amount   = $result['tax'];
         $this->total_amount = $result['gross'];
     }
 

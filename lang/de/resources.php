@@ -166,6 +166,15 @@ return [
         'provider_name' => 'Name des Dienstleisters',
     ],
     'appointment' => [
+        'reminders' => 'Terminerinnerungen',
+        'no_reminders' => 'Der Kunde hat für diese Buchung keine Erinnerung gesetzt.',
+        'reminder_lead' => ':hours Std. vorher',
+        'reminder_no_channel' => 'kein Kanal aktiviert',
+        'reminder_status' => [
+            'pending' => 'Geplant',
+            'sent' => 'Gesendet',
+            'cancelled' => 'Storniert',
+        ],
         'label' => 'Termin',
         'plural_label' => 'Termine',
         'navigation_label' => 'Termine',

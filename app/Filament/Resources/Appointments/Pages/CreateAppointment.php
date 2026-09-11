@@ -6,6 +6,7 @@ use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\BookingValidationService;
+use App\Services\TaxCalculatorService;
 use Carbon\Carbon;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
@@ -320,16 +321,13 @@ class CreateAppointment extends CreateRecord
             true
         );
 
-        // 5. Validate duplicate bookings for registered / guest customer
-        if ($customer) {
-            $validationService->validateNoDuplicateBooking($customer, $startTime, $serviceIds);
-        } else {
-            $validationService->validateNoDuplicateBookingByPhone(
-                $formData['customer_phone'] ?? null,
-                $startTime,
-                $serviceIds
-            );
-        }
+        // 5. The customer must not already be booked elsewhere in this window.
+        $validationService->assertCustomerIsFree(
+            $customer,
+            $formData['customer_phone'] ?? null,
+            $startTime,
+            $endTime,
+        );
     }
 
     private function prepareCustomerData(array $data): array
@@ -366,23 +364,29 @@ class CreateAppointment extends CreateRecord
             return !empty($item) && is_array($item) && isset($item['price']);
         });
 
-        $servicesCollection = collect($services);
+        // Prices are GROSS (tax-inclusive) — tax is extracted in reverse.
+        //
+        // Goes through TaxCalculatorService, the single implementation for the
+        // whole project. This used to be its own float calculation — a sixth
+        // copy of the same equation — so an appointment created from the admin
+        // panel could carry a different VAT figure than the identical booking
+        // created through the API (MON-01).
+        $taxRate = (string) get_setting('tax_rate', 0);
 
-        // Prices are GROSS (tax-inclusive) — extract net and tax via reverse calculation
-        $grossTotal = (float) $servicesCollection->sum('price');
-        $taxRate    = (float) get_setting('tax_rate', 0);
+        $totals = app(TaxCalculatorService::class)->calculateBulk(
+            array_map(
+                fn ($item): array => [
+                    'price'    => (string) ($item['price'] ?? '0'),
+                    'tax_rate' => $taxRate,
+                ],
+                array_values($services)
+            ),
+            2
+        );
 
-        if ($taxRate > 0) {
-            $netTotal  = $grossTotal / (1 + $taxRate / 100);
-            $taxAmount = $grossTotal - $netTotal;
-        } else {
-            $netTotal  = $grossTotal;
-            $taxAmount = 0.0;
-        }
-
-        $data['subtotal']     = round($netTotal,   2);
-        $data['tax_amount']   = round($taxAmount,  2);
-        $data['total_amount'] = round($grossTotal, 2);
+        $data['subtotal']     = $totals['net'];
+        $data['tax_amount']   = $totals['tax'];
+        $data['total_amount'] = $totals['gross'];
 
         return $data;
     }

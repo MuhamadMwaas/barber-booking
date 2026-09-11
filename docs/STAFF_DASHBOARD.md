@@ -1,6 +1,6 @@
 # StaffDashboard Documentation
 
-> **آخر تحديث:** 2026-08-15 — أُضيف تاب "التقارير" (`/dashboard/reports`): تقرير Z مطبوع (A4) بأساس **تاريخ التحصيل الفعلي** لا تاريخ الموعد، ليوم أو نطاق، بصلاحية `StaffDashboard:view_reports` الإدارية (راجع القسم 34). | 2026-06-11 — أُضيف تاب "الإحصائيات اليومية" (`/dashboard/stats`): مقاييس اليوم (مكتمل/جارٍ/قادم/ملغى/إيراد/مصدر/خدمات/ساعات) بنطاق provider خاص أو salon-wide + تفصيل per-provider، عبر `DashboardStatsService` المعزول (راجع القسم 33). | 2026-06-11 — خط الوقت الحالي (red marker) صار يُحسب client-side من ساعة المتصفح المحلية بدل `Carbon::now()` على السيرفر، لإصلاح إزاحته بمقدار فرق المنطقة الزمنية عن `APP_TIMEZONE=Asia/Baghdad` (راجع القسم 11.7). | 2026-06-03 — أُضيفت لوحة الرسائل (Bulletin Board) أسفل الفريق: جدول dashboard_messages + Model + DashboardMessageService (راجع القسم 32). | 2026-05-29 — تاب Customers + CustomerLookup.
+> **آخر تحديث:** 2026-09-07 — صار للداشبورد **مصادقة خاصة به** على دومينه (`/login`, `/logout` عبر `StaffAuthController`): نزع `StaffDashboard:view_admin` عن الـ provider كان يُعطّل زرّ الخروج بصمت لأن الزر كان يرسل إلى مسار خروج لوحة Filament الواقع داخل `authMiddleware` الخاصة بها. قواعد الدخول موحَّدة في `App\Support\StaffLoginDenial` (راجع القسمين 3.1–3.3). | 2026-08-15 — أُضيف تاب "التقارير" (`/dashboard/reports`): تقرير Z مطبوع (A4) بأساس **تاريخ التحصيل الفعلي** لا تاريخ الموعد، ليوم أو نطاق، بصلاحية `StaffDashboard:view_reports` الإدارية (راجع القسم 34). | 2026-06-11 — أُضيف تاب "الإحصائيات اليومية" (`/dashboard/stats`): مقاييس اليوم (مكتمل/جارٍ/قادم/ملغى/إيراد/مصدر/خدمات/ساعات) بنطاق provider خاص أو salon-wide + تفصيل per-provider، عبر `DashboardStatsService` المعزول (راجع القسم 33). | 2026-06-11 — خط الوقت الحالي (red marker) صار يُحسب client-side من ساعة المتصفح المحلية بدل `Carbon::now()` على السيرفر، لإصلاح إزاحته بمقدار فرق المنطقة الزمنية عن `APP_TIMEZONE=Asia/Baghdad` (راجع القسم 11.7). | 2026-06-03 — أُضيفت لوحة الرسائل (Bulletin Board) أسفل الفريق: جدول dashboard_messages + Model + DashboardMessageService (راجع القسم 32). | 2026-05-29 — تاب Customers + CustomerLookup.
 
 > وثيقة مرجعية عميقة ومبنية على قراءة مباشرة للكود الحالي، هدفها أن تمنح أي AI أو مطور فهمًا دقيقًا جدًا لصفحة `StaffDashboard` بكل ما فيها: الواجهة، الحالة، تدفقات الحجز، الدفع، الإجازات، الـ timeline، القواعد التشغيلية، والقيود الحالية.
 
@@ -57,45 +57,64 @@
 
 ### 3.1 Route
 
-الصفحة تُعرَض من خلال route مباشر في `routes/web.php`:
+كل مسارات الداشبورد مُسجَّلة **مرة واحدة** في `routes/web.php` داخل group واحد مقاد بالإعداد. الدومين يأتي من `config('app.staff_dashboard_domain')` (`STAFF_DASHBOARD_DOMAIN` في `.env`): إن كان مضبوطًا فالمسارات على ذلك الدومين الفرعي بلا prefix، وإن كان فارغًا فهي تحت `/dashboard` على الدومين الرئيسي.
 
 ```php
-Route::middleware(['web', EnsureStaffDashboardAccess::class])->group(function () {
-    Route::livewire('/dashboard', \App\Livewire\StaffDashboard::class)
-        ->name('staff.dashboard');
-});
+Route::domain($staffDashboardDomain ?: null)
+    ->prefix($staffDashboardDomain ? '' : 'dashboard')
+    ->group(function () {
+
+        // مصادقة الداشبورد — خارج البوابة عمدًا (راجع 3.2)
+        Route::get('/login',   [StaffAuthController::class, 'showLogin'])->name('staff.dashboard.login');
+        Route::post('/login',  [StaffAuthController::class, 'login'])->name('staff.dashboard.login.attempt');
+        Route::post('/logout', [StaffAuthController::class, 'logout'])->name('staff.dashboard.logout');
+
+        // تبديل اللغة متاح للزوّار أيضًا، ليُقرأ نموذج الدخول بلغة الموظف
+        Route::get('/language/{code}', ...)->name('staff.dashboard.language');
+
+        Route::middleware([EnsureStaffDashboardAccess::class])->group(function () {
+            Route::livewire('/',          StaffDashboard::class)->name('staff.dashboard');
+            Route::livewire('/customers', CustomerLookup::class)->name('staff.dashboard.customers');
+            Route::livewire('/stats',     StaffStats::class)->name('staff.dashboard.stats');
+            Route::livewire('/reports',   StaffReports::class)->name('staff.dashboard.reports');
+            Route::get('/report', [DailyReportController::class, 'show'])->name('staff.dashboard.report.print');
+        });
+    });
 ```
 
-يوجد أيضًا route لتبديل اللغة داخل نفس group:
+> **لا تُعِد تسجيل هذا الـ group مرة ثانية.** كان موجودًا مرتين سابقًا بنفس أسماء المسارات؛ Laravel يحتفظ بجدول اسم←مسار واحد، فكان `route('staff.dashboard.*')` يُحلّ دائمًا إلى نسخة الدومين الفرعي ويُنتج روابط تُرجع 404 على المضيف المحلي.
+
+### 3.2 Authentication — للداشبورد مصادقته الخاصة
+
+الداشبورد له الآن `login` و `logout` خاصان به على دومينه، في `app/Http/Controllers/Auth/StaffAuthController.php`، وصفحة Blade مستقلة في `resources/views/auth/staff-login.blade.php`.
+
+**لماذا؟** الداشبورد ليس لوحة Filament، لكنه كان يستعير مسارات مصادقة اللوحة بالكامل: الزائر يُرمى إلى `filament.admin.auth.login`، وزر الخروج يرسل إلى `filament.admin.auth.logout`. والاستعارة تعني **وراثة `authMiddleware` الخاصة باللوحة**، فحدث عطلان:
+
+1. **الخروج انكسر بصلاحية عرض.** يوم أُضيفت `EnsureCanViewAdminPanel` إلى `authMiddleware`، صار نزع `StaffDashboard:view_admin` عن الـ provider يُعطّل زرّ الخروج بصمت: الطلب يُعاد توجيهه إلى الداشبورد **قبل** أن يعمل معالج الخروج في Filament، فتبقى الجلسة حيّة ويبدو الزر وكأنه لا يفعل شيئًا. إنهاء جلستك ليس امتيازًا تحجبه صلاحية *مشاهدة*.
+2. **الدخول يدور في حلقة عبر الدومينين.** مسار login الخاص باللوحة غير مقيّد بدومين، فيُبنى على `APP_URL` أي الدومين **الرئيسي**، بينما الداشبورد على دومين فرعي. هذا ينجح فقط ما دام كوكي الجلسة مشتركًا عبر الدومين الأب؛ وإلا: داشبورد (زائر) ← login الرئيسي ← مسجَّل دخول أصلًا ← `/admin` ← `EnsureCanViewAdminPanel` ← داشبورد ← زائر ← …
+
+المسارات الثلاثة مسجَّلة **خارج** `EnsureStaffDashboardAccess` عمدًا: صفحة دخول خلف بوابة دخول هي حلقة، وخروج خلف بوابة صلاحية هو فخّ.
+
+**ما يبقى مشتركًا عمدًا:** حارس `web` نفسه، و`App\Support\StaffLoginDenial` — المصدر الواحد لسؤال «هل يحق لهذا الحساب تسجيل الدخول إلى سطح موظفين؟». تستدعيه صفحة دخول Filament (`app/Filament/Pages/Auth/Login.php`) وصفحة دخول الداشبورد معًا، تمامًا لنفس سبب وجود `User::isActiveStaff()`: سؤال تصريح يُجاب عنه في ملفين ينحرف، والانحراف يعني قاعدة ناقصة في أحد السطحين. `StaffLoginDenial::for()` يُرجِع `null` بالضبط حين يكون `isActiveStaff()` صحيحًا، وهذا مثبَّت باختبار.
+
+> **شرط إعداد:** إن كان `STAFF_DASHBOARD_DOMAIN` دومينًا فرعيًا وأردت أن يخدم تسجيل دخول واحد السطحين (وأن يُنهي خروج واحد كليهما)، يجب ضبط `SESSION_DOMAIN` على الدومين الأب المشترك (`.example.com`). بدونه يصبح لكل دومين جلسته المستقلة؛ الداشبورد يعمل بمفرده لأنه صار يُصادِق على مضيفه، لكن الانتقال إلى `/admin` سيطلب دخولًا جديدًا.
+
+### 3.3 Authorization — البوابة نفسها
+
+`EnsureStaffDashboardAccess` هي البوابة الوحيدة أمام الداشبورد، وتفحص ثلاثة أشياء بهذا الترتيب:
 
 ```php
-Route::get('/dashboard/language/{code}', function (string $code) {
-    // stores locale in session and redirects back
-})->name('staff.dashboard.language');
+if (! $auth->check())              return redirect()->guest(route('staff.dashboard.login'));
+if (! $user->is_active)            return $this->ejectDisabledUser(...);  // يقتل الجلسة، لا 403 فقط
+if (! $user->hasStaffRole())       abort(403);
+if (! $user->can('StaffDashboard:access')) abort(403);
 ```
 
-### 3.2 Access Control
+وهي مسجَّلة أيضًا كـ Livewire **persistent middleware** في `AppServiceProvider`، لأن كل أمر في الداشبورد هو `POST /livewire/update` على مسار آخر لا يحمل سوى group الـ `web` — بدون ذلك يستطيع موظف مفصول وتبويبه مفتوح أن يستمر في قبض الأموال عبر نقطة الـ AJAX.
 
-الدخول لا يعتمد على Sanctum ولا على auth الافتراضي فقط، بل يعتمد على `filament()->auth()` داخل middleware مخصص:
+### 3.4 صلاحيات الأدوار الافتراضية
 
-```php
-if (! $auth->check()) {
-    return redirect()->route('filament.admin.auth.login');
-}
-
-if (! $auth->user()->can('StaffDashboard:access')) {
-    abort(403);
-}
-```
-
-### 3.3 Important Access Note
-
-من `database/seeders/RoleSeeder.php`:
-
-- صلاحية `StaffDashboard:access` موجودة ضمن صلاحيات `admin`
-- لا تظهر ضمن قائمة صلاحيات `provider` الافتراضية في الـ seeder الحالي
-
-هذا يعني أن الاسم "StaffDashboard" قد يوحي أنها للموظف عمومًا، لكن الإعداد الافتراضي الحالي للـ seeders يمنح الوصول للإدارة فقط ما لم تُمنح الصلاحية يدويًا لاحقًا.
+من `database/seeders/RoleSeeder.php`، الأدوار التي تملك `StaffDashboard:access` هي: `SuperAdmin`, `admin`, `manager`, `provider`. الـ `provider` يحصل افتراضيًا على كل صلاحيات التشغيل عدا `view_reports` و `force_booking` (إداريتان لأنهما تكشفان مقبوضات كل الموظفين / تتجاوزان نافذة التوفر). تُضبَط لكل دور من شاشة Roles.
 
 ---
 
@@ -194,7 +213,10 @@ flowchart TD
 
 ### 6.5 `app/Services/InvoiceFinalizationService.php`
 
-يُنهي الفاتورة المسودة، يضيف payment record، يحدّث `payment_status`، ويضيف placeholder TSE data حاليًا.
+هو المالك الوحيد لعملية الدفع داخل الصالون. يبدأ من `Appointment`، ويعيد بناء
+فاتورة المجموعة، ويطبّق السعر الخاص إن وُجد، ثم يصدر الفاتورة و`Payment` واحداً
+ويُنهي كل المواعيد المشمولة داخل transaction واحدة. TSE متوقف عمداً ولا يوجد
+اتصال بـ Fiskaly أثناء الدفع.
 
 ---
 
@@ -261,15 +283,18 @@ public int $editDuration = 0;
 
 ```php
 public float $paymentAmount = 0;
-public string $paymentType = '2';
+public float $paymentBaseline = 0;
+public string $paymentType = 'cash';
 ```
 
 ملاحظة مهمة:
 
-- `paymentType = '2'` يعني `PAID_ONSTIE_CASH`
-- `paymentType = '3'` يعني `PAID_ONSTIE_CARD`
+- `paymentType = 'cash'` يعني دفعاً نقدياً داخل الصالون.
+- `paymentType = 'card'` يعني دفعاً بالبطاقة داخل الصالون.
+- `paymentBaseline` هو مجموع أسعار كل مواعيد الفاتورة قبل السعر الخاص.
 
-القيم هنا strings وليست enum instances، لأن المودال يتعامل مع radio values نصية.
+تحويل هذه القيم إلى `PaymentStatus` وربط `payment_method_id` مسؤولية
+`InvoiceFinalizationService`، لا الواجهة.
 
 ### 7.6 Time Off State
 
@@ -819,11 +844,11 @@ openBookingModalLocal(providerId = null, startTime = null)
 
 ### 14.6 `BookingService::createBooking()`
 
-الدالة تستخرج:
+الدالة تستخرج (القيم الافتراضية لا تعتبر الحجز مدفوعاً):
 
 ```php
-$isConfirmed = $bookingData['is_confirmed'] ?? ($paymentMethod == 'cash');
-$markAsPaid = $bookingData['mark_as_paid'] ?? ($paymentMethod == 'cash');
+$isConfirmed = $bookingData['is_confirmed'] ?? true;
+$markAsPaid = $bookingData['mark_as_paid'] ?? false;
 ```
 
 ثم داخل transaction:
@@ -1027,37 +1052,44 @@ openPaymentModal(int $appointmentId)
 يحمّل:
 
 - `selectedAppointmentId`
-- `paymentAmount = appointment.total_amount`
-- `paymentType = '2'` افتراضيًا (cash)
+- `paymentAmount = SUM(linkedGroup.total_amount)` لأن الفاتورة تغطي الأب والأبناء
+- `paymentBaseline` بنفس القيمة لكشف السعر الخاص الحقيقي
+- `paymentType = 'cash'` افتراضيًا، والاختيار الآخر `card`
 
 ثم يغلق appointment modal ويفتح payment modal.
 
 ### 19.2 `processPayment()`
 
-التدفق:
+بعد إصلاح `MON-05` هذه الدالة adapter رفيعة، وليست مكان قواعد مالية:
 
-1. تحميل appointment مع invoice
-2. إذا لا توجد invoice، ينشئ draft invoice أولًا
-3. إذا تغيّر `paymentAmount` يدويًا، يحدّث `invoice.total_amount`
-4. يستدعي `InvoiceFinalizationService::finalizeDraftInvoice(...)`
-5. بعد العودة، يحدّث appointment status إلى `COMPLETED`
-6. يرسل toast نجاح
-7. إذا final invoice لها رقم، يرسل event `printInvoice`
+1. تحميل appointment والتحقق من صلاحية `take_payment`.
+2. مقارنة `paymentAmount` مع `paymentBaseline`.
+3. إن اختلفا، تمرير القيمة الجديدة كسعر خاص؛ وإلا تمرير `null` بمعنى السعر الكامل.
+4. استدعاء `InvoiceFinalizationService::finalizeAppointmentPayment(...)`.
+5. إغلاق المودال وإظهار النجاح.
+6. إرسال `printInvoice` عند وجود رقم الفاتورة.
+7. إذا كانت المحاولة تكراراً لضغطة نجحت، يعاد استخدام الفاتورة الموجودة ولا ينشأ Payment آخر.
 
-### 19.3 `InvoiceFinalizationService::finalizeDraftInvoice()`
+### 19.3 `InvoiceFinalizationService::finalizeAppointmentPayment()`
 
-هذه الخدمة:
+هذه هي عملية الدفع الوحيدة في النظام، وتستخدمها أيضاً شاشتا Filament. داخل معاملة واحدة:
 
-- تتحقق أن invoice الحالية `DRAFT`
-- تولّد invoice number
-- تضيف metadata في `invoice_data`
-- تستدعي `updateAppointmentStatus()` لتحديث `payment_status`
-- تنشئ payment record
-- تسجل log
+- تحدد أن الفاتورة على parent أو الموعد المستقل.
+- تقفل الموعد والمجموعة والفاتورة.
+- ترفض الموعد الملغي/`NO_SHOW` والفاتورة المنهاة.
+- تحل Cash/Card إلى `PaymentMethod` فعال.
+- تعيد بناء بنود الأب وكل children.
+- تطبق السعر الخاص عبر `applyFinalAmount()`.
+- تولّد invoice number وpayment number داخل المعاملة.
+- تنشئ Payment واحداً يحمل `payment_method_id`.
+- تضبط كل appointments على `COMPLETED` وحالة دفع موحدة.
+- تحفظ `payment_method` كقيمة آلية `cash`/`card`.
+- تسجل source وcovered ids وقرار TSE.
 
 ### 19.4 TSE State
 
-رغم أن `applyTse = true` يُمرر من الداشبورد، فالخدمة الحالية تطبّق placeholder data فقط؛ التكامل الفعلي مع TSE ليس منفذًا بعد.
+TSE متوقف عمداً. مسار الدفع لا يستدعي Fiskaly ولا يجري اتصالاً شبكياً، ويحفظ
+`tse_enabled=false` في metadata الفاتورة والدفع.
 
 ### 19.5 Print Trigger
 
@@ -1069,17 +1101,19 @@ $this->dispatch('printInvoice', invoiceId: $finalizedInvoice->id);
 
 ثم layout يفتح `/invoice/{id}/print` في نافذة جديدة.
 
-### 19.6 Important Accounting Caveat
+### 19.6 Special-Customer Price
 
-إذا غيّر المستخدم `paymentAmount` يدويًا، الكود الحالي يحدث فقط:
+تغيير `paymentAmount` إلى قيمة أقل لا يدهس `total_amount` وحده ولا ينشئ ديناً.
+الخدمة تعيد بناء items أولاً ثم تسجل الفرق في `discount_amount` وتعيد استخراج
+`subtotal` و`tax_amount` من السعر النهائي. لذلك يبقى دائماً:
 
-```php
-$invoice->update(['total_amount' => $this->paymentAmount]);
+```text
+items_total - discount_amount = invoice.total_amount
+invoice.subtotal + invoice.tax_amount = invoice.total_amount
+payment.amount = invoice.total_amount
 ```
 
-بدون إعادة بناء invoice items أو subtotal/tax بشكل صريح داخل هذا المسار.
-
-هذا مناسب عمليًا لحالات خصم سريعة، لكنه ليس مسار accounting-perfect كامل.
+التفاصيل الكاملة: `docs/fixes/MON-05_unified_payment_flow.md`.
 
 ---
 
@@ -1365,17 +1399,11 @@ saveBookingFromAlpine()
 
 إما legacy، أو intended for future integrations.
 
-### 26.4 Unused Imports In `StaffDashboard.php`
+### 26.4 Imports Cleanup
 
-الملف الحالي يستورد أشياء لا تظهر مستخدمة فعليًا داخل هذا المكوّن، مثل:
-
-- `InvoiceStatus`
-- `PaymentStatus`
-- `AppointmentService as AppointmentServiceModel`
-- `BookingValidationService`
-- `ServiceAvailabilityService`
-
-هذا لا يكسر السلوك، لكنه مؤشر على تاريخ تغييرات متعددة.
+أزيلت imports القديمة غير المستخدمة أثناء إصلاح MON-05. ما بقي مثل
+`BookingValidationService` و`InvoiceService` مستخدم فعلياً في التحقق من التعارض
+وإعادة بناء المسودة بعد إضافة/إلغاء خدمات، وليس لإنهاء الدفع.
 
 ### 26.5 `createDtaftInvoiceFromAppointment` Typo
 
@@ -1406,9 +1434,12 @@ saveBookingFromAlpine()
 
 `updateAppointment()` لا يعيد جدولة كل service steps ولا يعيد تسعير الفاتورة.
 
-### 26.9 Payment Amount Adjustment Is Operational, Not Full Accounting Rebuild
+### 26.9 ~~Payment Amount Adjustment Was Incomplete~~ — Fixed by MON-05
 
-تعديل `paymentAmount` يحدّث `invoice.total_amount` فقط في هذا المسار.
+لم يعد تعديل `paymentAmount` يغيّر `invoice.total_amount` منفرداً. المسار الموحد
+يعيد بناء البنود أولاً، ويسجل الفرق كـ `discount_amount`، ثم يعيد استخراج صافي
+المبلغ والضريبة من السعر النهائي، وينسخ نفس الأرقام إلى `Payment`. المبلغ الأقل
+هو سعر خاص كامل وليس دفعة جزئية.
 
 ### 26.10 Role Naming vs Real Access
 
@@ -1456,8 +1487,11 @@ saveBookingFromAlpine()
 
 - `openPaymentModal()`
 - `processPayment()`
-- `InvoiceFinalizationService`
-- `InvoiceService`
+- `InvoiceFinalizationService::finalizeAppointmentPayment()` — مالك العملية
+- `InvoiceService::rebuildAggregatedInvoice()` و`applyFinalAmount()` للحساب فقط
+
+لا تضف إنشاء `Payment` أو إصدار فاتورة داخل Livewire/Filament؛ كل واجهة يجب أن
+تبقى adapter وتستدعي العملية الموحدة.
 
 ### 27.6 إذا كان التعديل في الوصول أو من يمكنه رؤية الصفحة
 
@@ -1470,7 +1504,9 @@ saveBookingFromAlpine()
 
 ## 28. Testing Recommendations For This Screen
 
-لا توجد ضمن القراءة الحالية tests متخصصة بهذه الصفحة نفسها. لذلك أي تعديل مهم عليها يجب أن يُراجع يدويًا على الأقل عبر هذا checklist:
+يوجد اختبار تكامل مركّز للقواعد المالية في
+`tests/Feature/Money/UnifiedPaymentFlowTest.php`. ويبقى فحص الواجهة يدوياً مهماً
+للتأكد من المودال والطباعة:
 
 1. افتح `/dashboard` وتأكد من السماح/المنع الصحيح حسب الصلاحية.
 2. غيّر اليوم من التقويم وتأكد من تغير الـ timeline والـ counts.

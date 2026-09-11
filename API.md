@@ -1792,65 +1792,204 @@ POST /api/appointments/{id}/cancel
 
 ---
 
-### 8. Appointments - Set Reminder
+### 8. Appointments - Reminder Options
+
+```
+GET /api/appointments/reminders/options
+```
+
+**الوصف:** خيارات مدة التذكير السبعة مع نصوصها المترجمة ونصوص الشاشة. **اقرأ منه ولا تثبّت الخيارات داخل التطبيق** — أي تغيير في الخيارات أو النصوص يصل تلقائياً بلا تحديث تطبيق.
+
+**Authentication:** ✅ يتطلب Bearer Token · **Rate limit:** 60/min
+
+**Success Response — 200:**
+```json
+{
+  "success": true,
+  "data": {
+    "options": [
+      { "offset_hours": 1,  "label": "قبل ساعة" },
+      { "offset_hours": 2,  "label": "قبل ساعتين" },
+      { "offset_hours": 3,  "label": "قبل ثلاث ساعات" },
+      { "offset_hours": 4,  "label": "قبل أربع ساعات" },
+      { "offset_hours": 5,  "label": "قبل خمس ساعات" },
+      { "offset_hours": 6,  "label": "قبل ست ساعات" },
+      { "offset_hours": 24, "label": "قبل 24 ساعة" }
+    ],
+    "default_offset_hours": 1,
+    "texts": {
+      "title": "تذكير بالموعد",
+      "subtitle": "احصل على تذكير قبل موعدك.",
+      "question": "متى تريد أن يصلك التذكير؟"
+    },
+    "channels": {
+      "push":  { "enabled": true,  "deliverable": true,  "effective": true },
+      "email": { "enabled": false, "deliverable": true,  "effective": false },
+      "sms":   { "enabled": false, "deliverable": false, "effective": false }
+    }
+  }
+}
+```
+
+> النصوص تُرجَّع بلغة المستخدم (`users.locale`) — بالألمانية تعود `"1 Stunde vorher"` و`"Wann möchtest du erinnert werden?"`.
+
+---
+
+### 9. Appointments - Set Reminder
 
 ```
 POST /api/appointments/reminders
 ```
 
-**الوصف:** تعيين تذكير لحجز قادم. يجب أن يكون وقت التذكير قبل بدء الحجز وبعد الوقت الحالي.
+**الوصف:** تعيين تذكير لحجز قادم، أو تغيير التذكير الموجود. **العملية idempotent**: كل نداء يستبدل التذكير السابق، فلا حاجة للحذف أولاً.
 
-**Authentication:** ✅ يتطلب Bearer Token
+**Authentication:** ✅ يتطلب Bearer Token · **Rate limit:** 30/min
 
 **Request Body:**
 
-| Field            | Type     | Required | Description                             |
-| ---------------- | -------- | -------- | --------------------------------------- |
-| `appointment_id` | integer  | ✅        | معرف الحجز — يجب أن يكون ملك المستخدم   |
-| `remind_at`      | datetime | ✅        | وقت التذكير — بعد الآن وقبل بداية الحجز |
+| Field            | Type     | Required | Description                                                     |
+| ---------------- | -------- | -------- | --------------------------------------------------------------- |
+| `appointment_id` | integer  | ✅        | معرف الحجز — يجب أن يكون ملك المستخدم                           |
+| `offset_hours`   | integer  | ⭐        | **المفضّل** — عدد الساعات قبل الموعد، من قائمة الخيارات السبعة |
+| `remind_at`      | datetime | ⚠️        | **قديم** — وقت مطلق. مدعوم للتوافق الخلفي فقط                  |
+
+> ⚠️ **أرسل أحدهما لا كليهما** — إرسال الاثنين معاً يُرفض بـ422.
+>
+> ⭐ **استخدم `offset_hours`.** السيرفر يحسب `remind_at = start_time − N` بمنطقته الزمنية، فلا يتأثر بمنطقة جهاز المستخدم. أما `remind_at` فيُفسَّر بـ`APP_TIMEZONE` (حالياً `Asia/Baghdad`) عند إرساله بلا offset صريح — وهذا فرق ساعات عن توقيت برلين.
 
 **Example Request:**
 ```json
-{
-  "appointment_id": 10,
-  "remind_at": "2026-03-15 09:00:00"
-}
+{ "appointment_id": 10, "offset_hours": 2 }
 ```
 
 **Success Response — 201:**
 ```json
 {
   "success": true,
-  "message": "Reminder created successfully",
+  "message": "تم إنشاء التذكير بنجاح.",
   "data": {
-    "reminder_id": 5,
+    "id": 5,
     "appointment_id": 10,
-    "remind_at": "2026-03-15T09:00:00+00:00",
-    "status": "pending"
+    "remind_at": "2026-03-15T08:00:00+03:00",
+    "offset_hours": 2,
+    "status": "pending",
+    "is_active": true,
+    "sent_at": null,
+    "cancelled_at": null,
+    "delivered_channels": null,
+    "channels": {
+      "push":  { "enabled": true,  "deliverable": true,  "effective": true },
+      "email": { "enabled": false, "deliverable": true,  "effective": false },
+      "sms":   { "enabled": true,  "deliverable": false, "effective": false }
+    },
+    "active_channels": ["push"],
+    "has_active_channel": true
   }
 }
 ```
+
+**حقول القنوات — اقرأها واعرض تنبيهاً:**
+
+| الحقل | المعنى |
+| ----- | ------ |
+| `enabled` | المستخدم فعّل هذه القناة في إعدادات التطبيق |
+| `deliverable` | يمكن الوصول إليه فعلاً عبرها (push=جهاز مسجّل، email=إيميل، sms=رقم جوال) |
+| `effective` | `enabled && deliverable` — أي أن التذكير سيصل فعلاً عبرها |
+| `active_channels` | قائمة القنوات الفعّالة |
+| `has_active_channel` | `false` ⟵ **اعرض تنبيهاً: التذكير محفوظ لكن لن يصله شيء** |
+| `delivered_channels` | `null` قبل الإرسال · `["sms"]` بعده · `[]` = أُرسل ولم تكن أي قناة مفعّلة |
 
 **Error Response — 422:**
 ```json
 {
   "success": false,
-  "message": "Validation failed",
+  "message": "بيانات غير صحيحة",
   "errors": {
-    "remind_at": ["The remind_at must be before the appointment start time."],
-    "appointment_id": ["The appointment has been cancelled."]
+    "offset_hours": ["مدة التذكير المختارة ليست ضمن الخيارات المتاحة."]
+  },
+  "error_type": "validation_error"
+}
+```
+
+---
+
+### 10. Appointments - Get Reminder
+
+```
+GET /api/appointments/{id}/reminders
+```
+
+**الوصف:** التذكير النشط للحجز — لملء حالة التوغل والقائمة المنسدلة عند فتح الشاشة.
+
+**Authentication:** ✅ يتطلب Bearer Token · **Rate limit:** 60/min
+
+**Success Response — 200 (يوجد تذكير):** نفس شكل `data` في الأعلى.
+
+**Success Response — 200 (لا يوجد تذكير):**
+```json
+{
+  "success": true,
+  "data": null,
+  "channels": {
+    "push":  { "enabled": true,  "deliverable": true,  "effective": true },
+    "email": { "enabled": false, "deliverable": true,  "effective": false },
+    "sms":   { "enabled": false, "deliverable": false, "effective": false }
   }
 }
 ```
 
-**Error Response — 404:**
+> ⚠️ **`data: null` ليس خطأ** — هو الحالة الطبيعية «التوغل مطفأ». لا ترجع 404 هنا. و`channels` موجود في الحالتين لتحذير المستخدم قبل ضبط التذكير وبعده.
+
+---
+
+### 11. Appointments - Delete Reminder
+
+```
+DELETE /api/appointments/{id}/reminders
+```
+
+**الوصف:** إيقاف التذكير (التوغل → OFF). الصف لا يُحذف فعلياً بل يُؤرشف، فيبقى سجل ما فعله المستخدم.
+
+**Authentication:** ✅ يتطلب Bearer Token · **Rate limit:** 30/min
+
+**Success Response — 200:**
+```json
+{ "success": true, "message": "تم إيقاف التذكير.", "data": null }
+```
+
+**Error Response — 404** (لا يوجد تذكير نشط أصلاً):
 ```json
 {
   "success": false,
-  "message": "Appointment not found",
+  "message": "لا يوجد تذكير نشط لهذا الموعد.",
   "error_type": "not_found"
 }
 ```
+
+---
+
+### إعدادات قنوات التذكير
+
+التوغلات الثلاث تُقرأ وتُعدَّل عبر مسارَي الإعدادات العامين الموجودين أصلاً:
+
+```
+GET   /api/settings                              ← يرجّع القنوات الثلاث مع قيم المستخدم
+PATCH /api/settings/reminder_push_enabled        { "value": true }
+PATCH /api/settings/reminder_email_enabled       { "value": true }
+PATCH /api/settings/reminder_sms_enabled         { "value": true }
+```
+
+| المفتاح | الافتراضي | ملاحظة |
+| ------- | --------- | ------ |
+| `reminder_push_enabled` | `true` | يحافظ على سلوك المستخدمين الحاليين |
+| `reminder_email_enabled` | `false` | اشتراك اختياري |
+| `reminder_sms_enabled` | `false` | اشتراك اختياري — مكلف |
+
+> **القاعدة:** القناة تتبع الإعداد حرفياً. فعّل SMS وحده ⟵ تصلك رسالة نصية **فقط**، بلا إشعار وبلا إيميل.
+>
+> **وقت القراءة:** الإعدادات تُقرأ **لحظة إرسال التذكير**، لا لحظة ضبطه. فتغيير القناة بعد الحجز يسري على التذكير المضبوط سلفاً.
+>
+> شاشة الإعدادات data-driven بالكامل — لا تكتب الخيارات يدوياً، اقرأها من `GET /api/settings`.
 
 ---
 
@@ -1926,6 +2065,7 @@ POST /api/bookings
 | `services[].service_id`  | integer | ✅        | معرف الخدمة — يجب أن يكون موجوداً في DB        |
 | `services[].provider_id` | integer | ✅        | معرف مقدم الخدمة — يجب أن يقدم الخدمة المحددة |
 | `services[].start_time`  | string  | ✅        | وقت البدء بصيغة `H:i` مثال: `10:00`           |
+| `reminder_offset_hours`  | integer | ❌        | مدة التذكير بالساعات — من قائمة الخيارات السبعة |
 
 **قواعد الـ Validation:**
 - الخدمات يجب أن تكون متتالية (لا تداخل في الأوقات)
@@ -1933,13 +2073,15 @@ POST /api/bookings
 - الوقت يجب أن يكون ضمن ساعات عمل المزود
 - لا يجوز الحجز إذا كان هناك حجز آخر في نفس الوقت للمزود
 - الحجز يجب أن يكون على الأقل `book_buffer` دقيقة مقدماً
+- `reminder_offset_hours` يجب أن تكون من قائمة `GET /api/appointments/reminders/options`
 
-**Example Request (خدمة واحدة):**
+**Example Request (خدمة واحدة + تذكير):**
 ```json
 {
   "date": "2026-03-16",
   "payment_method": "cash",
   "notes": "Please be on time",
+  "reminder_offset_hours": 2,
   "services": [
     {
       "service_id": 1,
@@ -1949,6 +2091,27 @@ POST /api/bookings
   ]
 }
 ```
+
+**التذكير داخل نداء الحجز:**
+
+التوغل موجود على شاشة الحجز نفسها، لذا يقبل هذا المسار مدة التذكير مباشرة — نداء واحد بدل اثنين، فلا توجد فترة يكون فيها الحجز موجوداً والتذكير الذي طلبه الزبون غير موجود.
+
+الرد يحمل كائن `reminder` بنفس شكل `POST /api/appointments/reminders`:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 42,
+    "number": "APT-20260316-A1B2C3",
+    "reminder": { "id": 7, "offset_hours": 2, "is_active": true, "active_channels": ["push"] }
+  }
+}
+```
+
+> ⚠️ **`reminder: null` مع نجاح 201 يعني: الحجز نجح والتذكير لم يُنشأ.** هذا مقصود — فشل التذكير **لا يُلغي الحجز أبداً**، لأن الموعد مورد متنازع عليه لا يمكن استرجاعه بينما التذكير على بُعد ضغطة. يحدث في حالتين: مدة التذكير مضت أصلاً (حجز الساعة 09:00 لموعد 10:00 مع تذكير 24 ساعة)، أو خلل تقني. **عالِجها في التطبيق بإعادة المحاولة عبر `POST /api/appointments/reminders`.**
+>
+> حذف الحقل أو إرساله `null` يحجز بلا تذكير.
 
 **Example Request (خدمتان متتاليتان):**
 ```json

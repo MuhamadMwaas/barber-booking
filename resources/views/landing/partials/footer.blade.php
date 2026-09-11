@@ -25,7 +25,7 @@
 @if ($footerEnabled)
     <footer class="relative border-t border-gold/12 bg-ink-soft">
         <div class="lp-container py-14 lg:py-16">
-            <div class="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1.4fr] lg:gap-12">
+            <div class="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.25fr_1fr_1fr_1fr_1.35fr] lg:gap-10">
 
                 {{-- Brand --}}
                 <div>
@@ -74,6 +74,31 @@
                             @foreach ($svcLinks as $link)
                                 <li>
                                     <a href="{{ $landing->linkUrl($link['url'] ?? '#services') }}"
+                                       class="text-[0.82rem] text-ash transition-colors hover:text-gold">
+                                        {{ $landing->t($link['label'] ?? null) }}
+                                    </a>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </nav>
+                @endif
+
+                {{-- Legal.
+
+                     A column of its own rather than only the small strip beside
+                     the copyright: a German commercial site must carry a
+                     findable Impressum (TMG § 5), and "findable" is not the last
+                     line of the page. The strip below keeps the copyright alone
+                     now, so the same three links are not printed twice. --}}
+                @if (count($legalLinks))
+                    <nav aria-label="{{ $landing->text('footer.legal_title') ?: __('landing.footer_legal') }}">
+                        <h2 class="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-gold">
+                            {{ $landing->text('footer.legal_title') ?: __('landing.footer_legal') }}
+                        </h2>
+                        <ul class="mt-5 space-y-2.5">
+                            @foreach ($legalLinks as $link)
+                                <li>
+                                    <a href="{{ $landing->linkUrl($link['url'] ?? null) }}"
                                        class="text-[0.82rem] text-ash transition-colors hover:text-gold">
                                         {{ $landing->t($link['label'] ?? null) }}
                                     </a>
@@ -145,18 +170,9 @@
                     {{ $landing->text('footer.copyright', '© ' . date('Y') . ' ' . $brandLabel) }}
                 </p>
 
-                @if (count($legalLinks))
-                    <ul class="flex items-center gap-4">
-                        @foreach ($legalLinks as $link)
-                            <li>
-                                <a href="{{ $landing->linkUrl($link['url'] ?? null) }}"
-                                   class="text-[0.72rem] text-ash transition-colors hover:text-gold">
-                                    {{ $landing->t($link['label'] ?? null) }}
-                                </a>
-                            </li>
-                        @endforeach
-                    </ul>
-                @endif
+                {{-- The legal links used to live here. They are now a full column
+                     above; repeating them in the same footer would only make the
+                     page longer, not the Impressum easier to find. --}}
             </div>
         </div>
     </footer>

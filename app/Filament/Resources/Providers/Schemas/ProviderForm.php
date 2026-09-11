@@ -2,16 +2,17 @@
 
 namespace App\Filament\Resources\Providers\Schemas;
 
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Grid;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Toggle;
+use App\Filament\Forms\Components\PasswordConfirmationInput;
+use App\Filament\Forms\Components\PasswordInput;
+use App\Support\ImageUploadRules;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
 
 class ProviderForm
 {
@@ -30,8 +31,13 @@ class ProviderForm
                             ->disk('public')
                             ->directory('temp/uploads')
                             ->visibility('public')
-                            ->maxSize(2048)
-                            ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/jpg'])
+                            // AUTH-06: the same ceilings the API enforces. The
+                            // dimensions rule is the one that matters — maxSize
+                            // bounds the bytes uploaded, not the pixels they
+                            // decode into.
+                            ->maxSize(ImageUploadRules::maxKilobytes())
+                            ->acceptedFileTypes(ImageUploadRules::mimeTypes())
+                            ->rules([ImageUploadRules::dimensions()])
                             ->helperText(__('resources.provider_resource.profile_image_helper'))
                             // The existing image is hydrated by the Edit page's
                             // mutateFormDataBeforeFill(). Do not override
@@ -137,26 +143,16 @@ class ProviderForm
 
                         Grid::make(2)
                             ->schema([
-                                TextInput::make('password')
+                                PasswordInput::make('password')
                                     ->label(__('resources.provider_resource.password'))
-                                    ->password()
-                                    ->revealable()
                                     ->required(fn (string $context): bool => $context === 'create')
-                                    ->dehydrateStateUsing(fn ($state) => Hash::make($state))
-                                    ->dehydrated(fn ($state) => filled($state))
-                                    ->rule(Password::default())
-                                    ->autocomplete('new-password')
-                                    ->helperText(__('resources.provider_resource.password_helper'))
-                                    ->maxLength(255)
-                                    ->confirmed(),
+                                    ->helperText(fn (string $context): ?string => $context === 'edit'
+                                        ? __('passwords.requirements.edit_helper')
+                                        : null),
 
-                                TextInput::make('password_confirmation')
+                                PasswordConfirmationInput::make('password_confirmation')
                                     ->label(__('resources.provider_resource.password_confirmation'))
-                                    ->password()
-                                    ->revealable()
-                                    ->required(fn (string $context): bool => $context === 'create')
-                                    ->dehydrated(false)
-                                    ->maxLength(255),
+                                    ->required(fn (string $context): bool => $context === 'create'),
                             ]),
                     ])
                     ->collapsible()

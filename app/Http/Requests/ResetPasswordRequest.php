@@ -3,9 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Enum\RegistrationMethod;
+use App\Rules\PasswordRequirements;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 
 /**
  * Step 3 of the reset flow: commit the new password.
@@ -49,7 +49,7 @@ class ResetPasswordRequest extends FormRequest
                 'required',
                 'string',
                 'confirmed',
-                Password::min(8)->mixedCase()->letters()->numbers()->symbols(),
+                new PasswordRequirements,
             ],
         ];
     }

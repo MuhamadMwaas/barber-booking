@@ -2,6 +2,15 @@
 
 > **الهدف:** وثيقة مرجعية كاملة تُغني أي مطور جديد أو AI Agent عن قراءة جميع الملفات بشكل منفرد. تشرح هذا القسم من مستوى المتطلبات التجارية وصولاً إلى آخر سطر في الكود.
 
+> **تحديث تشغيلي مهم — 2026-09-10 / MON-05:** مسار الدفع الفعلي الحالي هو
+> `InvoiceFinalizationService::finalizeAppointmentPayment()`، ومرجعه الوظيفي
+> `StaffDashboard`. الدفع داخل الصالون فقط (`cash`/`card`) وبعد الخدمة؛ المبلغ
+> الأقل سعر خاص كامل وليس دفعة جزئية؛ والفاتورة الواحدة تغطي الأب وكل المواعيد
+> المرتبطة. TSE متوقف عمداً في مرحلة non-production ولا يستدعي مسار الدفع أي
+> خدمة Fiskaly. أقسام Fiskaly أدناه مرجع للبنية غير النشطة وخطة مستقبلية، وليست
+> وصفاً لتوقيع يعمل حالياً. تفاصيل الإصلاح:
+> [`fixes/MON-05_unified_payment_flow.md`](fixes/MON-05_unified_payment_flow.md).
+
 ---
 
 ## الفهرس
@@ -73,14 +82,15 @@
                     ══════ وقت لاحق — العميل يدفع ══════
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│              InvoiceFinalizationService::finalizeDraftInvoice()      │
+│       InvoiceFinalizationService::finalizeAppointmentPayment()       │
 │                                                                      │
 │   ┌──────────────────────────────────────────────────────────────┐  │
-│   │  1. applyTSESignature() → Fiskaly API                       │  │
-│   │  2. generateInvoiceNumber()  → INV-2026-000001              │  │
-│   │  3. DRAFT → PAID                                            │  │
-│   │  4. updateAppointmentStatus() → COMPLETED                   │  │
-│   │  5. createPaymentRecord()                                   │  │
+│   │  1. Lock owner + linked appointments + invoice              │  │
+│   │  2. Rebuild group items + apply special price               │  │
+│   │  3. Generate invoice/payment numbers                        │  │
+│   │  4. DRAFT → PAID + one Payment(method FK)                   │  │
+│   │  5. All covered appointments → COMPLETED                    │  │
+│   │  6. Record tse_enabled=false; no Fiskaly network call       │  │
 │   └──────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 
@@ -102,8 +112,8 @@
 | المكون | الملف | المسؤولية |
 |--------|-------|-----------|
 | **BookingService** | `app/Services/BookingService.php` | إنشاء الحجز + Draft Invoice في transaction واحد |
-| **InvoiceService** | `app/Services/InvoiceService.php` | إنشاء/إعادة بناء الفواتير وتحويل Draft→Paid |
-| **InvoiceFinalizationService** | `app/Services/InvoiceFinalizationService.php` | الاستكمال الكامل: TSE + رقم + Payment record |
+| **InvoiceService** | `app/Services/InvoiceService.php` | إنشاء المسودة والبنود، إعادة بناء فاتورة المجموعة، وتطبيق السعر الخاص؛ لا يصدر دفعة |
+| **InvoiceFinalizationService** | `app/Services/InvoiceFinalizationService.php` | الكاتب الوحيد للدفع: قفل + رقم + PAID + Payment + إكمال المجموعة؛ TSE متوقف |
 | **TaxCalculatorService** | `app/Services/TaxCalculatorService.php` | حساب الضرائب بدقة bcmath — الوحيد المُعتمد |
 | **FiskalyService** | `app/Services/Fiskaly/FiskalyService.php` | بوابة دخول كل عمليات Fiskaly |
 | **FiskalyClient** | `app/Services/Fiskaly/FiskalyClient.php` | HTTP Client للـ Fiskaly API مع Auth Cache |
@@ -114,7 +124,7 @@
 | **TemplateBuilderService** | `app/Services/InvoiceTemplate/TemplateBuilderService.php` | تحويل Template إلى HTML جاهز للطباعة |
 | **DynamicFieldResolver** | `app/Services/InvoiceTemplate/DynamicFieldResolver.php` | حل القيم الديناميكية في القالب |
 | **PrintService** | `app/Services/Print/PrintService.php` | طباعة الفاتورة + تتبع السجلات |
-| **DocumentNumberGenerator** | `app/Services/DocumentNumberGenerator.php` | توليد الأرقام التسلسلية بأمان (lockForUpdate) |
+| **DocumentNumberGenerator** | `app/Services/DocumentNumberGenerator.php` | توليد الأرقام التسلسلية من صفّ عدّاد مقفول. **يجب أن يُنادى داخل معاملة المستدعي** وإلا رفع `RuntimeException` (`MON-03`) |
 | **PrintController** | `app/Http/Controllers/PrintController.php` | HTTP endpoints للطباعة (web + API) |
 
 ---
@@ -138,8 +148,8 @@ app/Models/
 
 ```
 app/Services/
-├── InvoiceService.php                    ← إنشاء + إعادة بناء + تحويل الفواتير
-├── InvoiceFinalizationService.php        ← الاستكمال الكامل مع TSE + Payment
+├── InvoiceService.php                    ← إنشاء/إعادة بناء المسودة + السعر الخاص
+├── InvoiceFinalizationService.php        ← الدفع الموحد + Payment + إكمال المجموعة
 ├── TaxCalculatorService.php              ← حساب الضرائب بـ bcmath
 ├── DocumentNumberGenerator.php          ← توليد أرقام INV-YYYY-XXXXXX
 │
@@ -260,40 +270,45 @@ BookingService::createBooking()
 ### المرحلة الثانية: الدفع واستكمال الفاتورة
 
 ```
-[Admin Panel] — الأدمن يضغط "Finalize" أو "Pay"
+[StaffDashboard / Filament adapter] — الموظف يضغط Pay
        │
        ▼
-InvoiceFinalizationService::finalizeDraftInvoice(
-    $invoice,
-    paymentType = '2' أو '3',   ← PaymentStatus::PAID_ONSTIE_CASH أو CARD
-    amountPaid,
-    notes
+InvoiceFinalizationService::finalizeAppointmentPayment(
+    appointment,
+    paymentMethod = 'cash' أو 'card' أو PaymentMethod id,
+    finalAmount = null أو سعر خاص,
+    notes,
+    source
 )
-       │
-       ├─→ [VALIDATE] invoice->status === DRAFT ؟ وإلا → throw InvalidArgumentException
-       ├─→ [VALIDATE] invoice->appointment موجود ؟
        │
        ├─→ [DB TRANSACTION]
        │      │
-       │      ├── 1. applyTSESignature() → ترجع placeholder حالياً (TODO: Fiskaly)
-       │      │       └── أو createPlaceholderTSE() إذا applyTse = false
+       │      ├── 1. resolve owner = parent_appointment_id ?? id
+       │      ├── 2. lock owner + linkedGroup + existing invoice
+       │      ├── 3. reject cancelled / NO_SHOW / non-DRAFT invoice
+       │      ├── 4. resolve an active on-site PaymentMethod
+       │      ├── 5. rebuildAggregatedInvoice(owner)
+       │      ├── 6. validate final amount (> 0 and <= items gross)
+       │      ├── 7. applyFinalAmount() (lower amount = discount)
        │      │
-       │      ├── 2. Invoice::generateInvoiceNumber()
-       │      │       └── DocumentNumberGenerator::generate('invoices','invoice_number','INV')
-       │      │           → DB LOCK → آخر رقم في السنة + 1 → INV-2026-000001
+       │      ├── 8. Invoice::generateInvoiceNumber()
+       │      │       └── DocumentNumberGenerator::next('invoice', 'INV')
+       │      │           → LOCK صفّ العدّاد → current + 1 → INV-2026-000001
        │      │
-       │      ├── 3. invoice->update([
-       │      │       invoice_number, status=PAID, invoice_data[tse_data, finalized_at...]
+       │      ├── 9. invoice->update([
+       │      │       invoice_number, status=PAID,
+       │      │       invoice_data[source, method id, tse_enabled=false, ...]
        │      │   ])
        │      │
-       │      ├── 4. updateAppointmentStatus()
-       │      │       └── كل الـ linkedGroup (parent + children) → COMPLETED + payment_status
+       │      ├── 10. كل linkedGroup → COMPLETED + payment status + cash/card
        │      │
-       │      └── 5. createPaymentRecord()
-       │              └── Payment::create([paymentable=Invoice, type=full/partial...])
+       │      └── 11. Payment::create(type=full, method_id, exact invoice totals)
        │
        └─→ [RETURN] $invoice->fresh(['appointment','customer','items','payments'])
 ```
+
+هذه هي عملية الدفع الوحيدة. لا يوجد تحصيل عبر API حالياً، ولا تستدعي العملية
+Fiskaly. القيم `tse_enabled=false` توثّق القرار ولا تمثل توقيعاً ناجحاً.
 
 ### المرحلة الثالثة: التوقيع الرقمي Fiskaly (الحالة الكاملة المستقبلية)
 
@@ -374,11 +389,14 @@ InvoiceItems (عند الحجز):
   invoice_number = "INV-2026-000001"
   status = 2 (PAID)
   invoice_data = {
-    tse_data: {...},
-    finalized_at: "2026-05-29T...",
+    tse_data: {tse_enabled: false, note: "TSE is disabled..."},
+    finalized_at: "2026-09-10T...",
     payment_type: "2",
-    amount_paid: 80.00,
-    finalized_by: "Admin Name"
+    payment_method_id: 1,
+    payment_method_code: "cash",
+    amount_paid: "80.00",
+    finalized_by: "Admin Name",
+    finalization_method: "staff_dashboard"
   }
   
   Payment record:
@@ -387,55 +405,41 @@ InvoiceItems (عند الحجز):
     tax_amount = 12.77
     status = PAID_ONSTIE_CASH (2)
     type = 'full'
+    payment_method_id = 1
     paymentable → Invoice
     payment_metadata = {
       invoice_number: "INV-2026-000001",
-      tse_transaction_number: null,  ← حتى يُطبَّق TSE
-      ...
+      covered_appointment_ids: [1, 2],
+      payment_method_code: "cash",
+      source: "staff_dashboard",
+      tse_enabled: false
     }
 ```
 
-### مسار بيانات Fiskaly داخل invoice_data JSON
+### شكل `invoice_data` الحالي وبيانات Fiskaly المستقبلية
 
 ```json
 {
-  "fiskaly_transaction_id":     "uuid-v4",
-  "fiskaly_transaction_number": 42,
-  "fiskaly_signature": {
-    "value":      "base64-encoded-signature...",
-    "algorithm":  "ecdsa-plain-SHA256",
-    "counter":    123,
-    "public_key": "base64-public-key..."
-  },
-  "fiskaly_qr_code":       "base64-qr-data-for-receipt",
-  "fiskaly_tss_serial":    "d0a4be4774b2d78...",
-  "fiskaly_client_serial": "SALON-POS-001",
-  "fiskaly_time_start":    1748476800,
-  "fiskaly_time_end":      1748476801,
-  "fiskaly_status":        "signed",
-  
   "tse_data": {
-    "tse_enabled":           false,
-    "tse_provider":          "fiskaly",
-    "transaction_number":    null,
-    "certified_timestamp":   "2026-05-29T...",
-    "signature_data":        null,
-    "tse_serial_number":     null,
-    "signature_algorithm":   "ecdsa-plain-SHA256",
-    ...
+    "tse_enabled": false,
+    "note": "TSE is disabled by current business configuration",
+    "timestamp": "2026-09-10T..."
   },
-  
-  "finalized_at":         "2026-05-29T...",
+  "finalized_at":         "2026-09-10T...",
   "finalized_by":         "Admin Name",
   "payment_type":         "2",
-  "amount_paid":          80.00,
-  "finalization_method":  "api",
-  
+  "payment_method_id":    1,
+  "payment_method_code":  "cash",
+  "amount_paid":          "80.00",
+  "finalization_method":  "staff_dashboard",
   "aggregated":           true,
   "appointment_ids":      [1, 2],
-  "last_rebuilt_at":      "2026-05-29T..."
+  "last_rebuilt_at":      "2026-09-10T..."
 }
 ```
+
+مفاتيح مثل `fiskaly_transaction_id` و`fiskaly_signature` ليست ناتجاً حالياً؛
+تظهر فقط مستقبلاً بعد تفعيل تكامل TSE فعلي ومختبر.
 
 ---
 
@@ -631,16 +635,16 @@ public function calculateTotal(): void
 
 ```
 payments
-  ├── payment_method_id → payment_methods (nullable — TODO: ربط)
+  ├── payment_method_id → payment_methods (قد يكون nullable في schema للتاريخ؛ إلزامي لكل دفع جديد في التطبيق)
   ├── payment_number    → PAY-20260529-XXXXXX
   ├── amount            → المبلغ المدفوع
   ├── subtotal          → الصافي (محسوب عكسياً)
   ├── tax_amount        → الضريبة
   ├── status            → PaymentStatus enum
-  ├── type              → full / partial / deposit / refund
+  ├── type              → full في التحصيل الحالي؛ الأنواع الأخرى محفوظة لسيناريوهات أخرى
   ├── paymentable_id    ─┐ Polymorphic
   ├── paymentable_type  ─┘ → Invoice أو Appointment
-  └── payment_metadata  → JSON: invoice_number, tse_transaction_number, collected_by
+  └── payment_metadata  → JSON: invoice_number, covered ids, method code, source, collected_by, tse_enabled=false
 ```
 
 ---
@@ -831,21 +835,77 @@ PAID invoice → invoice_number = "INV-2026-000001" ← رقم تسلسلي بد
 
 **لماذا؟** المحاسبة الألمانية تتطلب أرقاماً تسلسلية متتالية بدون فجوات. لو أنشأنا الرقم عند الحجز وألغى العميل، سيكون هناك فجوة. الحل: الرقم يُنشأ فقط عند الدفع الفعلي.
 
-### قاعدة 3: قفل قاعدة البيانات عند توليد الرقم
+### قاعدة 3: صفّ عدّادٍ مقفول داخل معاملة المستدعي
 
 ```php
-// DocumentNumberGenerator.php
-DB::transaction(function() {
-    $lastRecord = DB::table('invoices')
-        ->whereYear('created_at', $year)
-        ->orderByDesc('id')
-        ->lockForUpdate()   // ← SELECT ... FOR UPDATE
-        ->first();
-    // ...
-});
+// DocumentNumberGenerator::next()  —  MON-03
+if (DB::transactionLevel() === 0) {
+    throw new RuntimeException('… must be called inside a transaction …');
+}
+
+$counter = DB::table('document_counters')
+    ->where('series', $series)      // 'invoice' | 'payment'
+    ->lockForUpdate()               // ← صفٌّ موجود دائماً (تبذره الـ migration)
+    ->first();
+
+$current = $counter->period === $year ? (int) $counter->current : 0;
+$next    = $current + 1;
+
+DB::table('document_counters')->where('series', $series)
+    ->update(['period' => $year, 'current' => $next, 'updated_at' => now()]);
+
+return sprintf('%s-%s-%06d', $prefix, $year, $next);
 ```
 
-**لماذا `lockForUpdate`؟** في بيئة متعددة المستخدمين (concurrent requests)، بدون قفل قد يولّد طلبان متزامنان نفس الرقم.
+> ### ⚠️ تصحيح: النسخة الموصوفة سابقاً هنا كانت **معطوبة**، لا محميّة (`MON-03`)
+>
+> كان هذا القسم يوثّق هذا الكود بوصفه الحماية:
+>
+> ```php
+> DB::transaction(function() {
+>     $lastRecord = DB::table('invoices')->whereYear('created_at', $year)
+>         ->orderByDesc('id')->lockForUpdate()->first();
+>     preg_match('/(\d+)$/', $lastRecord->$column, $m);
+>     // ...
+> });
+> ```
+>
+> وفيه ثلاثة أعطال:
+>
+> **1. `orderByDesc('id')` يجلب أحدث صف، لا أعلى رقم.** وكل حجز يُنشئ مسودة
+> بـ `invoice_number = NULL`، فأحدث صف مسودةٌ رقمها NULL، و`preg_match` عليها
+> لا يجد شيئاً ⟶ الرقم `INV-YYYY-000001` **دائماً**. لم يكن هذا حالة تسابق:
+> **كل** فاتورة في النظام كانت تحمل الرقم نفسه، حتمياً وبلا أي تزامن. ثبت
+> رقمياً أن `INV-2026-000007` كان موجوداً والمولّد أصدر `000001` رغم ذلك.
+>
+> **2. القفل لا يحجز شيئاً.** `DB::transaction()` الداخلية تُثبِّت وتُحرِّر
+> القفل **قبل** أن يكتب المستدعي الرقم — نمط «اقرأ، حرِّر، ثم اكتب». وحين لا
+> يوجد صف للسنة فـ `lockForUpdate()` لا تقفل شيئاً أصلاً: **لا يمكن قفل
+> غياب** (نفس درس `BOOK-02`).
+>
+> **3. الاعتماد على المسح.** استنتاج الرقم من محتوى عمود يجعل أي صفٍّ مشوَّه
+> أو `NULL` قادراً على إعادة المسلسل إلى الصفر.
+>
+> **الفروق في النسخة المُصلَحة:**
+>
+> | | قبل | بعد |
+> |---|---|---|
+> | مصدر الرقم | مسح جدول المستندات | صفّ عدّاد |
+> | المعاملة | خاصة بالمولّد | **معاملة المستدعي** |
+> | القفل يُحرَّر | قبل الكتابة | بعد الكتابة |
+> | لا صف موجود | لا قفل إطلاقاً | الصف مبذور دائماً |
+> | ارتداد المستدعي | العدّاد يبقى مرتفعاً ⟶ فجوة | يرتد ⟶ لا فجوة |
+> | نداء خارج معاملة | يمرّ بصمت | `RuntimeException` |
+>
+> ولا يُستخدم `AUTO_INCREMENT`: قيمته **لا ترتد** مع المعاملة، فارتدادٌ واحد
+> يترك فجوة دائمة.
+>
+> **والحماية بطبقتين الآن:** القفل يمنع التسابق، وخمسة قيود فريدة تمنع كل ما
+> نسيناه — `invoices(invoice_number)`، `invoices(appointment_id)`،
+> `payments(payment_number)`، `appointments(number)`،
+> `provider_service(provider_id, service_id)`.
+>
+> التفاصيل الكاملة: [`docs/fixes/MON-03_document_numbering.md`](fixes/MON-03_document_numbering.md)
 
 ### قاعدة 4: الفاتورة المجمَّعة (Aggregated Invoice)
 
@@ -970,19 +1030,15 @@ if ($invoice->status !== InvoiceStatus::DRAFT) {
 9. invoice->update(subtotals + audit metadata)
 ```
 
-#### `finalizeDraftInvoice(Invoice, paymentType, amountPaid, notes): Invoice`
+#### حدود مسؤولية `InvoiceService`
 
-```
-⚠️ تحذير: هذه الدالة موجودة في كلا:
-  - InvoiceService.php (نسخة مبسطة)
-  - InvoiceFinalizationService.php (النسخة الكاملة مع TSE + Payment)
+لا توجد فيه الآن دالة تصدر فاتورة مدفوعة. حُذفت
+`createInvoiceFromAppointment()` و`finalizeDraftInvoice()` في إصلاح MON-05.
+المتاح لهذا التدفق هو:
 
-يجب استخدام InvoiceFinalizationService دائماً!
-
-الفرق:
-  InvoiceService::finalizeDraftInvoice → لا تُنشئ Payment record
-  InvoiceFinalizationService::finalizeDraftInvoice → تُنشئ Payment record + TSE
-```
+- `createDtaftInvoiceFromAppointment()` لإنشاء المسودة عند الحجز (الاسم التاريخي ما زال يحوي typo).
+- `rebuildAggregatedInvoice()` لإعادة بناء بنود الأب وكل children.
+- `applyFinalAmount()` لتسجيل السعر الخاص وإعادة توزيع net/tax/gross.
 
 ---
 
@@ -990,44 +1046,23 @@ if ($invoice->status !== InvoiceStatus::DRAFT) {
 
 **الملف:** [app/Services/InvoiceFinalizationService.php](app/Services/InvoiceFinalizationService.php)
 
-#### `finalizeDraftInvoice(Invoice, paymentType, amountPaid, notes, applyTse): Invoice`
+#### `finalizeAppointmentPayment(Appointment, paymentMethod, finalAmount, notes, source, adjustedDuration): Invoice`
 
 ```
-الخطوة 1: التحقق
-  - invoice->status === DRAFT
-  - invoice->appointment موجود
-
-الخطوة 2: DB Transaction يبدأ
-
-الخطوة 3: TSE Signature
-  if $applyTse:
-    tseData = applyTSESignature($invoice, $paymentType, $amountPaid)
-    ← حالياً: إرجاع placeholder بـ tse_enabled=false
-  else:
-    tseData = createPlaceholderTSE()
-
-الخطوة 4: توليد رقم الفاتورة
-  invoiceNumber = Invoice::generateInvoiceNumber()
-  ← DocumentNumberGenerator::generate('invoices','invoice_number','INV')
-
-الخطوة 5: تحديث الفاتورة
-  invoice->update([
-    invoice_number = invoiceNumber,
-    status = PAID,
-    invoice_data = merge(existing + tse_data + finalized_at + ...)
-  ])
-
-الخطوة 6: تحديث الحجوزات
-  updateAppointmentStatus($appointment, $paymentType, PAID)
-  → كل linkedGroup → status=COMPLETED, payment_status=from($paymentType)
-
-الخطوة 7: إنشاء Payment Record
-  createPaymentRecord($invoice, $paymentType, $amountPaid, $tseData)
-  → Payment::create([paymentable=Invoice, type=full/partial, ...])
-
-الخطوة 8: DB Commit
-
-الإرجاع: invoice->fresh(['appointment','customer','items','payments'])
+1. يبدأ DB transaction ويحدد invoice owner.
+2. يقفل owner وlinkedGroup والفاتورة الموجودة.
+3. يرفض cancelled/NO_SHOW أو فاتورة ليست DRAFT.
+4. يحل PaymentMethod فعالاً من id أو cash/card ويرفض الطرق الأونلاين.
+5. يعيد بناء فاتورة موحدة من خدمات المجموعة كلها.
+6. يتحقق أن finalAmount موجب ولا يتجاوز مجموع البنود.
+7. يطبق السعر الخاص كـ discount؛ null يعني السعر الكامل.
+8. يولد رقمي Invoice وPayment المتسلسلين داخل المعاملة.
+9. يحدّث Invoice إلى PAID مع audit metadata دون استبدال metadata السابقة.
+10. يحدّث كل المواعيد إلى COMPLETED وقيمة payment_method ثابتة cash/card.
+11. ينشئ Payment واحداً من type=full وبـ payment_method_id غير فارغ.
+12. ينسخ subtotal/tax/amount من الفاتورة نفسها لضمان التطابق.
+13. يسجل tse_enabled=false؛ لا ينفذ اتصال Fiskaly.
+14. أي فشل يلغي العملية كلها؛ الضغط المكرر يرى الفاتورة المنهاة ولا ينشئ دفعة ثانية.
 ```
 
 ---
@@ -1043,20 +1078,39 @@ if ($invoice->status !== InvoiceStatus::DRAFT) {
 ```
 المدخل: gross = "50.00", taxRate = "19"
 العملية:
-  factor = 1 + (19 / 100) = 1.19  [bcmath]
-  net_high = 50.00 / 1.19 = 42.0168...  [bcmath, precision=2]
-  tax_high = 50.00 - 42.0168... = 7.9832...
+  internal_scale = max(10, precision + 8) = 10      ← أوسع من الناتج دائماً
 
-  net = bcRound(net_high, 2) = "42.02"
-  tax = bcRound(tax_high, 2) = "7.98"
-  gross = bcRound("50.00", 2) = "50.00"
+  factor   = 1 + (19 / 100) = 1.1900000000          [bcmath, scale 10]
+  net_high = 50.00 / 1.19   = 42.0168067226         [bcmath, scale 10]
+  tax_high = 50.00 - net_high = 7.9831932774        [bcmath, scale 10]
+
+  net   = bcRound(net_high, 2) = "42.02"            ← التقريب هنا فقط
+  tax   = bcRound(tax_high, 2) = "7.98"
+  gross = bcRound("50.00", 2)  = "50.00"
 
 Reconciliation:
-  sum = 42.02 + 7.98 = 50.00
+  sum  = 42.02 + 7.98 = 50.00
   diff = 50.00 - 50.00 = 0.00 ✓ (لا تعديل)
+  وعند diff != 0 تُعدَّل **الضريبة** دائماً، لا الصافي (قرار حتمي).
 
 المخرج: { net: "42.02", tax: "7.98", gross: "50.00" }
 ```
+
+> ### ⚠️ تصحيح: هذا الوصف كان يوثّق النيّة، لا الكود (`MON-01`)
+>
+> قبل 2026-09-10 كانت الدقة الداخلية **2** لا 10، و`bcdiv` **تقتطع ولا تقرّب**:
+>
+> ```
+> net_high = bcdiv("50.00", "1.19", 2)  →  "42.01"    ← اقتطاع، لا تقريب
+> net      = bcRound("42.01", 2)        →  "42.01"    ← تقريب رقم مقرَّب أصلاً
+> tax      = 50.00 - 42.01              →  "7.99"
+>
+> المخرج الفعلي كان: { net: "42.01", tax: "7.99", gross: "50.00" }
+> ```
+>
+> فالسطر «`net = bcRound(net_high, 2) = "42.02"`» أعلاه **لم يكن صحيحاً أبداً**.
+> `42.02` هو ما كان يُنتجه `BookingService` (دقة 6)، فاختلف صف `appointments`
+> عن صف `invoices` بسنت في نفس المعاملة. الوصف صار مطابقاً للكود بعد الإصلاح.
 
 #### ضمان المطابقة الرياضية
 
@@ -1286,33 +1340,32 @@ FISKALY_LOG_LEVEL=info
 
 | المكون | الحالة | ملاحظة |
 |--------|--------|---------|
-| `FiskalyClient` | ✅ مكتمل | JWT + Cache + Retry |
-| `TssService` | ✅ مكتمل | CRUD + Admin Auth + DB Storage |
-| `ClientService` | ✅ مكتمل | Create/Update/DB Storage |
-| `TransactionService` | ✅ مكتمل | Start + Finish + KassenSichV Schema |
-| `FiskalyService::signInvoice()` | ✅ مكتمل | يعمل إذا كانت الإعدادات موجودة |
-| `InvoiceFinalizationService::applyTSESignature()` | ⚠️ Placeholder | لا تستدعي FiskalyService بعد! |
+| `FiskalyClient` | موجود وغير نشط | خارج مسار الدفع الحالي |
+| `TssService` | موجود وغير نشط | CRUD/Admin support غير مستخدم عند التحصيل |
+| `ClientService` | موجود وغير نشط | خارج مسار الدفع الحالي |
+| `TransactionService` | موجود وغير نشط | لا يستدعيه `InvoiceFinalizationService` |
+| `FiskalyService::signInvoice()` | موجود وغير موصول | لا يكفي وجود الإعدادات لتفعيله |
+| `InvoiceFinalizationService` | TSE متوقف صراحةً | يحفظ `tse_enabled=false` ولا يجري اتصالاً شبكياً |
 | عرض TSE في الفاتورة | ✅ مكتمل | tse-info line type |
 | تصدير DSFinV-K | ✅ API موجود | `TssService::export()` |
 
-**الخطوة المفقودة الحرجة:**
+**الوضع التشغيلي المعتمد في 2026-09-10:**
 
 ```php
-// InvoiceFinalizationService.php السطر 39
-// هذا الكود يُرجع placeholder، لا يتصل بـ Fiskaly!
-private function applyTSESignature(Invoice $invoice, ...) {
+private function disabledTseMetadata(): array
+{
     return [
-        'tse_enabled' => false,  // ← دائماً false!
-        ...
+        'tse_enabled' => false,
+        'note' => 'TSE is disabled by current business configuration',
+        'timestamp' => now()->toISOString(),
     ];
 }
-
-// الكود الصحيح يجب أن يكون:
-private function applyTSESignature(Invoice $invoice, ...) {
-    $fiskalyService = app(FiskalyService::class);
-    return $fiskalyService->signInvoice($invoice);
-}
 ```
+
+هذا قرار واضح لبيئة غير إنتاجية، وليس offline signature ولا نجاحاً وهمياً.
+قبل أي تشغيل إنتاجي يحتاج TSE يجب تنفيذ مشروع تفعيل مستقل: مراجعة قانونية، ربط
+الخدمة بالكاتب الموحد، سياسة failure/offline، اختبارات sandbox ثم production،
+ومراجعة شكل الإيصال. تغيير `FISKALY_ENABLED` وحده لا يحقق ذلك.
 
 ---
 
@@ -1401,14 +1454,38 @@ Browser يستقبل HTML + يفتح print dialog تلقائياً
 
 ### أماكن حساب الضرائب في الكود
 
+**بعد إصلاح `MON-01` (2026-09-10): تنفيذ واحد فقط.** كل ما في الجدول يفوّض إلى
+`TaxCalculatorService` ولا يحتوي حساباً خاصاً به:
+
 | المكان | الطريقة | الملاحظة |
 |--------|---------|---------|
-| `BookingService::calculateTotals()` | bcmath manual | لكل خدمة، ثم مصالحة |
-| `TaxCalculatorService::extractTax()` | bcmath مع bcRound | الأكثر دقة |
-| `InvoiceFinalizationService::calculateReverseTax()` | bcmath | للـ Payment record |
-| `InvoiceService::calculateReverseTax()` | float (!) | خطر — يُستخدم فقط في createInvoiceFromAppointment() |
-| `InvoiceItem::calculateTotal()` | float × float | خطر — لكن observer مُعطَّل |
-| `Invoice::calculateTotals()` | bcadd + bcmul | لكن بدقة 4 للضريبة |
+| `TaxCalculatorService::extractTax()` | **bcmath، دقة داخلية `max(10, p+8)`** | 🟢 **المصدر الوحيد** — التقريب مرة واحدة في النهاية |
+| `TaxCalculatorService::addTax()` | bcmath، نفس الدقة | ⚠️ **ليست عكس `extractTax`** — انظر التحذير أدناه |
+| `BookingService::calculateTotals()` | → `calculateBulk()` | حُذفت نسخته الخاصة (~40 سطراً) + `bcRound()` + `calculateTotalsInverse()` |
+| `BookingService::addServiceDifferentProvider()` | → `extractTax()` | كانت float |
+| `InvoiceFinalizationService::calculateReverseTax()` | → `extractTax()` | كانت bcmath + `bcscale(6)` **عامة** (تلوّث بقية الطلب — `MON-06`) |
+| `InvoiceService::calculateReverseTax()` | → `extractTax()` | كانت float صريحاً |
+| `InvoiceItem::calculateTotal()` | → `extractTax()` من الـ gross المخزَّن | كانت تعيد بناء الـ gross من الـ net فتفقد سنتاً |
+| `Invoice::calculateTotals()` | → `extractTax()` | كانت سليمة أصلاً؛ صحّت تلقائياً بإصلاح الحاسبة |
+| `CreateAppointment::calculateTotalsFromServices()` | → `calculateBulk()` | كانت float |
+| `AppointmentCreationService::calculateTotalsFromServices()` | → `calculateBulk()` | كانت **تُضيف** الضريبة فوق سعر gross (الاتجاه الخطأ) |
+| ~~`BookingService2`~~ | — | **حُذف** (428 سطراً، صفر مستدعين) |
+
+> ### ⚠️ `addTax` ليست عكس `extractTax` — ولا يمكن أن تكون
+>
+> الاستخراج العكسي **دالة غير عكوسة**: عدة قيم gross تنتج نفس الـ net المقرَّب.
+>
+> ```
+> 45.00 ÷ 1.19 = 37.8151…  →  net يُقرَّب إلى 37.82
+> 37.82 × 1.19 = 45.0058   →  gross يُقرَّب إلى 45.01   ≠ 45.00
+> ```
+>
+> فلا ترجع أبداً من الـ net إلى gross كان مخزَّناً — **الـ gross هو الحقيقة**.
+> `InvoiceItem::calculateTotal()` كانت تفعل ذلك في `static::saving`، فأي حفظ
+> لبند فاتورة كان يُصغّرها سنتاً؛ وكان خامداً فقط لأن مسارَي الإنشاء ملفوفان
+> بـ `withoutEvents()`. صار الـ gross المخزَّن مرجعاً والضريبة تُستخرج منه.
+>
+> التفاصيل الكاملة: [`docs/fixes/MON-01_vat_calculation_unified.md`](fixes/MON-01_vat_calculation_unified.md)
 
 ---
 
@@ -1599,20 +1676,18 @@ Customer    BookingController   BookingService   InvoiceService    Fiskaly
     │               │                 │                │              │
    ...              │                 │                │              │
     │               │                 │                │              │
-Admin           FilamentAdmin    InvoiceFinalizationService    Fiskaly API
-    │               │                 │                              │
-    │── Click Pay ─→│                 │                              │
-    │               │── finalizeDraftInvoice()─────────────────────→ │
-    │               │                 │── applyTSESignature()        │
-    │               │                 │   (placeholder حالياً)       │
-    │               │                 │── generateInvoiceNumber()    │
-    │               │                 │   → DB::lockForUpdate()      │
-    │               │                 │   → INV-2026-000001          │
-    │               │                 │── invoice->update(PAID)      │
-    │               │                 │── updateLinkedAppointments() │
-    │               │                 │── createPaymentRecord()      │
-    │               │                 │── DB::commit()              │
-    │←── Invoice PAID ───────────────│                              │
+Staff           StaffDashboard     InvoiceFinalizationService       Database
+    │                  │                         │                      │
+    │── Click Pay ────→│                         │                      │
+    │                  │── finalizeAppointmentPayment()───────────────→│
+    │                  │                         │── lock group/invoice │
+    │                  │                         │── rebuild + discount │
+    │                  │                         │── numbers + PAID     │
+    │                  │                         │── one Payment + FK    │
+    │                  │                         │── all → COMPLETED     │
+    │                  │                         │── tse=false (no HTTP) │
+    │                  │                         │── commit              │
+    │←── Invoice PAID ─│                         │                      │
     │               │                 │                              │
     │── Click Print →│                 │                              │
     │               │── PrintService::print()                        │
@@ -1699,31 +1774,18 @@ Admin               FiskalyService      FiskalyClient      Fiskaly API
 // 1. الحصول على الحجز
 $appointment = Appointment::with(['services.pivot', 'customer'])->find($id);
 
-// 2. التأكد من عدم وجود فاتورة PAID
-$invoiceService = app(InvoiceService::class);
-$invoiceService->validateInvoiceCreation($appointment); // throws on error
-
-// 3. إنشاء Draft (إذا لم تكن موجودة)
-if (!$appointment->invoice) {
-    // يُستدعى عادةً من BookingService تلقائياً
-}
-
-// 4. إعادة بناء الفاتورة (إذا أُضيفت خدمات جديدة)
-$invoiceService->rebuildAggregatedInvoice($appointment);
-
-// 5. استكمال الفاتورة عند الدفع
+// 2. التحصيل بعد تقديم الخدمة. الخدمة نفسها تتحقق وتقفل وتعيد بناء المسودة.
 $finalizationService = app(InvoiceFinalizationService::class);
-$invoice = $finalizationService->finalizeDraftInvoice(
-    $appointment->invoice,
-    (string) PaymentStatus::PAID_ONSTIE_CASH->value, // '2'
-    $amountPaid,
-    $notes,
-    $applyTse = true
+$invoice = $finalizationService->finalizeAppointmentPayment(
+    appointment: $appointment,
+    paymentMethod: 'cash', // أو card، أو PaymentMethod id في Filament
+    finalAmount: $specialPrice ?? null,
+    notes: $notes,
+    source: 'staff_dashboard',
 );
 
-// 6. توقيع رقمي منفصل (اختياري — إذا لم يُطبَّق في finalize)
-$fiskalyService = app(FiskalyService::class);
-$fiskalyService->signInvoice($invoice);
+// لا تستدع Fiskaly منفصلاً: TSE متوقف حالياً، وعند تفعيله مستقبلاً يجب
+// أن يندمج داخل العملية الموحدة حتى يبقى الدفع ذرياً ومتسقاً.
 ```
 
 ### كيف تُضيف نوع سطر جديداً للقالب؟
@@ -1809,13 +1871,17 @@ $invoice->getCoveredAppointments()
 
 هذا النظام يُنفِّذ دورة حياة فاتورة متكاملة لصالون حلاقة ألماني تحكمها ثلاثة متطلبات:
 
-**1. الامتثال القانوني (KassenSichV):** كل فاتورة نقدية مدفوعة يجب أن تُوقَّع رقمياً بـ TSE. البنية الحالية جاهزة لهذا عبر `FiskalyService::signInvoice()` و `TransactionService::createFromInvoice()` — الوصلة المفقودة هي **استدعاء** هذه الدوال من `InvoiceFinalizationService::applyTSESignature()` (حالياً placeholder).
+**1. حالة TSE:** توجد بنية دعم Fiskaly في المستودع لكنها غير موصولة بالتحصيل.
+القرار الحالي هو إيقاف TSE صراحةً في non-production وتسجيل ذلك في metadata.
+أي انتقال إلى production يتطلب مراجعة قانونية وتقنية وتكاملاً واختبارات مستقلة؛
+لا يكفي تفعيل متغير بيئي.
 
 **2. الدقة المحاسبية (bcmath):** النظام يستخدم `TaxCalculatorService` مع `bcmath` لضمان `net + tax = gross` رياضياً بدون أخطاء تقريب float. يُطبَّق هذا في `BookingService` و `InvoiceService::rebuildAggregatedInvoice()`.
 
 **3. القوالب المرنة:** نظام template قابل للتخصيص الكامل يدعم 16 نوع سطر مختلف، ديناميكي الحقول، يشمل بيانات TSE/Fiskaly كـ `tse_info` line type. القالب يُصدِّر HTML مباشراً مع script لطباعة تلقائية عبر المتصفح.
 
-**الفجوة الوحيدة الحالية:** `applyTSESignature()` في `InvoiceFinalizationService` تُرجع placeholder ولا تتصل بـ `FiskalyService`. ربطهما يُكمل الامتثال الكامل لـ KassenSichV.
+**حدود هذه الوثيقة:** إصلاح MON-05 يضمن اتساق السجلات المالية لكنه لا يدّعي
+امتثال TSE. تفاصيل Fiskaly التالية backlog هندسي للتفعيل المستقبلي.
 
 ---
 
@@ -1824,55 +1890,17 @@ $invoice->getCoveredAppointments()
 
 ---
 
-### المشكلة 1: `applyTSESignature()` لا تتصل بـ Fiskaly
+### المشكلة 1: TSE غير موصول — قرار الإيقاف موثّق، والتفعيل مؤجل
 
-**التصنيف:** حرج — يُبطل الامتثال القانوني  
-**الملف:** [app/Services/InvoiceFinalizationService.php:114](app/Services/InvoiceFinalizationService.php#L114)
+**الحالة في 2026-09-10:** TSE متوقف عمداً في non-production. لم تعد هناك دالة
+`applyTSESignature()` توهم باستدعاء اختياري؛ الكاتب الموحد يستعمل
+`disabledTseMetadata()` ويكتب `tse_enabled=false`، ولا ينفذ أي HTTP request.
 
-**كيف تتشكل:**
-```php
-// الكود الحالي يُرجع دائماً:
-return [
-    'tse_enabled' => false,   // ← دائماً false!
-    'tse_provider' => 'fiskaly',
-    'transaction_number' => null,
-    'signature_data' => null,
-    // ...
-];
-// FiskalyService::signInvoice() موجودة ومكتملة لكن لا تُستدعى!
-```
-
-**الخطر:** كل فاتورة تُطبَّق عليها `finalizeDraftInvoice()` ستكون بدون توقيع TSE. هذا يُخالف KassenSichV ويُعرِّض الصالون لغرامات ضريبية.
-
-**الإصلاح:**
-```php
-// في InvoiceFinalizationService.php السطر 114
-private function applyTSESignature(
-    Invoice $invoice,
-    string $paymentType,
-    float $amountPaid
-): array {
-    // ربط بـ FiskalyService الحقيقي
-    try {
-        $fiskalyService = app(FiskalyService::class);
-        $result = $fiskalyService->signInvoice($invoice);
-        
-        return [
-            'tse_enabled' => true,
-            'transaction_number' => $result['transaction']['number'] ?? null,
-            'certified_timestamp' => now()->toISOString(),
-            'signature_data' => $result['transaction']['signature'] ?? null,
-            'tse_serial_number' => $result['transaction']['tss_serial_number'] ?? null,
-        ];
-    } catch (FiskalyException $e) {
-        // Offline fallback
-        if (config('fiskaly.offline_mode.enabled')) {
-            return $this->createPlaceholderTSE();
-        }
-        throw $e;
-    }
-}
-```
+**الحد الفاصل المهم:** هذا قرار تشغيل واختبار، لا إثبات امتثال production. إذا
+أصبح TSE مطلوباً عند الإطلاق، فيجب تصميم الربط داخل
+`finalizeAppointmentPayment()` نفسه، وتحديد fail-closed/offline policy، واختبار
+Fiskaly sandbox والإيصال والتعافي قبل تفعيله. لا يجوز استدعاء Fiskaly من واجهة
+واحدة أو بعد commit، لأن ذلك يعيد مشكلة تعدد الحالات الجزئية.
 
 ---
 
@@ -1922,31 +1950,18 @@ public function calculateTotal(): void
 
 ---
 
-### المشكلة 3: تكرار منطق `finalizeDraftInvoice` في خدمتين
+### المشكلة 3: ~~تكرار منطق `finalizeDraftInvoice`~~ — ✅ مُصلَحة (MON-05)
 
-**التصنيف:** متوسط — confusion والكود المكرر  
-**الملفات:** [InvoiceService.php:554](app/Services/InvoiceService.php#L554) و [InvoiceFinalizationService.php:17](app/Services/InvoiceFinalizationService.php#L17)
+حُذفت الدالة من `InvoiceService` وحُذفت عملية الإنهاء القديمة من
+`InvoiceFinalizationService`. المدخل الوحيد الآن هو:
 
-**كيف تتشكل:**
-```
-InvoiceService::finalizeDraftInvoice() ← نسخة مبسطة: لا Payment record، لا TSE حقيقي
-InvoiceFinalizationService::finalizeDraftInvoice() ← النسخة الكاملة: TSE + Payment + LinkedAppointments
-
-مطور جديد يستدعي الأولى ظناً أنها الكاملة
-→ الفاتورة تُكتمل بدون سجل دفع وبدون TSE
-```
-
-**الإصلاح:**
 ```php
-// في InvoiceService، أعِد التوجيه للنسخة الكاملة أو احذف المكررة:
-/**
- * @deprecated Use InvoiceFinalizationService::finalizeDraftInvoice() instead
- */
-public function finalizeDraftInvoice(...): Invoice
-{
-    return app(InvoiceFinalizationService::class)->finalizeDraftInvoice(...);
-}
+InvoiceFinalizationService::finalizeAppointmentPayment(...)
 ```
+
+وحُذفت أيضاً `InvoicePaymentService` و`createInvoiceFromAppointment()`، وصارت
+واجهات Staff/Filament adapters رفيعة. الاختبار البنيوي في
+`UnifiedPaymentFlowTest` يتحقق من غياب الدوال القديمة حتى لا تعود صدفة.
 
 ---
 
@@ -2194,9 +2209,9 @@ $lastNumber = (int) ($matches[1] ?? 0);
 
 | # | المشكلة | الخطورة | يؤثر على | الإصلاح |
 |---|---------|---------|---------|---------|
-| 1 | `applyTSESignature()` placeholder | حرج | الامتثال القانوني | ربط FiskalyService |
+| 1 | TSE غير موصول | مؤجل بقرار non-production | جاهزية production/الامتثال | مشروع تفعيل مستقل؛ المسار الحالي يصرّح `tse_enabled=false` |
 | 2 | Float في `InvoiceItem::calculateTotal()` | عالي | دقة الحسابات | استخدام TaxCalculatorService |
-| 3 | تكرار `finalizeDraftInvoice` | متوسط | الصيانة | Deprecate أحدهما |
+| 3 | تكرار كتّاب الدفع | ✅ مُصلَح MON-05 | الصيانة واتساق المال | كاتب واحد `finalizeAppointmentPayment()` |
 | 4 | خطأ إملائي `segnture` | منخفض | الصيانة | Migration rename |
 | 5 | Race condition في `updateEnvFile` | متوسط | البيانات | File lock |
 | 6 | لا index على `invoice_number` | أداء | سرعة | Migration index |
@@ -2248,4 +2263,6 @@ FISKALY_VAT_NUMBER="DE123456789"
 
 ---
 
-*هذه الوثيقة تعكس حالة الكود كما في 2026-05-29. أي مطور أو AI Agent يقرأ هذه الوثيقة يجب أن يتحقق من التغييرات اللاحقة عبر `git log --since="2026-05-29" -- app/Services/Fiskaly/ app/Services/InvoiceFinalizationService.php`*
+*أصل الوثيقة يعكس مسح 2026-05-29، وتم تحديث مسار الدفع وقرار TSE وفق كود
+2026-09-10 (MON-05). أقسام Fiskaly التفصيلية تصف بنية dormant وخطة مستقبلية؛
+تحقق دائماً من الكود والتهيئة وقرار الامتثال قبل production.*

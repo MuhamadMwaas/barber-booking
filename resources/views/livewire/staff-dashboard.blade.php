@@ -1393,13 +1393,13 @@
                             class="block text-xs font-medium text-gray-500 mb-2">{{ __('dashboard.payment_modal.payment_type') }}</label>
                         <div class="grid grid-cols-2 gap-2">
                             <label
-                                class="flex items-center justify-center px-4 py-3 rounded-lg border cursor-pointer {{ $paymentType === '2' ? 'border-amber-500 bg-amber-50' : 'border-gray-200' }}">
-                                <input type="radio" wire:model="paymentType" value="2" class="sr-only">
+                                class="flex items-center justify-center px-4 py-3 rounded-lg border cursor-pointer {{ $paymentType === 'cash' ? 'border-amber-500 bg-amber-50' : 'border-gray-200' }}">
+                                <input type="radio" wire:model="paymentType" value="cash" class="sr-only">
                                 <span class="text-sm font-medium">{{ __('dashboard.payment_modal.cash') }}</span>
                             </label>
                             <label
-                                class="flex items-center justify-center px-4 py-3 rounded-lg border cursor-pointer {{ $paymentType === '3' ? 'border-amber-500 bg-amber-50' : 'border-gray-200' }}">
-                                <input type="radio" wire:model="paymentType" value="3" class="sr-only">
+                                class="flex items-center justify-center px-4 py-3 rounded-lg border cursor-pointer {{ $paymentType === 'card' ? 'border-amber-500 bg-amber-50' : 'border-gray-200' }}">
+                                <input type="radio" wire:model="paymentType" value="card" class="sr-only">
                                 <span class="text-sm font-medium">{{ __('dashboard.payment_modal.card') }}</span>
                             </label>
                         </div>

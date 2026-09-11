@@ -48,10 +48,31 @@ class TaxCalculatorService2Test extends TestCase
         foreach ($hundredPercentCases as $case) {
             $result = $this->calculator->extractTax($case['gross'], '100', $case['precision']);
 
-            // مع ضريبة 100%: net = gross / 2
-            $expectedNet = bcdiv($case['gross'], '2', $case['precision']);
-            $this->assertEquals($expectedNet, $result['net']);
-            $this->assertEquals($expectedNet, $result['tax']);
+            // مع ضريبة 100%: net و tax نصفان متساويان من gross.
+            //
+            // لكن إذا كانت الخانة الأخيرة من gross **فردية** فالنصفان لا
+            // يمكن أن يتساويا بالضبط وفي الوقت نفسه يجمعا إلى gross:
+            //   33.333333 ÷ 2 = 16.6666665  → لا يُمثَّل بست خانات
+            //   16.666666 + 16.666666 = 33.333332  ≠ 33.333333
+            // كانت هذه الحالة تطالب بالثلاثة معاً (net == نصف، tax == نصف،
+            // ومجموعهما == gross) وهو مطلب متناقض داخلياً. النسخة القديمة
+            // كانت «تنجح» فيه لسبب لا علاقة له بالصحة: كانت تقتطع المدخل
+            // نفسه إلى منزلتين فيصل 33.333333 إلى المعادلة كـ 33.33.
+            //
+            // الخاصية الحقيقية: المجموع == gross دائماً، والنصفان لا يفترقان
+            // بأكثر من وحدة واحدة من الخانة الأخيرة.
+            $ulp   = bcdiv('1', bcpow('10', (string) $case['precision'], 0), $case['precision']);
+            $delta = bcsub($result['net'], $result['tax'], $case['precision']);
+            if (bccomp($delta, '0', $case['precision']) === -1) {
+                $delta = bcmul($delta, '-1', $case['precision']);
+            }
+
+            $this->assertLessThanOrEqual(
+                0,
+                bccomp($delta, $ulp, $case['precision']),
+                "النصفان متباعدان أكثر من وحدة واحدة: net {$result['net']} vs tax {$result['tax']}"
+            );
+
             $this->assertConditionNetPlusTaxEqualsGross($result, $case['precision']);
         }
 
@@ -88,34 +109,42 @@ class TaxCalculatorService2Test extends TestCase
      */
     public function testTwentyComplexServicesWithHardCalculations(): void
     {
-        $services = $this->generateComplexServices(20);
+        $count    = 20;
+        $services = $this->generateComplexServices($count);
 
-        // حساب كل خدمة على حدة بجمع عالي الدقة
+        // حساب كل خدمة على حدة بجمع عالي الدقة (يقرّب كل بند بدقة 10)
         $individualTotals = $this->calculateIndividualTotals($services, 8);
 
-        // حساب المجموع باستخدام calculateBulk
+        // حساب المجموع باستخدام calculateBulk (يقرّب كل بند بدقة 8)
         $bulkResult = $this->calculator->calculateBulk($services, 8);
 
-        // التحقق من التطابق مع تسامح صغير جداً بسبب التدوير
+        // الطرفان يقرّبان **كل بند** بدقّتين مختلفتين (10 مقابل 8)، فلا يمكن
+        // أن يتطابقا حرفياً: كل بند قد ينحرف بنصف وحدة من الخانة الثامنة،
+        // فالتراكم النظري الأقصى على $count بنداً هو $count/2 وحدة. نسمح
+        // بـ $count وحدة — أوسع من الحد النظري وأضيق بكثير من أي خطأ حقيقي
+        // في المعادلة (الذي يظهر عند الخانة الثانية أو الثالثة، لا الثامنة).
         $this->assertEqualsWithPrecision(
             $individualTotals['net'],
             $bulkResult['net'],
             8,
-            'مجموع Net الفردي لا يطابق المجموع الكلي'
+            'مجموع Net الفردي لا يطابق المجموع الكلي',
+            $count
         );
 
         $this->assertEqualsWithPrecision(
             $individualTotals['tax'],
             $bulkResult['tax'],
             8,
-            'مجموع Tax الفردي لا يطابق المجموع الكلي'
+            'مجموع Tax الفردي لا يطابق المجموع الكلي',
+            $count
         );
 
         $this->assertEqualsWithPrecision(
             $individualTotals['gross'],
             $bulkResult['gross'],
             8,
-            'مجموع Gross الفردي لا يطابق المجموع الكلي'
+            'مجموع Gross الفردي لا يطابق المجموع الكلي',
+            $count
         );
 
         // التحقق من المعادلة الأساسية في النتيجة المجمعة
@@ -415,8 +444,14 @@ class TaxCalculatorService2Test extends TestCase
                 6
             );
 
-            // تأكد من أن معدل الضريبة بين 0 و 100
-            if (bccomp($taxRate, '100', 6) > 0) {
+            // تأكد من أن معدل الضريبة بين 0 و 100.
+            //
+            // كان هذا `if` واحداً يقسم على 2 مرة واحدة، وهو لا يكفي: عند
+            // count=300 يصل المعدل المولَّد إلى ~700، فقسمةٌ واحدة تُنزله إلى
+            // ~350 — أي أنه يبقى فوق 100 فترفضه الحاسبة بـ
+            // InvalidArgumentException، فيفشل الاختبار بسبب مولّده لا بسبب
+            // الكود المُختبَر. `while` تُنزله فعلاً إلى المجال المطلوب.
+            while (bccomp($taxRate, '100', 6) > 0) {
                 $taxRate = bcdiv($taxRate, '2', 6);
             }
 
@@ -473,12 +508,39 @@ class TaxCalculatorService2Test extends TestCase
     /**
      * مقارنة مع دقة معينة
      */
-    private function assertEqualsWithPrecision(string $expected, string $actual, int $precision, string $message = ''): void
-    {
+    /**
+     * مقارنة مبلغين بتسامح صريح مقدّر بوحدات الخانة الأخيرة (ulp).
+     *
+     * كانت هذه الدالة تقرّب الطرفين ثم تطالب بتساوٍ **تام** — أي بلا أي
+     * تسامح، رغم أن مستدعيها يقول في تعليقه «تسامح صغير جداً بسبب التدوير».
+     * وذلك مطلبٌ مستحيل عندما يُقرَّب الطرفان لكل بند بدقّتين مختلفتين:
+     * جمعُ 20 بنداً مقرَّباً بدقة 10 لا يمكن أن يساوي حرفياً جمعَ نفس
+     * البنود مقرَّبةً بدقة 8. الفرق المسموح هنا وحدة واحدة في الخانة
+     * الأخيرة لكل بند، وهو الحد الأقصى النظري لتراكم تقريب البنود.
+     */
+    private function assertEqualsWithPrecision(
+        string $expected,
+        string $actual,
+        int $precision,
+        string $message = '',
+        int $toleranceUlps = 1
+    ): void {
         $expectedRounded = $this->bcRound($expected, $precision);
-        $actualRounded = $this->bcRound($actual, $precision);
+        $actualRounded   = $this->bcRound($actual, $precision);
 
-        $this->assertEquals($expectedRounded, $actualRounded, $message);
+        $ulp       = bcdiv('1', bcpow('10', (string) $precision, 0), $precision);
+        $tolerance = bcmul($ulp, (string) max(1, $toleranceUlps), $precision);
+
+        $delta = bcsub($expectedRounded, $actualRounded, $precision);
+        if (bccomp($delta, '0', $precision) === -1) {
+            $delta = bcmul($delta, '-1', $precision);
+        }
+
+        $this->assertLessThanOrEqual(
+            0,
+            bccomp($delta, $tolerance, $precision),
+            $message . " (expected {$expectedRounded}, got {$actualRounded}, tolerance {$tolerance})"
+        );
     }
 
     /**

@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enum\AppointmentStatus;
 use App\Enum\OtpType;
 use App\Enum\RegistrationMethod;
+use App\Support\ImageUploadRules;
 use Filament\Models\Contracts\FilamentUser;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -25,9 +26,20 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Filament\Panel;
 use Filament\Models\Contracts\HasName;
+use App\Observers\UserObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 
+#[ObservedBy(UserObserver::class)]
 class User extends Authenticatable implements FilamentUser, HasName
 {
+    /**
+     * Roles allowed on any STAFF surface (Filament panel + Staff Dashboard).
+     *
+     * Deliberately different from {@see isStaffAccount()}, which drives OTP
+     * verification for the mobile API and intentionally omits SuperAdmin.
+     */
+    public const STAFF_ROLES = ['SuperAdmin', 'admin', 'manager', 'provider'];
+
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens, HasRoles, SoftDeletes;
 
@@ -65,14 +77,43 @@ class User extends Authenticatable implements FilamentUser, HasName
         'is_account_verified',
         'requires_otp_verification',
     ];
+    /**
+     * Does this account hold a staff ROLE? (Says nothing about is_active.)
+     */
+    public function hasStaffRole(): bool
+    {
+        return $this->hasAnyRole(self::STAFF_ROLES);
+    }
+
+    /**
+     * THE single answer to "may this account use a staff surface at all?"
+     * (AUTHZ-01).
+     *
+     * Before this existed the question was answered twice — once in
+     * canAccessPanel() for /admin and once, differently and WITHOUT the
+     * is_active half, in EnsureStaffDashboardAccess for the Staff Dashboard. The
+     * two drifted, and deactivating an employee closed /admin while leaving the
+     * dashboard (customer database, payment collection, booking deletion) wide
+     * open.
+     *
+     * Every staff surface — existing or future — must gate on THIS method, so a
+     * new surface cannot reintroduce the gap by implementing one half of the
+     * rule.
+     *
+     * Note this is entry-level access only. What a user may SEE and DO once
+     * inside is still gated per-resource by Spatie permissions
+     * (NavigationDefaultAccess, InteractsWithDashboardPermissions).
+     */
+    public function isActiveStaff(): bool
+    {
+        return $this->is_active && $this->hasStaffRole();
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
-        // Staff accounts (admin / manager / provider / SuperAdmin) may enter the
-        // Filament panel. What each one actually SEES is gated per-resource by the
-        // Spatie permissions checked in NavigationDefaultAccess. Providers reach a
-        // limited panel; their default landing page is the StaffDashboard (handled
-        // by StaffLoginResponse).
-        return $this->hasAnyRole(['SuperAdmin', 'admin', 'manager', 'provider']) && $this->is_active;
+        // Providers reach a limited panel; their default landing page is the
+        // StaffDashboard (handled by StaffLoginResponse).
+        return $this->isActiveStaff();
     }
 
     /**
@@ -228,7 +269,8 @@ class User extends Authenticatable implements FilamentUser, HasName
         }
 
         $name = Str::slug(trim($this->first_name ?: 'user'), '_');
-        $extension = $image->extension() ?: $image->getClientOriginalExtension();
+        // AUTH-06: the stored name must never inherit a client-supplied extension.
+        $extension = ImageUploadRules::safeExtension($image);
         $dir = "users/profile_images/{$this->id}";
         $fileName = "{$name}_{$this->id}_" . Str::uuid() . ".{$extension}";
         $path = "{$dir}/{$fileName}";

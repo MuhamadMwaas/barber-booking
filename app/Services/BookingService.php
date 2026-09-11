@@ -20,11 +20,15 @@ class BookingService
         protected ?GapAnalysisService $gapAnalysis = null,
         protected ?PushBookingsService $pushService = null,
         protected ?AppointmentLinkingService $linkingService = null,
+        protected ?BookingLockService $lockService = null,
+        protected ?TaxCalculatorService $taxCalculator = null,
     ) {
         // Lazy-resolve optional services from the container if not injected.
         $this->gapAnalysis     = $this->gapAnalysis ?? app(GapAnalysisService::class);
         $this->pushService     = $this->pushService ?? app(PushBookingsService::class);
         $this->linkingService  = $this->linkingService ?? app(AppointmentLinkingService::class);
+        $this->lockService     = $this->lockService ?? app(BookingLockService::class);
+        $this->taxCalculator   = $this->taxCalculator ?? app(TaxCalculatorService::class);
     }
 
     /**
@@ -41,8 +45,19 @@ class BookingService
         $services = $bookingData['services'];
         $date = $bookingData['date'];
         $paymentMethod = $bookingData['payment_method'];
-        $isConfirmed = $bookingData['is_confirmed'] ?? ($paymentMethod == 'cash');
-        $markAsPaid = $bookingData['mark_as_paid'] ?? ($paymentMethod == 'cash');
+        // There is no online payment in this system — every booking is settled in
+        // cash at the shop — so a booking is ALWAYS created confirmed and always
+        // blocks its slot. A caller may still pass is_confirmed explicitly, but
+        // no path does today; payment_method is recorded as intent only and no
+        // longer decides whether the booking is real.
+        $isConfirmed = $bookingData['is_confirmed'] ?? true;
+
+        // Never mark money as received at booking time. The customer has not
+        // arrived yet, let alone paid. payment_status stays PENDING until staff
+        // finalises the invoice at the counter (this is what StaffDashboard has
+        // always done; the API used to lie and mark cash bookings paid on
+        // creation, inflating every revenue report — BOOK-03).
+        $markAsPaid = $bookingData['mark_as_paid'] ?? false;
         $notes = $bookingData['notes'] ?? null;
         $customerName = $bookingData['customer_name'] ?? ($customer->full_name ?? null);
         $customerEmail = $bookingData['customer_email'] ?? $customer->email ?? null;
@@ -63,24 +78,44 @@ class BookingService
             ? ($bookingData['override_reason'] ?? null)
             : null;
 
+        // Trusted staff flag: let one customer hold two overlapping appointments.
+        // Deliberately SEPARATE from bypass_availability, whose contract is that
+        // it relaxes the provider's working-window checks and nothing else. Some
+        // salon work really is parallel — a manicure while colour develops — and
+        // the person standing in front of the customer knows better than the
+        // rule. Raised server-side only after a force_booking permission check,
+        // so it can never reach a customer-facing path.
+        $allowCustomerOverlap = (bool) ($bookingData['allow_customer_overlap'] ?? false);
 
+
+        // Shape-only checks: service count, date window, duplicate service ids.
+        // These depend on the request alone, never on what other people are doing,
+        // so they stay outside the transaction and reject junk cheaply.
         $this->validationService->validateBasicData($services, $date);
-
-        if ($customer) {
-            $this->validationService->validateDailyBookingLimit($customer, $date);
-        }
-
 
         $services = $this->sortServicesByStartTime($services);
 
+        // Everything from here on is decided against SHARED state — is this slot
+        // free, has this customer hit their daily limit — so the check and the
+        // write must happen together, under a lock, or another request can slip
+        // in between them and we double-book the provider (BOOK-02).
+        $appointment = DB::transaction(function () use ($customer, $date, $services, $paymentMethod, $isConfirmed, $markAsPaid, $notes, $customerName, $customerEmail, $customerPhone, $bookingData, $bypassAvailability, $overrideReason, $allowSameDayPast, $allowCustomerOverlap) {
+            // Serialise on the provider rows (and the customer's, for the daily
+            // limit). Everyone booking these providers now queues behind us.
+            $this->lockService->lockUsers(
+                array_merge(array_column($services, 'provider_id'), [$customer?->id]),
+            );
 
-        $preparedServices = $this->validateAndPrepareServices($services, $date, $customer, $customerPhone, $allowSameDayPast, $bypassAvailability);
+            // Re-checked under the lock: two simultaneous requests can no longer
+            // both read "one below the limit" and both create.
+            if ($customer) {
+                $this->validationService->validateDailyBookingLimit($customer, $date);
+            }
 
-        // 5. Calculate totals
-        $totals = $this->calculateTotals($preparedServices);
+            $preparedServices = $this->validateAndPrepareServices($services, $date, $customer, $customerPhone, $allowSameDayPast, $bypassAvailability, $allowCustomerOverlap);
 
-        // 6. Create booking in transaction
-        $appointment = DB::transaction(function () use ($customer, $date, $paymentMethod, $isConfirmed, $markAsPaid, $notes, $preparedServices, $totals, $customerName, $customerEmail, $customerPhone, $bookingData, $bypassAvailability, $overrideReason) {
+            $totals = $this->calculateTotals($preparedServices);
+
             // Allow staff-created bookings to be confirmed without being marked as paid yet.
             $createdStatus = $isConfirmed ? 1 : 0;
             $paymentStatus = $markAsPaid
@@ -165,6 +200,7 @@ class BookingService
         ?string $customerPhone = null,
         bool $allowSameDayPast = false,
         bool $bypassAvailability = false,
+        bool $allowCustomerOverlap = false,
     ): array {
         $preparedServices = [];
         $previousEndTime = null;
@@ -177,10 +213,19 @@ class BookingService
 
         foreach ($services as $index => $serviceData) {
 
+            // Either lookup can miss — a soft-deleted row is the common way, since
+            // the `exists:` rules match deleted rows that Eloquent then hides. The
+            // ids are handed down so the rejection can be logged precisely while
+            // the caller still gets one uninformative message (BOOK-09).
             $service = $servicesCollection->get($serviceData['service_id']);
             $provider = $providersCollection->get($serviceData['provider_id']);
 
-            $this->validationService->validateProviderOffersService($provider, $service);
+            $this->validationService->validateProviderOffersService(
+                $provider,
+                $service,
+                (int) $serviceData['provider_id'],
+                (int) $serviceData['service_id'],
+            );
 
 
             $serviceDuration = $this->getEffectiveDuration($provider, $service);
@@ -209,20 +254,17 @@ class BookingService
                 $bypassAvailability
             );
 
-            // 6. Validate no duplicate booking
-            if ($customer) {
-                $this->validationService->validateNoDuplicateBooking(
+            // 6. The customer must not already be somewhere else at this hour.
+            //    Checked per service rather than once across the whole booking:
+            //    services may legitimately sit apart with a gap between them, and
+            //    testing the full span would block that gap for no reason.
+            if (! $allowCustomerOverlap) {
+                $this->validationService->assertCustomerIsFree(
                     $customer,
-                    $startTime,
-                    array_column($services, 'service_id')
-                );
-            } else {
-                $this->validationService->validateNoDuplicateBookingByPhone(
                     $customerPhone,
                     $startTime,
-                    array_column($services, 'service_id')
+                    $endTime,
                 );
-
             }
 
             // Prepare service data
@@ -244,133 +286,45 @@ class BookingService
     }
 
     /**
-     * Calculate booking totals
+     * Calculate booking totals from the prepared services.
+     *
+     * Prices are GROSS (tax-inclusive), so tax is extracted in reverse. The
+     * arithmetic lives in ONE place for the whole project —
+     * TaxCalculatorService — so the booking layer and the invoice layer can
+     * never disagree about the VAT on the same transaction (MON-01).
+     *
+     * This method used to carry its own 40-line bcmath implementation at
+     * internal scale 6. It was the *correct* one, while
+     * TaxCalculatorService::extractTax() truncated at scale 2 — so the
+     * `appointments` row and the `invoices` row for one 50.00 EUR service
+     * disagreed by a cent (7.98 vs 7.99). The calculator is now the single
+     * source of truth and matches what this method used to produce.
      */
     private function calculateTotals(array $preparedServices): array
     {
         $totalDuration = array_sum(array_column($preparedServices, 'duration_minutes'));
 
-        // High internal precision
-        $internalScale = 6;
-
-        // tax rate (e.g., "19")
         $taxRate = (string) get_setting('tax_rate', '0');
 
-        // factor = 1 + taxRate/100
-        $factor = '1';
-        if (bccomp($taxRate, '0', 6) === 1) {
-            $factor = bcadd('1', bcdiv($taxRate, '100', $internalScale), $internalScale);
-        }
-
-        // Totals (as strings)
-        $grossTotal = '0';
-        $netTotal = '0';
-        $taxTotal = '0';
-
-        foreach ($preparedServices as $service) {
-            // Always treat price as string to avoid float conversion
-            // Ensure it looks like "12.34"
-            $gross = isset($service['price'])
-                ? (string) $service['price']
-                : '0';
-
-            // normalize to internal scale
-            // (bc* doesn't need normalization, but it's good practice)
-            $gross = bcadd($gross, '0', $internalScale);
-
-            $grossTotal = bcadd($grossTotal, $gross, $internalScale);
-
-            if (bccomp($taxRate, '0', 6) !== 1) {
-                // taxRate <= 0
-                $net = $gross;
-                $tax = '0';
-            } else {
-                // net = gross / factor
-                $net = bcdiv($gross, $factor, $internalScale);
-
-                // tax = gross - net
-                $tax = bcsub($gross, $net, $internalScale);
-            }
-
-            // Round per line item to 2 decimals (invoice practice)
-            $net = $this->bcRound($net, 2);
-            $tax = $this->bcRound($tax, 2);
-
-            // Add rounded line amounts to totals (still as strings)
-            $netTotal = bcadd($netTotal, $net, 2);
-            $taxTotal = bcadd($taxTotal, $tax, 2);
-        }
-
-        // Final gross rounded to cents (money)
-        $grossTotal = $this->bcRound($grossTotal, 2);
-
-        // At this point: netTotal+taxTotal might differ by 0.01 due to per-line rounding.
-        // We'll reconcile using bcmath.
-        $sumNetTax = bcadd($netTotal, $taxTotal, 2);
-        $diff = bcsub($grossTotal, $sumNetTax, 2); // "-0.01", "0.00", "0.01"
-
-        if (bccomp($diff, '0.00', 2) !== 0) {
-            // Adjust taxTotal by the diff to force: gross = net + tax
-            $taxTotal = bcadd($taxTotal, $diff, 2);
-
-            // Optional safety: re-round
-            $taxTotal = $this->bcRound($taxTotal, 2);
-        }
+        // Per-line rounding to cents, then reconciled so net + tax == gross.
+        $totals = $this->taxCalculator->calculateBulk(
+            array_map(
+                fn (array $service): array => [
+                    'price'    => (string) ($service['price'] ?? '0'),
+                    'tax_rate' => $taxRate,
+                ],
+                $preparedServices
+            ),
+            2
+        );
 
         return [
-            'subtotal' => $netTotal,
-            'tax_amount' => $taxTotal,
-            'total_amount' => $grossTotal,
+            'subtotal'       => $totals['net'],
+            'tax_amount'     => $totals['tax'],
+            'total_amount'   => $totals['gross'],
             'total_duration' => $totalDuration,
         ];
     }
-
-    private function bcRound(string $number, int $precision = 2): string
-    {
-        if ($precision < 0) {
-            throw new InvalidArgumentException('Precision must be >= 0');
-        }
-
-        $sign = '';
-        if (str_starts_with($number, '-')) {
-            $sign = '-';
-            $number = substr($number, 1);
-        }
-
-        // shift = 10^precision
-        $shift = '1' . str_repeat('0', $precision);
-
-        // number * shift
-        $shifted = bcmul($number, $shift, $precision + 6);
-
-        // add 0.5 then floor via bcdiv(..., 0)
-        $shiftedPlus = bcadd($shifted, '0.5', $precision + 6);
-        $floored = bcdiv($shiftedPlus, '1', 0);
-
-        // back to original scale
-        $result = bcdiv($floored, $shift, $precision);
-
-        return $sign === '-' ? '-' . $result : $result;
-    }
-
-    private function calculateTotalsInverse(array $preparedServices): array
-    {
-        $subtotal = array_sum(array_column($preparedServices, 'price'));
-        $totalDuration = array_sum(array_column($preparedServices, 'duration_minutes'));
-
-        // Get tax rate from settings
-        $taxRate = (float) get_setting('tax_rate', 0);
-        $taxAmount = $subtotal * ($taxRate / 100);
-        $totalAmount = $subtotal + $taxAmount;
-
-        return [
-            'subtotal' => round($subtotal, 2),
-            'tax_amount' => round($taxAmount, 2),
-            'total_amount' => round($totalAmount, 2),
-            'total_duration' => $totalDuration,
-        ];
-    }
-
 
     /**
      * Get effective duration (custom or default)
@@ -441,7 +395,7 @@ class BookingService
     public function getCustomerBookings(User $customer, ?string $status = null)
     {
         $query = Appointment::where('customer_id', $customer->id)
-            ->with(['services', 'provider', 'services_record'])
+            ->with(['services', 'provider', 'services_record', 'activeReminder'])
             ->orderBy('appointment_date', 'desc')
             ->orderBy('start_time', 'desc');
 
@@ -457,7 +411,7 @@ class BookingService
      */
     public function getBookingDetails(int $appointmentId, User $customer): Appointment
     {
-        $appointment = Appointment::with(['services', 'provider', 'customer', 'services_record'])
+        $appointment = Appointment::with(['services', 'provider', 'customer', 'services_record', 'activeReminder'])
             ->find($appointmentId);
         if (!$appointment) {
             throw new \Illuminate\Database\Eloquent\ModelNotFoundException(
@@ -573,6 +527,29 @@ class BookingService
             $anchor, $service, $newProvider, $sameProvider, $duration,
             $placement, $analysis, $applyPush
         ) {
+            // 4.0) The gap analysis above ran WITHOUT a lock, so its answer is a
+            //      snapshot: another booking may have landed in that gap while the
+            //      staff member was reading the confirmation dialog. Lock the
+            //      provider (and the anchor's, when they differ) and re-assert the
+            //      exact window the analysis picked before writing anything.
+            //      Without this the add-service path has the same TOCTOU hole
+            //      createBooking used to have (BOOK-02).
+            $this->lockService->lockUsers([$newProvider->id, $anchor->provider_id]);
+
+            if (! $applyPush && ($analysis['suggested_start_time'] ?? null) && ($analysis['suggested_end_time'] ?? null)) {
+                // Only when no push is involved: with a push the surrounding
+                // bookings are about to move, so "occupied" is expected and the
+                // plan itself defines the final layout.
+                $date = $anchor->appointment_date->format('Y-m-d');
+
+                $this->validationService->assertNoConflictingAppointment(
+                    $newProvider,
+                    Carbon::parse($date . ' ' . $analysis['suggested_start_time']),
+                    Carbon::parse($date . ' ' . $analysis['suggested_end_time']),
+                    $sameProvider ? $anchor->id : null,
+                );
+            }
+
             // 4.1) Execute push if needed
             $pushedIds = [];
             if (($analysis['requires_push'] ?? false) && $applyPush) {
@@ -692,15 +669,14 @@ class BookingService
         $price = $this->getEffectivePrice($newProvider, $service);
         $date  = $parent->appointment_date->format('Y-m-d');
 
-        // Tax split
-        $taxRate = (float) get_setting('tax_rate', 19);
-        if ($taxRate > 0) {
-            $net = round($price / (1 + ($taxRate / 100)), 2);
-            $tax = round($price - $net, 2);
-        } else {
-            $net = round($price, 2);
-            $tax = 0.0;
-        }
+        // Tax split — through the single calculator, never float arithmetic.
+        // This used to be `round($price / (1 + $rate/100), 2)` on floats, a
+        // fourth private implementation of the same equation (MON-01).
+        $taxRate = (string) get_setting('tax_rate', 19);
+        $split   = $this->taxCalculator->extractTax((string) $price, $taxRate, 2);
+        $net     = $split['net'];
+        $tax     = $split['tax'];
+        $price   = $split['gross'];
 
         $newStart = Carbon::parse($date . ' ' . $analysis['suggested_start_time']);
         $newEnd   = Carbon::parse($date . ' ' . $analysis['suggested_end_time']);

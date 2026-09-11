@@ -1,319 +1,344 @@
 <?php
+
 namespace App\Services;
+
 use App\Enum\AppointmentStatus;
 use App\Enum\InvoiceStatus;
 use App\Enum\PaymentStatus;
+use App\Exceptions\InvoiceAlreadyFinalizedException;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Models\PaymentMethod;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
+
+/**
+ * The one application service that owns an on-site payment.
+ *
+ * StaffDashboard is the reference workflow. Filament tables are only adapters:
+ * they collect an appointment, a final (possibly discounted) price, and either
+ * cash/card or an active PaymentMethod id, then call this service.
+ */
 class InvoiceFinalizationService
 {
     /**
-     * تحويل فاتورة Draft إلى Paid مع TSE
+     * Collect one full on-site payment and finalize the unified invoice.
+     *
+     * A lower final amount is a deliberate special-customer price (discount),
+     * never a partial payment. One payment covers the invoice owner plus every
+     * linked appointment, and all covered appointments are completed together.
+     *
+     * @param  int|string  $paymentMethod  Active PaymentMethod id, or `cash`/`card`.
+     * @param  float|null  $finalAmount  Null means the full item total.
      */
-    public function finalizeDraftInvoice(
-        Invoice $invoice,
-        string $paymentType,
-        float $amountPaid,
-        ?string $notes = null,
-        bool $applyTse = true
-    ): Invoice {
-
-        // التحقق من الحالة
-        if ($invoice->status !== InvoiceStatus::DRAFT) {
-            throw new \InvalidArgumentException(
-                'يمكن فقط تحويل الفواتير Draft. الحالة الحالية: ' . $invoice->status->getLabel()
-            );
-        }
-
-        if (!$invoice->appointment) {
-            throw new \InvalidArgumentException('الفاتورة غير مرتبطة بحجز');
-        }
-
-        DB::beginTransaction();
-
-        try {
-            // The master switch wins over the per-call $applyTse flag: while
-            // FISKALY_ENABLED=false no caller can request a TSE signature.
-            $tseData = ($applyTse && config('fiskaly.enabled'))
-                ? $this->applyTSESignature($invoice, $paymentType, $amountPaid)
-                : $this->createPlaceholderTSE();
-
-            $invoiceNumber = Invoice::generateInvoiceNumber();
-
-            // 3. تحديد حالة الفاتورة بناءً على المبلغ المدفوع
-            $invoiceStatus = InvoiceStatus::PAID;
-
-            // 4. تحديث الفاتورة
-            $invoice->update([
-                'invoice_number' => $invoiceNumber,
-                'status' => $invoiceStatus,
-                'notes' => $notes,
-                'invoice_data' => array_merge(
-                    $invoice->invoice_data ?? [],
-                    [
-                        'tse_data' => $tseData,
-                        'finalized_at' => now()->toISOString(),
-                        'finalized_by' => Auth::user()?->full_name ?? 'System',
-                        'payment_type' => $paymentType,
-                        'amount_paid' => $amountPaid,
-                        'finalization_method' => 'api',
-                    ]
-                ),
-            ]);
-
-            // 5. تحديث حالة الحجز
-            $this->updateAppointmentStatus(
-                $invoice->appointment,
-                $paymentType,
-                $invoiceStatus
-            );
-
-            // 6. إنشاء سجل الدفع
-            $payment = $this->createPaymentRecord(
-                $invoice,
-                $paymentType,
-                $amountPaid,
-                $tseData
-            );
-
-            DB::commit();
-
-            // 7. تسجيل النجاح
-            Log::info('Invoice finalized successfully', [
-                'invoice_id' => $invoice->id,
-                'invoice_number' => $invoiceNumber,
-                'amount_paid' => $amountPaid,
-                'payment_id' => $payment->id,
-                'tse_applied' => $applyTse,
-            ]);
-
-            return $invoice->fresh(['appointment', 'customer', 'items', 'payments']);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            Log::error('Failed to finalize invoice', [
-                'invoice_id' => $invoice->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            throw new \RuntimeException(
-                'فشل في إتمام الفاتورة: ' . $e->getMessage(),
-                0,
-                $e
-            );
-        }
-    }
-
-    /**
-     * تطبيق التوقيع الرقمي TSE
-     */
-    private function applyTSESignature(
-        Invoice $invoice,
-        string $paymentType,
-        float $amountPaid
-    ): array {
-
-        // TODO: الربط الفعلي مع TSE Cloud Service
-        // مثال على المزودين:
-        // - fiskaly (https://fiskaly.com)
-        // - epson TSE
-        // - Swissbit TSE
-
-        // للآن، نُنشئ بيانات placeholder
-        return [
-            'tse_enabled' => false,
-            'tse_provider' => 'fiskaly', // سيتم تحديده لاحقاً
-            'transaction_number' => null,
-            'certified_timestamp' => now()->toISOString(),
-            'signature_data' => null,
-            'tse_serial_number' => null,
-            'signature_algorithm' => 'ecdsa-plain-SHA256',
-            'signature_counter' => null,
-            'signature_value' => null,
-            'public_key' => null,
-            'certificate_serial' => null,
-            'log_time' => now()->toISOString(),
-            'note' => 'TSE not yet implemented - placeholder data',
-        ];
-
-        // الكود الفعلي سيكون شيء مثل:
-        /*
-        $tseClient = app(TSEClient::class);
-
-        $tseResponse = $tseClient->signTransaction([
-            'type' => 'POS_RECEIPT',
-            'data' => [
-                'invoice_number' => $invoice->id,
-                'amount' => $amountPaid,
-                'currency' => 'EUR',
-                'payment_type' => $paymentType,
-                'items' => $invoice->items->map(fn($item) => [
-                    'description' => $item->description,
-                    'quantity' => $item->quantity,
-                    'price' => $item->unit_price,
-                    'tax_rate' => $item->tax_rate,
-                ]),
-            ],
-        ]);
-
-        return [
-            'tse_enabled' => true,
-            'transaction_number' => $tseResponse['transaction_number'],
-            'certified_timestamp' => $tseResponse['timestamp'],
-            'signature_data' => $tseResponse['signature'],
-            // ... باقي البيانات من TSE
-        ];
-        */
-    }
-
-    /**
-     * إنشاء placeholder TSE (عندما TSE غير مفعل)
-     */
-    private function createPlaceholderTSE(): array
-    {
-        return [
-            'tse_enabled' => false,
-            'note' => 'TSE signature not applied',
-            'timestamp' => now()->toISOString(),
-        ];
-    }
-
-    /**
-     * تحديد حالة الفاتورة بناءً على المبلغ المدفوع
-     */
-    private function determineInvoiceStatus(float $totalAmount, float $amountPaid): InvoiceStatus
-    {
-        $bcTotal = (string) $totalAmount;
-        $bcPaid = (string) $amountPaid;
-
-        $comparison = bccomp($bcPaid, $bcTotal, 2);
-
-        if ($comparison === 0) {
-            return InvoiceStatus::PAID;
-        } elseif ($comparison === -1) {
-            return InvoiceStatus::PARTIALLY_PAID;
-        } else {
-            return InvoiceStatus::PAID;
-        }
-    }
-
-    /**
-     * Update status/payment for the appointment that owns the invoice AND
-     * every linked child appointment. This is the "atomic group finalization"
-     * step: when the unified invoice goes PAID, ALL linked bookings flip to
-     * COMPLETED + matching payment_status in one transaction.
-     */
-    private function updateAppointmentStatus(
+    public function finalizeAppointmentPayment(
         Appointment $appointment,
-        string $paymentType,
-        InvoiceStatus $invoiceStatus
-    ): void {
+        int|string $paymentMethod,
+        ?float $finalAmount = null,
+        ?string $notes = null,
+        string $source = 'staff_dashboard',
+        ?int $adjustedDuration = null
+    ): Invoice {
+        return DB::transaction(function () use ($appointment, $paymentMethod, $finalAmount, $notes, $source, $adjustedDuration) {
+            $invoiceOwnerId = $appointment->parent_appointment_id ?? $appointment->id;
 
-        $paymentStatus = match($invoiceStatus) {
-            InvoiceStatus::PAID => PaymentStatus::from((int) $paymentType),
-            InvoiceStatus::PARTIALLY_PAID => PaymentStatus::PENDING,
-            default => PaymentStatus::PENDING,
-        };
+            // The invoice always belongs to the parent (or the standalone
+            // appointment). Lock it first so every payment entry point queues on
+            // the same stable row even when no invoice exists yet.
+            $invoiceOwner = Appointment::query()
+                ->whereKey($invoiceOwnerId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        // Whole linked group (parent + every child). Standalone returns just self.
-        $linkedAppointments = $appointment->linkedGroup()->get();
+            $coveredAppointments = $invoiceOwner->linkedGroup()
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
 
-        $appointmentUpdates = [
-            'payment_status' => $paymentStatus,
-            'payment_method' => $paymentStatus->label(),
-        ];
+            $this->assertAppointmentsCanBePaid($coveredAppointments);
+            $this->applyAdjustedDuration(
+                $coveredAppointments,
+                $appointment->id,
+                $adjustedDuration
+            );
 
-        // When the invoice is fully PAID, mark every appointment in the group
-        // as COMPLETED so the timeline reflects "service rendered".
-        if ($invoiceStatus === InvoiceStatus::PAID) {
-            $appointmentUpdates['status'] = AppointmentStatus::COMPLETED;
-        }
+            $method = $this->resolvePaymentMethod($paymentMethod);
+            $paymentStatus = $this->paymentStatusFor($method);
+            $methodCode = $this->appointmentPaymentMethodFor($method);
 
-        foreach ($linkedAppointments as $linked) {
-            $linked->update($appointmentUpdates);
-        }
+            // Check the state while holding the row lock. A retry/double-click
+            // sees the committed PAID state and is reported as already finalized,
+            // rather than inserting a second Payment.
+            $existingInvoice = $invoiceOwner->invoice()
+                ->lockForUpdate()
+                ->first();
 
-        Log::info('Linked appointments finalized together', [
-            'invoice_root_appointment_id' => $appointment->id,
-            'linked_count' => $linkedAppointments->count(),
-            'invoice_status' => $invoiceStatus->getLabel(),
-            'payment_status' => $paymentStatus->label(),
-        ]);
+            if ($existingInvoice && $existingInvoice->status !== InvoiceStatus::DRAFT) {
+                throw new InvoiceAlreadyFinalizedException($existingInvoice);
+            }
+
+            $invoiceService = app(InvoiceService::class);
+
+            // Rebuild from every service in the parent/children group. This is
+            // the same behaviour the StaffDashboard established as canonical.
+            $invoice = $invoiceService->rebuildAggregatedInvoice($invoiceOwner);
+
+            $this->assertValidFinalAmount($invoice, $finalAmount);
+            $invoice = $invoiceService->applyFinalAmount($invoice, $finalAmount);
+
+            return $this->finalizeLockedInvoice(
+                invoice: $invoice,
+                coveredAppointments: $coveredAppointments,
+                paymentMethod: $method,
+                paymentStatus: $paymentStatus,
+                appointmentPaymentMethod: $methodCode,
+                notes: $notes,
+                source: $source,
+            );
+        });
     }
 
     /**
-     * إنشاء سجل الدفع
+     * @param  Collection<int, Appointment>  $coveredAppointments
      */
-    private function createPaymentRecord(
+    private function finalizeLockedInvoice(
         Invoice $invoice,
-        string $paymentType,
-        float $amountPaid,
-        array $tseData
-    ): Payment {
+        $coveredAppointments,
+        PaymentMethod $paymentMethod,
+        PaymentStatus $paymentStatus,
+        string $appointmentPaymentMethod,
+        ?string $notes,
+        string $source
+    ): Invoice {
+        if ($invoice->status !== InvoiceStatus::DRAFT) {
+            throw new InvoiceAlreadyFinalizedException($invoice);
+        }
 
-        // حساب الضرائب على المبلغ المدفوع
-        $taxRate = $invoice->tax_rate;
-        $taxCalculation = $this->calculateReverseTax($amountPaid, $taxRate);
+        $amountPaid = (string) $invoice->total_amount;
+        $invoiceNumber = Invoice::generateInvoiceNumber();
+        $tseData = $this->disabledTseMetadata();
 
-        return Payment::create([
-            'payment_method_id' => null, // TODO: ربط بجدول payment_methods
+        $invoice->update([
+            'invoice_number' => $invoiceNumber,
+            'status' => InvoiceStatus::PAID,
+            'notes' => $notes,
+            'invoice_data' => array_merge(
+                $invoice->invoice_data ?? [],
+                [
+                    'tse_data' => $tseData,
+                    'finalized_at' => now()->toISOString(),
+                    'finalized_by' => Auth::user()?->full_name ?? 'System',
+                    'payment_type' => (string) $paymentStatus->value,
+                    'payment_method_id' => $paymentMethod->id,
+                    'payment_method_code' => $appointmentPaymentMethod,
+                    'amount_paid' => $amountPaid,
+                    'finalization_method' => $source,
+                ]
+            ),
+        ]);
+
+        foreach ($coveredAppointments as $coveredAppointment) {
+            $coveredAppointment->update([
+                'status' => AppointmentStatus::COMPLETED,
+                'payment_status' => $paymentStatus,
+                // Stable machine value. Human labels come from PaymentMethod or
+                // translations and must never be persisted in this field.
+                'payment_method' => $appointmentPaymentMethod,
+            ]);
+        }
+
+        $payment = Payment::create([
+            'payment_method_id' => $paymentMethod->id,
             'payment_number' => Payment::generatePaymentNumber(),
             'amount' => $amountPaid,
-            'subtotal' => $taxCalculation['subtotal'],
-            'tax_amount' => $taxCalculation['tax_amount'],
-            'status' => PaymentStatus::from($paymentType),
-            'type' => $this->determinePaymentType($invoice->total_amount, $amountPaid),
+            // The Payment is proof of this exact invoice, so copy its reconciled
+            // post-discount money split rather than calculating VAT a second time.
+            'subtotal' => $invoice->subtotal,
+            'tax_amount' => $invoice->tax_amount,
+            'status' => $paymentStatus,
+            'type' => Payment::TYPE_FULL,
             'paymentable_id' => $invoice->id,
             'paymentable_type' => Invoice::class,
             'payment_metadata' => [
-                'invoice_number' => $invoice->invoice_number,
+                'invoice_number' => $invoiceNumber,
                 'appointment_number' => $invoice->appointment->number,
-                'tse_transaction_number' => $tseData['transaction_number'] ?? null,
-                'tse_timestamp' => $tseData['certified_timestamp'] ?? null,
+                'covered_appointment_ids' => $coveredAppointments->pluck('id')->all(),
+                'payment_method_code' => $appointmentPaymentMethod,
                 'payment_date' => now()->toISOString(),
-                'collected_by' => auth()->user()?->full_name ?? 'System',
+                'collected_by' => Auth::user()?->full_name ?? 'System',
+                'source' => $source,
+                'tse_enabled' => false,
             ],
+        ]);
+
+        Log::info('Unified on-site payment finalized', [
+            'invoice_id' => $invoice->id,
+            'invoice_number' => $invoiceNumber,
+            'payment_id' => $payment->id,
+            'payment_method_id' => $paymentMethod->id,
+            'payment_method_code' => $appointmentPaymentMethod,
+            'amount_paid' => $amountPaid,
+            'covered_appointment_ids' => $coveredAppointments->pluck('id')->all(),
+            'source' => $source,
+            'tse_enabled' => false,
+        ]);
+
+        return $invoice->fresh(['appointment', 'customer', 'items', 'payments']);
+    }
+
+    private function resolvePaymentMethod(int|string $identifier): PaymentMethod
+    {
+        if (is_int($identifier)) {
+            $method = PaymentMethod::query()
+                ->active()
+                ->lockForUpdate()
+                ->find($identifier);
+        } else {
+            $key = strtolower(trim($identifier));
+
+            $method = match ($key) {
+                'cash' => PaymentMethod::query()
+                    ->active()
+                    ->where('type', PaymentMethod::TYPE_CASH)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->first(),
+                'card' => PaymentMethod::query()
+                    ->active()
+                    ->whereIn('type', [
+                        PaymentMethod::TYPE_DEBIT_CARD,
+                        PaymentMethod::TYPE_CREDIT_CARD,
+                    ])
+                    // The current UI says only "Card". Prefer debit when both
+                    // seeded variants exist; a concrete id from Filament wins.
+                    ->orderByDesc('type')
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->first(),
+                default => null,
+            };
+        }
+
+        if (! $method) {
+            throw new InvalidArgumentException('طريقة الدفع غير موجودة أو غير مفعلة.');
+        }
+
+        // Online gateways and bank transfers are deliberately outside the
+        // current product policy: payment is cash/card in the salon only.
+        $this->paymentStatusFor($method);
+
+        return $method;
+    }
+
+    private function paymentStatusFor(PaymentMethod $method): PaymentStatus
+    {
+        return match ($method->type) {
+            PaymentMethod::TYPE_CASH => PaymentStatus::PAID_ONSTIE_CASH,
+            PaymentMethod::TYPE_CREDIT_CARD,
+            PaymentMethod::TYPE_DEBIT_CARD => PaymentStatus::PAID_ONSTIE_CARD,
+            default => throw new InvalidArgumentException(
+                'طريقة الدفع الحالية يجب أن تكون نقداً أو بطاقة داخل الصالون.'
+            ),
+        };
+    }
+
+    private function appointmentPaymentMethodFor(PaymentMethod $method): string
+    {
+        return $method->type === PaymentMethod::TYPE_CASH ? 'cash' : 'card';
+    }
+
+    /**
+     * @param  Collection<int, Appointment>  $appointments
+     */
+    private function assertAppointmentsCanBePaid($appointments): void
+    {
+        if ($appointments->isEmpty()) {
+            throw new InvalidArgumentException('لا توجد مواعيد مرتبطة بهذه الفاتورة.');
+        }
+
+        $invalid = $appointments->first(fn (Appointment $appointment) => in_array(
+            $appointment->status,
+            [
+                AppointmentStatus::USER_CANCELLED,
+                AppointmentStatus::ADMIN_CANCELLED,
+                AppointmentStatus::NO_SHOW,
+            ],
+            true
+        ));
+
+        if ($invalid) {
+            throw new InvalidArgumentException('لا يمكن تحصيل فاتورة تحتوي على موعد ملغي أو لم يحضر صاحبه.');
+        }
+    }
+
+    private function assertValidFinalAmount(Invoice $invoice, ?float $finalAmount): void
+    {
+        $itemsGross = (string) $invoice->items()->sum('total_amount');
+        $requested = $finalAmount === null
+            ? $itemsGross
+            : number_format($finalAmount, 2, '.', '');
+
+        if (bccomp($itemsGross, '0.00', 2) <= 0) {
+            throw new InvalidArgumentException('لا يمكن تحصيل فاتورة بلا مبلغ موجب.');
+        }
+
+        if (bccomp($requested, '0.00', 2) <= 0) {
+            throw new InvalidArgumentException('يجب أن يكون مبلغ الدفع أكبر من صفر.');
+        }
+
+        if (bccomp($requested, $itemsGross, 2) === 1) {
+            throw new InvalidArgumentException('مبلغ الدفع لا يمكن أن يتجاوز مجموع خدمات الفاتورة.');
+        }
+    }
+
+    /**
+     * Preserve the provider appointment screen's optional duration correction,
+     * but execute it inside the same transaction as the payment.
+     *
+     * @param  Collection<int, Appointment>  $appointments
+     */
+    private function applyAdjustedDuration($appointments, int $appointmentId, ?int $minutes): void
+    {
+        if ($minutes === null) {
+            return;
+        }
+
+        if ($minutes <= 0) {
+            throw new InvalidArgumentException('مدة الموعد المعدلة يجب أن تكون أكبر من صفر.');
+        }
+
+        /** @var Appointment|null $appointment */
+        $appointment = $appointments->firstWhere('id', $appointmentId);
+        if (! $appointment) {
+            throw new InvalidArgumentException('الموعد المحدد ليس ضمن الفاتورة الموحدة.');
+        }
+
+        if ((int) $appointment->duration_minutes === $minutes) {
+            return;
+        }
+
+        $appointment->update([
+            'duration_minutes' => $minutes,
+            'end_time' => $appointment->start_time->copy()->addMinutes($minutes),
         ]);
     }
 
     /**
-     * تحديد نوع الدفع
+     * TSE is deliberately disabled for the current product phase.
+     *
+     * No network client is called from payment. Keeping explicit metadata makes
+     * that operational decision visible on every invoice and Payment audit row.
      */
-    private function determinePaymentType(float $totalAmount, float $amountPaid): string
+    private function disabledTseMetadata(): array
     {
-        $comparison = bccomp((string)$amountPaid, (string)$totalAmount, 2);
-
-        return match($comparison) {
-            0 => Payment::TYPE_FULL,
-            -1 => Payment::TYPE_PARTIAL,
-            default => Payment::TYPE_FULL,
-        };
-    }
-
-    /**
-     * حساب الضريبة العكسية
-     */
-    private function calculateReverseTax(float $totalWithTax, float $taxRate): array
-    {
-        bcscale(6);
-
-        $total = (string) $totalWithTax;
-        $rate = (string) $taxRate;
-
-        $factor = bcadd('1', bcdiv($rate, '100', 6), 6);
-        $subtotal = bcdiv($total, $factor, 6);
-        $taxAmount = bcsub($total, $subtotal, 6);
-
         return [
-            'subtotal' => round((float)$subtotal, 2),
-            'tax_amount' => round((float)$taxAmount, 2),
-            'total' => $totalWithTax,
+            'tse_enabled' => false,
+            'note' => 'TSE is disabled by current business configuration',
+            'timestamp' => now()->toISOString(),
         ];
     }
 }

@@ -56,41 +56,71 @@ class ProviderServiceSeeder extends Seeder
                     $notes = $notesOptions[array_rand($notesOptions)];
                 }
 
-                DB::table('provider_service')->insert([
-                    'service_id' => $service->id,
-                    'provider_id' => $provider->id,
-                    'is_active' => $isActive,
-                    'custom_price' => $customPrice,
-                    'custom_duration' => $customDuration,
-                    'notes' => $notes,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+                // updateOrInsert, not insert: `provider_service` now carries a
+                // UNIQUE (provider_id, service_id) constraint (MON-03 / DB-01),
+                // because two rows for one pair mean an UNDEFINED price — both
+                // getEffectivePrice() and getProviderServicePricing() use
+                // ->first(), so the app could quote 30 and charge 45. A plain
+                // insert also made this seeder non-rerunnable.
+                DB::table('provider_service')->updateOrInsert(
+                    [
+                        'service_id' => $service->id,
+                        'provider_id' => $provider->id,
+                    ],
+                    [
+                        'is_active' => $isActive,
+                        'custom_price' => $customPrice,
+                        'custom_duration' => $customDuration,
+                        'notes' => $notes,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]
+                );
             }
         }
 
 
+        // Guarantee every service has at least one ACTIVE provider.
+        //
+        // This loop used to pick a provider at random and plain-insert. The
+        // random pick could easily land on a provider that the loop above had
+        // already linked to this service with is_active = false — producing a
+        // DUPLICATE (provider_id, service_id) pair on a **fresh** run, not just
+        // a re-run. With the pair now unique that is a hard failure, so the
+        // existing row is reactivated instead, and a provider without a row is
+        // preferred when one is available.
         foreach ($services as $service) {
             $existingLink = DB::table('provider_service')
                 ->where('service_id', $service->id)
                 ->where('is_active', true)
                 ->exists();
 
-            if (!$existingLink) {
+            if ($existingLink) {
+                continue;
+            }
 
-                $provider = $providers->random();
+            $linkedProviderIds = DB::table('provider_service')
+                ->where('service_id', $service->id)
+                ->pluck('provider_id')
+                ->all();
 
-                DB::table('provider_service')->insert([
+            $unlinked = $providers->whereNotIn('id', $linkedProviderIds);
+            $provider = $unlinked->isNotEmpty() ? $unlinked->random() : $providers->random();
+
+            DB::table('provider_service')->updateOrInsert(
+                [
                     'service_id' => $service->id,
                     'provider_id' => $provider->id,
+                ],
+                [
                     'is_active' => true,
                     'custom_price' => null,
                     'custom_duration' => null,
                     'notes' => 'Primary provider for this service',
                     'created_at' => now(),
                     'updated_at' => now(),
-                ]);
-            }
+                ]
+            );
         }
 
         $this->command->info('Provider-service relationships seeded successfully');

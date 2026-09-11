@@ -120,6 +120,7 @@ return [
     'not_in' => 'The selected :attribute is invalid.',
     'not_regex' => 'The :attribute field format is invalid.',
     'numeric' => 'The :attribute field must be a number.',
+    'phone' => 'The :attribute field must be a valid international phone number, e.g. +49 30 1234567.',
     'password' => [
         'letters' => 'The :attribute field must contain at least one letter.',
         'mixed' => 'The :attribute field must contain at least one uppercase and one lowercase letter.',

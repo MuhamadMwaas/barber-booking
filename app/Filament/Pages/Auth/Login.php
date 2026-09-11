@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages\Auth;
 
+use App\Support\StaffLoginDenial;
 use DanHarrin\LivewireRateLimiting\Exceptions\TooManyRequestsException;
 use Filament\Auth\Http\Responses\Contracts\LoginResponse;
 use Filament\Auth\MultiFactor\Contracts\HasBeforeChallengeHook;
@@ -45,28 +46,24 @@ class Login extends BaseLogin
             $this->throwFailureValidationException();
         }
 
-        // ── Disabled account — show a clear notification instead of generic error ──
-        if (! $user->is_active) {
+        // ── May this account sign in to a staff surface at all? ───────────────────
+        //
+        // Asked through StaffLoginDenial so this page and the Staff Dashboard's
+        // own login (StaffAuthController) cannot answer it differently — the same
+        // reason User::isActiveStaff() exists. Two files answering one
+        // authorisation question is how the original gap opened.
+        //
+        // Note this replaces an older `hasRole('customer')` check: a user with NO
+        // role passed that and then failed canAccessPanel(), so they were told
+        // "these credentials do not match our records" — a lie that sends them to
+        // reset a password that was never the problem.
+        if ($reason = StaffLoginDenial::for($user)) {
             $this->fireFailedEvent($authGuard, $user, $credentials);
 
             Notification::make()
                 ->danger()
-                ->title(__('auth.account_disabled_title'))
-                ->body(__('auth.account_disabled_body'))
-                ->persistent()
-                ->send();
-
-            return null;
-        }
-
-        // ── Customer account — panel is for staff only ────────────────────────────
-        if ($user->hasRole('customer')) {
-            $this->fireFailedEvent($authGuard, $user, $credentials);
-
-            Notification::make()
-                ->danger()
-                ->title(__('auth.customer_not_allowed_title'))
-                ->body(__('auth.customer_not_allowed_body'))
+                ->title(StaffLoginDenial::title($reason))
+                ->body(StaffLoginDenial::body($reason))
                 ->persistent()
                 ->send();
 

@@ -7,6 +7,7 @@ use App\Enum\OtpType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Rules\PhoneNumber;
 use App\Services\AccountVerificationService;
 use App\Services\OtpService;
 use Illuminate\Http\Request;
@@ -39,7 +40,10 @@ class PhoneVerificationController extends Controller
     public function sendOtp(Request $request)
     {
         $request->validate([
-            'phone' => ['sometimes', 'string', 'max:20'],
+            // AUTH-07: this endpoint writes users.phone too, so it carries the
+            // same rule. A format check on one of two write paths is not a
+            // format check.
+            'phone' => ['sometimes', 'string', 'max:20', new PhoneNumber],
         ]);
 
         /** @var User $user */

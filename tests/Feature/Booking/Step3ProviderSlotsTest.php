@@ -167,17 +167,19 @@ it('keeps the slot free once an appointment is cancelled', function () {
 });
 
 /**
- * MISMATCH — availability and booking disagree about unpaid online bookings.
+ * PARITY — availability and booking agree about created_status = 0.
  *
- * BookingValidationService only treats `created_status = 1` rows as conflicts
- * (BookingValidationService.php:129), but ServiceAvailabilityService blocks on
- * ANY pending appointment. So an abandoned online booking hides the slot from
- * the customer while still allowing someone else to book it.
+ * This used to be a documented mismatch: availability blocked on ANY pending
+ * appointment while BookingValidationService only treated `created_status = 1`
+ * as a conflict, so an unconfirmed row hid the slot from the customer while
+ * still letting someone else book it. Both layers now share
+ * Appointment::scopeBlocksProviderTime(), so an unconfirmed row blocks neither.
  *
- * Availability is the stricter side here, which is the safe direction — this
- * test pins the current behaviour so the discrepancy is visible.
+ * Nothing creates created_status = 0 any more — there is no online payment, so
+ * every booking is created confirmed — but the row is still constructed here to
+ * prove the two layers cannot drift apart again.
  */
-it('hides a slot held by an unconfirmed online booking', function () {
+it('keeps a slot open when the only booking on it is unconfirmed', function () {
     $this->salon->bookSlot(
         $this->salon->available,
         SalonFixture::DATE,
@@ -186,7 +188,7 @@ it('hides a slot held by an unconfirmed online booking', function () {
         createdStatus: 0,
     );
 
-    expect(startTimes(slots()))->not->toContain('11:00');
+    expect(startTimes(slots()))->toContain('11:00');
 });
 
 // ── Booking window ───────────────────────────────────────────────────────────

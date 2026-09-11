@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\BookingValidationService;
+use App\Services\TaxCalculatorService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -166,15 +167,12 @@ class AppointmentCreationService
             $endTime,
         );
 
-        if ($customer) {
-            $validationService->validateNoDuplicateBooking($customer, $startTime, $serviceIds);
-        } else {
-            $validationService->validateNoDuplicateBookingByPhone(
-                $formData['customer_phone'] ?? null,
-                $startTime,
-                $serviceIds,
-            );
-        }
+        $validationService->assertCustomerIsFree(
+            $customer,
+            $formData['customer_phone'] ?? null,
+            $startTime,
+            $endTime,
+        );
     }
 
     protected function prepareCustomerData(array $data): array
@@ -207,13 +205,30 @@ class AppointmentCreationService
             return ! empty($item) && is_array($item) && isset($item['price']);
         });
 
-        $subtotal = collect($services)->sum('price');
-        $taxRate = (float) get_setting('tax_rate', 0);
-        $taxAmount = $subtotal * ($taxRate / 100);
+        // Prices are GROSS (tax-inclusive), so tax is EXTRACTED, never added.
+        //
+        // This method used to do `$subtotal = sum(prices)` and then
+        // `$tax = $subtotal * rate/100`, i.e. it added 19% ON TOP of prices
+        // that already included it — a 50.00 service came out as 59.50. It was
+        // the tax equation pointing the wrong way (MON-01). No caller reaches
+        // this class today, which is why nobody noticed; it is corrected rather
+        // than left as a trap for whoever wires it up.
+        $taxRate = (string) get_setting('tax_rate', 0);
 
-        $data['subtotal'] = round($subtotal, 2);
-        $data['tax_amount'] = round($taxAmount, 2);
-        $data['total_amount'] = round($subtotal + $taxAmount, 2);
+        $totals = app(TaxCalculatorService::class)->calculateBulk(
+            array_map(
+                fn ($item): array => [
+                    'price'    => (string) ($item['price'] ?? '0'),
+                    'tax_rate' => $taxRate,
+                ],
+                array_values($services)
+            ),
+            2
+        );
+
+        $data['subtotal']     = $totals['net'];
+        $data['tax_amount']   = $totals['tax'];
+        $data['total_amount'] = $totals['gross'];
 
         return $data;
     }

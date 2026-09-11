@@ -7,6 +7,7 @@ use App\Enum\PaymentStatus;
 use App\Models\Appointment;
 use App\Models\Branch;
 use App\Models\Language;
+use App\Models\PaymentMethod;
 use App\Models\ProviderScheduledWork;
 use App\Models\ProviderTimeOff;
 use App\Models\ReasonLeave;
@@ -107,6 +108,7 @@ class SalonFixture
         }
 
         $this->seedSettings();
+        $this->seedOnSitePaymentMethods();
 
         // Production always has languages seeded with one default. Without a
         // default row Service::translation() dereferences null — see the
@@ -206,6 +208,25 @@ class SalonFixture
                 ],
             );
         }
+    }
+
+    private function seedOnSitePaymentMethods(): void
+    {
+        PaymentMethod::create([
+            'name' => 'CASH',
+            'code' => 'cash',
+            'type' => PaymentMethod::TYPE_CASH,
+            'status' => true,
+            'class' => '-',
+        ]);
+
+        PaymentMethod::create([
+            'name' => 'Card',
+            'code' => 'card',
+            'type' => PaymentMethod::TYPE_DEBIT_CARD,
+            'status' => true,
+            'class' => '-',
+        ]);
     }
 
     public function setSetting(string $key, string $value): void
@@ -310,14 +331,25 @@ class SalonFixture
         ]);
     }
 
-    /** Raw insert for the same reason as {@see giveFullDayLeave()}. */
-    public function giveHourlyLeave(User $provider, string $date, string $from, string $to): int
-    {
+    /**
+     * Raw insert for the same reason as {@see giveFullDayLeave()}.
+     *
+     * $endDate defaults to $date (a single-day leave). Pass a later date to build
+     * the multi-day case, which means ONE continuous absence from $date $from
+     * until $endDate $to — not the same window repeated each morning.
+     */
+    public function giveHourlyLeave(
+        User $provider,
+        string $date,
+        string $from,
+        string $to,
+        ?string $endDate = null,
+    ): int {
         return DB::table('provider_time_offs')->insertGetId([
             'user_id' => $provider->id,
             'type' => ProviderTimeOff::TYPE_HOURLY,
             'start_date' => $date,
-            'end_date' => $date,
+            'end_date' => $endDate ?? $date,
             'start_time' => $from,
             'end_time' => $to,
             'reason_id' => ReasonLeave::firstOrCreate(['name' => 'Appointment'])->id,
@@ -339,7 +371,7 @@ class SalonFixture
         AppointmentStatus $status = AppointmentStatus::PENDING,
     ): Appointment {
         return Appointment::create([
-            'number' => 'APT-' . str()->random(10),
+            'number' => 'APT-'.str()->random(10),
             'provider_id' => $provider->id,
             'customer_id' => $this->filler->id,
             'appointment_date' => $date,

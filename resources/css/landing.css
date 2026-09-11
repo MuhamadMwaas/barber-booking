@@ -314,6 +314,20 @@
 [dir="rtl"] .lp-more svg       { transform: scaleX(-1); }
 [dir="rtl"] .lp-more:hover svg { transform: scaleX(-1) translateX(3px); }
 
+/*
+| A BACK link points against the reading direction, so it is the mirror of the
+| rule above rather than a copy of it: left in LTR, right in RTL. Written as its
+| own modifier because `.lp-more svg` above would otherwise flip it the wrong
+| way in Arabic — a "return to the homepage" arrow pointing further forward.
+|
+| Must stay after the .lp-more rules: the selectors carry equal specificity, so
+| source order is what decides.
+*/
+.lp-more.lp-back svg              { transform: scaleX(-1); }
+.lp-more.lp-back:hover svg        { transform: scaleX(-1) translateX(3px); }
+[dir="rtl"] .lp-more.lp-back svg       { transform: none; }
+[dir="rtl"] .lp-more.lp-back:hover svg { transform: translateX(3px); }
+
 /* Latin tracking values look wrong on Arabic script, which is joined. */
 [dir="rtl"] .lp-eyebrow  { letter-spacing: 0.08em; }
 [dir="rtl"] .lp-display  { letter-spacing: 0; }

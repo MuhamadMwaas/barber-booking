@@ -158,8 +158,13 @@ class AdvancedTaxCalculatorTest extends TestCase
     public function testPrecisionEdgeCases(): void
     {
         // دقة صفرية (أرقام صحيحة)
+        //
+        // 100 ÷ 1.15 = 86.9565…  →  التقريب الصحيح هو 87، لا 86.
+        // كان هذا الاختبار يؤكّد '86' بينما تعليقه نفسه يقول «→ 87»: كُتب
+        // ليطابق الكود المعطوب الذي كان يقتطع بـ bcdiv بدل أن يقرّب، فصار
+        // يحرس العطل بدل أن يكشفه (MON-01).
         $result = $this->calculator->extractTax('100', '15', 0);
-        $this->assertEquals('86', $result['net']); // 100 / 1.15 = 86.96 → 87
+        $this->assertEquals('87', $result['net']); // 100 / 1.15 = 86.96 → 87
         $this->assertEquals('13', $result['tax']); // 100 - 87 = 13
         $this->assertEquals('100', $result['gross']);
 
@@ -177,17 +182,43 @@ class AdvancedTaxCalculatorTest extends TestCase
             $this->assertConditionNetPlusTaxEqualsGross($results[$precision], $precision);
         }
 
-        // التحقق من أن الزيادة في الدقة تقلل الخطأ
+        // التحقق من أن الزيادة في الدقة تقلل الخطأ.
+        //
+        // التسامح **نسبي بالدقة**، لا ثابتاً. كان الاختبار يستخدم '0.1'
+        // مطلقةً لكل المقارنات، وهي قيمة مستحيلة عند مقارنة الدقة 0 بالدقة 1:
+        //
+        //     123.456789 ÷ 1.1575 = 106.6538…
+        //     بدقة 0 → 107      (تقريب لأقرب واحد صحيح)
+        //     بدقة 1 → 106.7
+        //     الفرق  = 0.3      ← أكبر من 0.1 وهو مع ذلك صحيح تماماً
+        //
+        // القيمة المقرَّبة بدقة i تبعد عن الحقيقية بما لا يزيد عن ‎0.5×10⁻ⁱ‎،
+        // وبدقة i+1 بما لا يزيد عن ‎0.05×10⁻ⁱ‎، فالحد الأقصى لفرقهما
+        // ‎0.55×10⁻ⁱ‎. (هذا التأكيد لم يكن يُنفَّذ أصلاً: الاختبار كان يتوقف
+        // قبله عند تأكيد '86' الخاطئ في أول الدالة.)
         for ($i = 0; $i < 7; $i++) {
             $current = $results[$i];
             $next = $results[$i + 1];
 
             // net الحالي يجب أن يكون قريباً من net التالي عند رفعه للدقة الأعلى
             $currentNetHigherPrecision = $this->bcRound($current['net'], $i + 1);
-            $difference = abs(bcsub($currentNetHigherPrecision, $next['net'], $i + 2));
 
-            $this->assertLessThanOrEqual('0.1', $difference,
-                "الفرق الكبير بين الدقة {$i} و " . ($i + 1));
+            // القيمة المطلقة بـ bcmath، لا بـ abs(): abs() على نص bcmath
+            // يُرجع float، والقيم الصغيرة جداً تُطبع بصيغة أسّية ('1.0E-9')
+            // فترفضها bcmath بـ ValueError.
+            $difference = bcsub($currentNetHigherPrecision, $next['net'], $i + 2);
+            if (bccomp($difference, '0', $i + 2) === -1) {
+                $difference = bcmul($difference, '-1', $i + 2);
+            }
+
+            $tolerance = bcdiv('0.55', bcpow('10', (string) $i, 0), $i + 2);
+
+            $this->assertLessThanOrEqual(
+                0,
+                bccomp($difference, $tolerance, $i + 2),
+                "الفرق الكبير بين الدقة {$i} و " . ($i + 1)
+                    . " (الفرق {$difference}، المسموح {$tolerance})"
+            );
         }
     }
 
@@ -307,8 +338,14 @@ class AdvancedTaxCalculatorTest extends TestCase
                 6
             );
 
-            // تأكد من أن معدل الضريبة بين 0 و 100
-            if (bccomp($taxRate, '100', 6) > 0) {
+            // تأكد من أن معدل الضريبة بين 0 و 100.
+            //
+            // كان هذا `if` واحداً يقسم على 2 مرة واحدة، وهو لا يكفي: عند
+            // count=300 يصل المعدل المولَّد إلى ~700، فقسمةٌ واحدة تُنزله إلى
+            // ~350 — أي أنه يبقى فوق 100 فترفضه الحاسبة بـ
+            // InvalidArgumentException، فيفشل الاختبار بسبب مولّده لا بسبب
+            // الكود المُختبَر. `while` تُنزله فعلاً إلى المجال المطلوب.
+            while (bccomp($taxRate, '100', 6) > 0) {
                 $taxRate = bcdiv($taxRate, '2', 6);
             }
 

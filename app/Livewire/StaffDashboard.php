@@ -2,21 +2,19 @@
 
 namespace App\Livewire;
 
+use App\Enum\AppointmentStatus;
+use App\Exceptions\InvoiceAlreadyFinalizedException;
+use App\Exceptions\PushRequiredException;
 use App\Livewire\Concerns\InteractsWithDashboardPermissions;
 use App\Livewire\Concerns\ProvidesDashboardChrome;
-use App\Enum\AppointmentStatus;
-use App\Enum\InvoiceStatus;
-use App\Enum\PaymentStatus;
-use App\Exceptions\PushRequiredException;
 use App\Models\Appointment;
 use App\Models\AppointmentColor;
-use App\Models\AppointmentService as AppointmentServiceModel;
 use App\Models\DashboardMessage;
-use App\Models\Language;
 use App\Models\ProviderTimeOff;
 use App\Models\Service;
 use App\Models\User;
 use App\Services\AttendanceService;
+use App\Services\BookingLockService;
 use App\Services\BookingService;
 use App\Services\BookingValidationService;
 use App\Services\DashboardMessageService;
@@ -24,20 +22,24 @@ use App\Services\DashboardService;
 use App\Services\GapAnalysisService;
 use App\Services\InvoiceFinalizationService;
 use App\Services\InvoiceService;
-use App\Services\ServiceAvailabilityService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
-class StaffDashboard extends Component {
-    use ProvidesDashboardChrome;
+class StaffDashboard extends Component
+{
     use InteractsWithDashboardPermissions;
+    use ProvidesDashboardChrome;
 
     public string $selectedDate;
+
     public array $selectedProviderIds = [];
+
     public int $calendarYear;
+
     public int $calendarMonth;
 
     /** Provider-only view filter: when true the timeline shows only my column. */
@@ -48,50 +50,80 @@ class StaffDashboard extends Component {
 
     // -------- Attendance confirmation / history modals --------
     public bool $showCheckInModal = false;
+
     public bool $showCheckOutModal = false;
+
     public bool $showAttendanceHistoryModal = false;
+
     public array $checkInPreview = [];
+
     public array $checkOutPreview = [];
+
     public array $attendanceHistory = [];
 
     public bool $showBookingModal = false;
+
     public bool $showAppointmentModal = false;
+
     public bool $showPaymentModal = false;
+
     public bool $showTimeOffModal = false;
 
     public string $customerType = 'existing';
+
     public ?int $selectedCustomerId = null;
+
     public string $guestName = '';
+
     public string $guestPhone = '';
+
     public string $guestEmail = '';
+
     public string $customerSearch = '';
 
     public array $bookingServices = [];
+
     public string $bookingNotes = '';
 
     public ?int $selectedAppointmentId = null;
+
     public string $editStartTime = '';
+
     public string $editEndTime = '';
+
     public int $editDuration = 0;
+
     public string $editNotes = '';
+
     public string $editProviderNotes = '';  // ← provider professional notes
 
     public float $paymentAmount = 0;
+
     /** The amount shown when the payment modal opened — used to detect a real discount. */
     public float $paymentBaseline = 0;
-    public string $paymentType = '2';
+
+    /** Canonical on-site payment key: `cash` or `card`. */
+    public string $paymentType = 'cash';
 
     public ?int $timeOffProviderId = null;
+
     public string $timeOffType = '1';
+
     public string $timeOffStartDate = '';
+
     public string $timeOffEndDate = '';
+
     public string $timeOffStartTime = '';
+
     public string $timeOffEndTime = '';
+
     public ?int $timeOffReasonId = null;
 
     // -------- Add Service to Existing Booking ----------
     public bool $showAddServiceModal = false;
+
     public ?int $addServiceToAppointmentId = null;
+
     public array $addServiceForm = [
         'category_id' => null,
         'service_id' => null,
@@ -100,20 +132,25 @@ class StaffDashboard extends Component {
         'duration_minutes' => 0,
         'start_time' => null,
     ];
+
     public array $addServiceAnalysis = [];   // Last result from analyzeAddServiceGap()
 
     // -------- Push Preview ----------
     public bool $showPushPreviewModal = false;
+
     public array $pushPreviewPlan = [];      // Plan array (from PushRequiredException)
 
     // -------- Bulletin Board (messages) ----------
     public string $newMessageBody = '';
+
     public string $newMessageExpiry = 'never';   // 'never' | 'end_of_day' | 'in_24h'
 
     protected DashboardService $dashboardService;
+
     protected DashboardMessageService $messageService;
 
-    public function boot(DashboardService $dashboardService, DashboardMessageService $messageService) {
+    public function boot(DashboardService $dashboardService, DashboardMessageService $messageService)
+    {
         $this->dashboardService = $dashboardService;
         $this->messageService = $messageService;
     }
@@ -127,13 +164,15 @@ class StaffDashboard extends Component {
     #[Computed]
     public function selectedAppointment(): ?Appointment
     {
-        if (!$this->selectedAppointmentId) {
+        if (! $this->selectedAppointmentId) {
             return null;
         }
+
         return $this->dashboardService->getAppointmentDetails($this->selectedAppointmentId);
     }
 
-    public function mount() {
+    public function mount()
+    {
         $this->selectedDate = Carbon::today()->format('Y-m-d');
         $this->calendarYear = (int) Carbon::today()->format('Y');
         $this->calendarMonth = (int) Carbon::today()->format('n');
@@ -147,13 +186,15 @@ class StaffDashboard extends Component {
         $this->refreshAttendanceState();
     }
 
-    public function selectDate(string $date) {
+    public function selectDate(string $date)
+    {
         $this->selectedDate = $date;
         $this->syncSelectedProvidersForSelectedDate();
         $this->dispatch('dateChanged', date: $date);
     }
 
-    public function goToToday() {
+    public function goToToday()
+    {
         $today = Carbon::today();
         $this->selectedDate = $today->format('Y-m-d');
         $this->calendarYear = (int) $today->format('Y');
@@ -161,24 +202,27 @@ class StaffDashboard extends Component {
         $this->syncSelectedProvidersForSelectedDate();
     }
 
-    public function previousMonth() {
+    public function previousMonth()
+    {
         $date = Carbon::create($this->calendarYear, $this->calendarMonth, 1)->subMonth();
         $this->calendarYear = (int) $date->format('Y');
         $this->calendarMonth = (int) $date->format('n');
     }
 
-    public function nextMonth() {
+    public function nextMonth()
+    {
         $date = Carbon::create($this->calendarYear, $this->calendarMonth, 1)->addMonth();
         $this->calendarYear = (int) $date->format('Y');
         $this->calendarMonth = (int) $date->format('n');
     }
 
-    public function toggleProvider(int $providerId) {
+    public function toggleProvider(int $providerId)
+    {
         $selectableProviderIds = $this->getSelectableProviderIdsFromProviders(
             $this->allProviders
         );
 
-        if (!in_array($providerId, $selectableProviderIds, true)) {
+        if (! in_array($providerId, $selectableProviderIds, true)) {
             return;
         }
 
@@ -189,7 +233,8 @@ class StaffDashboard extends Component {
         }
     }
 
-    public function openBookingModal(?int $providerId = null, ?string $startTime = null) {
+    public function openBookingModal(?int $providerId = null, ?string $startTime = null)
+    {
         $this->resetBookingForm();
         if ($startTime) {
             $this->bookingServices[0]['start_time'] = $startTime;
@@ -200,41 +245,48 @@ class StaffDashboard extends Component {
         $this->showBookingModal = true;
     }
 
-    public function closeBookingModal() {
+    public function closeBookingModal()
+    {
         $this->showBookingModal = false;
         $this->resetBookingForm();
     }
 
-    public function openAppointmentModal(int $appointmentId) {
+    public function openAppointmentModal(int $appointmentId)
+    {
         $this->selectedAppointmentId = $appointmentId;
         $appointment = $this->selectedAppointment;
         if ($appointment) {
-            $this->editStartTime      = $appointment->start_time->format('H:i');
-            $this->editEndTime        = $appointment->end_time->format('H:i');
-            $this->editDuration       = $appointment->duration_minutes;
-            $this->editNotes          = $appointment->notes ?? '';
-            $this->editProviderNotes  = $appointment->provider_notes ?? '';
+            $this->editStartTime = $appointment->start_time->format('H:i');
+            $this->editEndTime = $appointment->end_time->format('H:i');
+            $this->editDuration = $appointment->duration_minutes;
+            $this->editNotes = $appointment->notes ?? '';
+            $this->editProviderNotes = $appointment->provider_notes ?? '';
         }
         $this->showAppointmentModal = true;
     }
 
-    public function updatedEditStartTime(): void {
+    public function updatedEditStartTime(): void
+    {
         $this->syncEditEndTimeFromDuration();
     }
 
-    public function updatedEditDuration(): void {
+    public function updatedEditDuration(): void
+    {
         $this->syncEditEndTimeFromDuration();
     }
 
-    public function updatedEditEndTime(): void {
+    public function updatedEditEndTime(): void
+    {
         $this->syncEditDurationFromEndTime();
     }
 
-    public function updatedAddServiceForm($value, string $key): void {
+    public function updatedAddServiceForm($value, string $key): void
+    {
         if ($key === 'category_id') {
             $this->addServiceForm['service_id'] = null;
             $this->addServiceForm['duration_minutes'] = 0;
             $this->addServiceAnalysis = [];
+
             return;
         }
 
@@ -245,6 +297,7 @@ class StaffDashboard extends Component {
         if (empty($value)) {
             $this->addServiceForm['duration_minutes'] = 0;
             $this->addServiceAnalysis = [];
+
             return;
         }
 
@@ -252,6 +305,7 @@ class StaffDashboard extends Component {
         if (! $service) {
             $this->addServiceForm['duration_minutes'] = 0;
             $this->addServiceAnalysis = [];
+
             return;
         }
 
@@ -259,38 +313,47 @@ class StaffDashboard extends Component {
         $this->analyzeAddServiceGap();
     }
 
-    public function closeAppointmentModal() {
+    public function closeAppointmentModal()
+    {
         $this->showAppointmentModal = false;
         $this->selectedAppointmentId = null;
     }
 
-    public function openPaymentModal(int $appointmentId) {
+    public function openPaymentModal(int $appointmentId)
+    {
         $this->selectedAppointmentId = $appointmentId;
         $appointment = $this->selectedAppointment;
         if ($appointment) {
-            $this->paymentAmount = (float) $appointment->total_amount;
+            // Every appointment stores only its own services. The payment covers
+            // the parent + all linked children, so show their complete gross sum.
+            $groupTotal = (float) $appointment->linkedGroup()->sum('total_amount');
+
+            $this->paymentAmount = $groupTotal;
             // Remember the suggested amount so processPayment() can tell whether
             // the staff actually lowered it (a discount) or left it untouched.
-            $this->paymentBaseline = (float) $appointment->total_amount;
-            $this->paymentType = '2';
+            $this->paymentBaseline = $groupTotal;
+            $this->paymentType = 'cash';
         }
         $this->showAppointmentModal = false;
         $this->showPaymentModal = true;
     }
 
-    public function closePaymentModal() {
+    public function closePaymentModal()
+    {
         $this->showPaymentModal = false;
         $this->selectedAppointmentId = null;
     }
 
-    public function openTimeOffModal() {
+    public function openTimeOffModal()
+    {
         $this->resetTimeOffForm();
         $this->timeOffStartDate = $this->selectedDate;
         $this->timeOffEndDate = $this->selectedDate;
         $this->showTimeOffModal = true;
     }
 
-    public function openTimeOffModalFromTimeline(int $providerId, string $startTime, string $endTime) {
+    public function openTimeOffModalFromTimeline(int $providerId, string $startTime, string $endTime)
+    {
         $this->resetTimeOffForm();
         $this->timeOffProviderId = $providerId;
         $this->timeOffType = '0'; // Hourly
@@ -301,12 +364,14 @@ class StaffDashboard extends Component {
         $this->showTimeOffModal = true;
     }
 
-    public function closeTimeOffModal() {
+    public function closeTimeOffModal()
+    {
         $this->showTimeOffModal = false;
         $this->resetTimeOffForm();
     }
 
-    public function updatedBookingServices($value, $key) {
+    public function updatedBookingServices($value, $key)
+    {
         $parts = explode('.', $key);
         if (count($parts) >= 2) {
             $index = (int) $parts[0];
@@ -335,7 +400,8 @@ class StaffDashboard extends Component {
         }
     }
 
-    public function addEmptyBookingService() {
+    public function addEmptyBookingService()
+    {
         $this->bookingServices[] = [
             'category_id' => null,
             'service_id' => null,
@@ -346,16 +412,18 @@ class StaffDashboard extends Component {
         ];
     }
 
-    public function removeBookingService(int $index) {
+    public function removeBookingService(int $index)
+    {
         if (count($this->bookingServices) > 1) {
             unset($this->bookingServices[$index]);
             $this->bookingServices = array_values($this->bookingServices);
         }
     }
 
-    public function getAvailableSlotsForBookingService(int $index): array {
+    public function getAvailableSlotsForBookingService(int $index): array
+    {
         $bs = $this->bookingServices[$index] ?? null;
-        if (!$bs || !$bs['service_id'] || !$bs['provider_id']) {
+        if (! $bs || ! $bs['service_id'] || ! $bs['provider_id']) {
             return [];
         }
 
@@ -370,9 +438,10 @@ class StaffDashboard extends Component {
         }, $rawSlots);
     }
 
-    public function getAvailableProvidersAtTime(int $index): array {
+    public function getAvailableProvidersAtTime(int $index): array
+    {
         $bs = $this->bookingServices[$index] ?? null;
-        if (!$bs || !$bs['service_id'] || !$bs['start_time']) {
+        if (! $bs || ! $bs['service_id'] || ! $bs['start_time']) {
             return [];
         }
 
@@ -384,7 +453,8 @@ class StaffDashboard extends Component {
         );
     }
 
-    public function getAvailableProvidersForBooking(int $serviceId, string $startTime, int $duration, bool $bypassAvailability = false): array {
+    public function getAvailableProvidersForBooking(int $serviceId, string $startTime, int $duration, bool $bypassAvailability = false): array
+    {
         // Only honour the force flag for users who actually hold the permission,
         // so a forged request can never surface on-leave providers.
         $bypassAvailability = $bypassAvailability && $this->dashCan('force_booking');
@@ -398,9 +468,11 @@ class StaffDashboard extends Component {
         );
     }
 
-    public function saveBookingFromAlpine(array $data) {
+    public function saveBookingFromAlpine(array $data)
+    {
         if ($this->dashDeny('create_booking')) {
             $this->dispatch('booking-error');
+
             return;
         }
 
@@ -411,16 +483,18 @@ class StaffDashboard extends Component {
         $bypassAvailability = (bool) ($data['bypassAvailability'] ?? false);
         if ($bypassAvailability && $this->dashDeny('force_booking')) {
             $this->dispatch('booking-error');
+
             return;
         }
 
         $validServices = array_filter($data['services'] ?? [], function ($bs) {
-            return !empty($bs['service_id']) && !empty($bs['provider_id']) && !empty($bs['start_time']);
+            return ! empty($bs['service_id']) && ! empty($bs['provider_id']) && ! empty($bs['start_time']);
         });
 
         if (empty($validServices)) {
             $this->dispatch('notify', type: 'error', message: 'Please fill in all service details');
             $this->dispatch('booking-error');
+
             return;
         }
 
@@ -436,16 +510,21 @@ class StaffDashboard extends Component {
                 // Authorised force booking (validated above). Bypasses ONLY the
                 // provider availability window; conflict + offers-service stay on.
                 'bypass_availability' => $bypassAvailability,
+                // Same force_booking authorisation, separate axis: a customer may
+                // genuinely have two things done at once (a manicure while colour
+                // develops), and the person at the counter can see that.
+                'allow_customer_overlap' => $bypassAvailability,
                 'override_reason' => $bypassAvailability ? trim((string) ($data['overrideReason'] ?? '')) ?: null : null,
                 'notes' => $data['notes'] ?? '',
                 'services' => [],
             ];
 
-            if (($data['customerType'] ?? 'existing') === 'existing' && !empty($data['selectedCustomerId'])) {
+            if (($data['customerType'] ?? 'existing') === 'existing' && ! empty($data['selectedCustomerId'])) {
                 $customer = User::find($data['selectedCustomerId']);
-                if (!$customer) {
+                if (! $customer) {
                     $this->dispatch('notify', type: 'error', message: 'Selected customer not found');
                     $this->dispatch('booking-error');
+
                     return;
                 }
                 $bookingData['customer_name'] = $customer->full_name;
@@ -469,15 +548,19 @@ class StaffDashboard extends Component {
             $appointment = $bookingService->createBooking($customer, $bookingData);
 
             $this->dispatch('booking-saved');
-            $this->dispatch('notify', type: 'success', message: __('dashboard.booking_modal.save') . ' #' . $appointment->number);
-        } catch (\Exception $e) {
-            Log::error('Dashboard booking error: ' . $e->getMessage());
+            $this->dispatch('notify', type: 'success', message: __('dashboard.booking_modal.save').' #'.$appointment->number);
+        } catch (\Throwable $e) {
+            // Throwable, not Exception: a TypeError is an Error, so it used to
+            // escape this catch and take the whole Livewire component down instead
+            // of showing a notification (BOOK-09).
+            Log::error('Dashboard booking error: '.$e->getMessage(), ['exception' => $e::class]);
             $this->dispatch('notify', type: 'error', message: $e->getMessage());
             $this->dispatch('booking-error');
         }
     }
 
-    public function saveBooking() {
+    public function saveBooking()
+    {
         if ($this->dashDeny('create_booking')) {
             return;
         }
@@ -488,6 +571,7 @@ class StaffDashboard extends Component {
 
         if (empty($validServices)) {
             $this->dispatch('notify', type: 'error', message: 'Please fill in all service details');
+
             return;
         }
 
@@ -525,26 +609,34 @@ class StaffDashboard extends Component {
             $appointment = $bookingService->createBooking($customer, $bookingData);
 
             $this->closeBookingModal();
-            $this->dispatch('notify', type: 'success', message: __('dashboard.booking_modal.save') . ' #' . $appointment->number);
+            $this->dispatch('notify', type: 'success', message: __('dashboard.booking_modal.save').' #'.$appointment->number);
             $this->dispatch('refreshTimeline');
-        } catch (\Exception $e) {
-            Log::error('Dashboard booking error: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            // See saveBookingFromAlpine(): a TypeError is an Error, not an Exception.
+            Log::error('Dashboard booking error: '.$e->getMessage(), ['exception' => $e::class]);
             $this->dispatch('notify', type: 'error', message: $e->getMessage());
         }
     }
 
-    public function updateAppointment() {
-        if (!$this->selectedAppointmentId) return;
+    public function updateAppointment()
+    {
+        if (! $this->selectedAppointmentId) {
+            return;
+        }
 
         $appointment = Appointment::find($this->selectedAppointmentId);
-        if (!$appointment) return;
+        if (! $appointment) {
+            return;
+        }
 
-        if ($this->dashDenyOnAppointment('edit_appointment', $appointment)) return;
+        if ($this->dashDenyOnAppointment('edit_appointment', $appointment)) {
+            return;
+        }
 
         try {
-            $newStart = Carbon::parse($this->selectedDate . ' ' . $this->editStartTime);
+            $newStart = Carbon::parse($this->selectedDate.' '.$this->editStartTime);
             $newEnd = $this->editEndTime
-                ? Carbon::parse($this->selectedDate . ' ' . $this->editEndTime)
+                ? Carbon::parse($this->selectedDate.' '.$this->editEndTime)
                 : $newStart->copy()->addMinutes($this->editDuration);
 
             if ($newEnd->lte($newStart)) {
@@ -553,16 +645,38 @@ class StaffDashboard extends Component {
 
             $this->editDuration = (int) $newStart->diffInMinutes($newEnd);
 
-            $appointment->update([
-                'start_time' => $newStart,
-                'end_time' => $newEnd,
-                'duration_minutes' => $this->editDuration,
-            ]);
+            // Moving/resizing an appointment writes to the provider's calendar
+            // exactly like creating one does, so it takes the same lock and the
+            // same conflict check — this used to write blindly and could drop a
+            // booking on top of another one (BOOK-02).
+            //
+            // force_booking holders may still overlap deliberately, matching what
+            // the create-booking flow already allows them to do.
+            $canForce = $this->dashCan('force_booking');
 
-            if ($appointment->services_record->count() > 0) {
-                $firstService = $appointment->services_record->first();
-                $firstService->update(['duration_minutes' => $this->editDuration]);
-            }
+            DB::transaction(function () use ($appointment, $newStart, $newEnd, $canForce) {
+                app(BookingLockService::class)->lockUsers([$appointment->provider_id]);
+
+                if (! $canForce) {
+                    app(BookingValidationService::class)->assertNoConflictingAppointment(
+                        $appointment->provider,
+                        $newStart,
+                        $newEnd,
+                        $appointment->id,   // an appointment never conflicts with itself
+                    );
+                }
+
+                $appointment->update([
+                    'start_time' => $newStart,
+                    'end_time' => $newEnd,
+                    'duration_minutes' => $this->editDuration,
+                ]);
+
+                if ($appointment->services_record->count() > 0) {
+                    $firstService = $appointment->services_record->first();
+                    $firstService->update(['duration_minutes' => $this->editDuration]);
+                }
+            });
 
             $this->closeAppointmentModal();
             $this->dispatch('notify', type: 'success', message: 'Appointment updated');
@@ -572,13 +686,14 @@ class StaffDashboard extends Component {
         }
     }
 
-    private function syncEditEndTimeFromDuration(): void {
+    private function syncEditEndTimeFromDuration(): void
+    {
         if (empty($this->editStartTime) || $this->editDuration <= 0) {
             return;
         }
 
         try {
-            $this->editEndTime = Carbon::parse($this->selectedDate . ' ' . $this->editStartTime)
+            $this->editEndTime = Carbon::parse($this->selectedDate.' '.$this->editStartTime)
                 ->addMinutes($this->editDuration)
                 ->format('H:i');
         } catch (\Throwable) {
@@ -586,14 +701,15 @@ class StaffDashboard extends Component {
         }
     }
 
-    private function syncEditDurationFromEndTime(): void {
+    private function syncEditDurationFromEndTime(): void
+    {
         if (empty($this->editStartTime) || empty($this->editEndTime)) {
             return;
         }
 
         try {
-            $start = Carbon::parse($this->selectedDate . ' ' . $this->editStartTime);
-            $end = Carbon::parse($this->selectedDate . ' ' . $this->editEndTime);
+            $start = Carbon::parse($this->selectedDate.' '.$this->editStartTime);
+            $end = Carbon::parse($this->selectedDate.' '.$this->editEndTime);
 
             if ($end->gt($start)) {
                 $this->editDuration = (int) $start->diffInMinutes($end);
@@ -603,13 +719,20 @@ class StaffDashboard extends Component {
         }
     }
 
-    public function updateNotes() {
-        if (!$this->selectedAppointmentId) return;
+    public function updateNotes()
+    {
+        if (! $this->selectedAppointmentId) {
+            return;
+        }
 
         $appointment = Appointment::find($this->selectedAppointmentId);
-        if (!$appointment) return;
+        if (! $appointment) {
+            return;
+        }
 
-        if ($this->dashDenyOnAppointment('edit_notes', $appointment)) return;
+        if ($this->dashDenyOnAppointment('edit_notes', $appointment)) {
+            return;
+        }
 
         try {
             $appointment->update(['notes' => $this->editNotes]);
@@ -624,12 +747,18 @@ class StaffDashboard extends Component {
      */
     public function updateProviderNotes(): void
     {
-        if (!$this->selectedAppointmentId) return;
+        if (! $this->selectedAppointmentId) {
+            return;
+        }
 
         $appointment = Appointment::find($this->selectedAppointmentId);
-        if (!$appointment) return;
+        if (! $appointment) {
+            return;
+        }
 
-        if ($this->dashDenyOnAppointment('edit_notes', $appointment)) return;
+        if ($this->dashDenyOnAppointment('edit_notes', $appointment)) {
+            return;
+        }
 
         try {
             $appointment->update(['provider_notes' => $this->editProviderNotes]);
@@ -645,9 +774,13 @@ class StaffDashboard extends Component {
      */
     public function addColorToAppointment(int $colorId, float $quantity): void
     {
-        if (!$this->selectedAppointmentId) return;
+        if (! $this->selectedAppointmentId) {
+            return;
+        }
 
-        if ($this->dashDenyOnAppointment('manage_colors', $this->selectedAppointment)) return;
+        if ($this->dashDenyOnAppointment('manage_colors', $this->selectedAppointment)) {
+            return;
+        }
 
         try {
             $existing = AppointmentColor::where('appointment_id', $this->selectedAppointmentId)
@@ -659,8 +792,8 @@ class StaffDashboard extends Component {
             } else {
                 AppointmentColor::create([
                     'appointment_id' => $this->selectedAppointmentId,
-                    'color_id'       => $colorId,
-                    'quantity'       => $quantity,
+                    'color_id' => $colorId,
+                    'quantity' => $quantity,
                 ]);
             }
 
@@ -680,9 +813,13 @@ class StaffDashboard extends Component {
      */
     public function removeColorFromAppointment(int $appointmentColorId): void
     {
-        if (!$this->selectedAppointmentId) return;
+        if (! $this->selectedAppointmentId) {
+            return;
+        }
 
-        if ($this->dashDenyOnAppointment('manage_colors', $this->selectedAppointment)) return;
+        if ($this->dashDenyOnAppointment('manage_colors', $this->selectedAppointment)) {
+            return;
+        }
 
         try {
             AppointmentColor::where('id', $appointmentColorId)
@@ -698,16 +835,24 @@ class StaffDashboard extends Component {
         }
     }
 
-    public function cancelAppointment() {
-        if (!$this->selectedAppointmentId) return;
+    public function cancelAppointment()
+    {
+        if (! $this->selectedAppointmentId) {
+            return;
+        }
 
         $appointment = Appointment::with('children')->find($this->selectedAppointmentId);
-        if (!$appointment) return;
+        if (! $appointment) {
+            return;
+        }
 
-        if ($this->dashDenyOnAppointment('cancel_appointment', $appointment)) return;
+        if ($this->dashDenyOnAppointment('cancel_appointment', $appointment)) {
+            return;
+        }
 
         if (in_array($appointment->payment_status->value, [1, 2, 3]) || $appointment->status->value === 1) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.appointment_modal.cannot_cancel_paid'));
+
             return;
         }
 
@@ -720,6 +865,7 @@ class StaffDashboard extends Component {
                 type: 'error',
                 message: __('dashboard.cannot_cancel_has_children', ['numbers' => $numbers])
             );
+
             return;
         }
 
@@ -736,7 +882,7 @@ class StaffDashboard extends Component {
                 try {
                     app(InvoiceService::class)->rebuildAggregatedInvoice($appointment->parent);
                 } catch (\Throwable $e) {
-                    Log::warning('Aggregated invoice rebuild after child cancel failed: ' . $e->getMessage());
+                    Log::warning('Aggregated invoice rebuild after child cancel failed: '.$e->getMessage());
                 }
             }
 
@@ -748,17 +894,25 @@ class StaffDashboard extends Component {
         }
     }
 
-    public function deleteAppointment() {
-        if (!$this->selectedAppointmentId) return;
+    public function deleteAppointment()
+    {
+        if (! $this->selectedAppointmentId) {
+            return;
+        }
 
         $appointment = Appointment::with(['invoice', 'invoice.items', 'children', 'parent'])
             ->find($this->selectedAppointmentId);
-        if (!$appointment) return;
+        if (! $appointment) {
+            return;
+        }
 
-        if ($this->dashDenyOnAppointment('delete_appointment', $appointment)) return;
+        if ($this->dashDenyOnAppointment('delete_appointment', $appointment)) {
+            return;
+        }
 
         if (in_array($appointment->payment_status->value, [1, 2, 3]) || $appointment->status->value === 1) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.appointment_modal.cannot_delete_paid'));
+
             return;
         }
 
@@ -771,6 +925,7 @@ class StaffDashboard extends Component {
                 type: 'error',
                 message: __('dashboard.cannot_delete_has_children', ['numbers' => $numbers])
             );
+
             return;
         }
 
@@ -792,7 +947,7 @@ class StaffDashboard extends Component {
                 try {
                     app(InvoiceService::class)->rebuildAggregatedInvoice($parent);
                 } catch (\Throwable $e) {
-                    Log::warning('Aggregated invoice rebuild after child delete failed: ' . $e->getMessage());
+                    Log::warning('Aggregated invoice rebuild after child delete failed: '.$e->getMessage());
                 }
             }
 
@@ -803,61 +958,37 @@ class StaffDashboard extends Component {
         }
     }
 
-    public function processPayment() {
-        if (!$this->selectedAppointmentId) return;
+    public function processPayment()
+    {
+        if (! $this->selectedAppointmentId) {
+            return;
+        }
 
         // Load with parent + children so we can resolve the invoice owner and
         // finalize the whole linked group atomically.
         $appointment = Appointment::with(['invoice', 'parent.invoice', 'children'])
             ->find($this->selectedAppointmentId);
-        if (!$appointment) return;
+        if (! $appointment) {
+            return;
+        }
 
-        if ($this->dashDenyOnAppointment('take_payment', $appointment)) return;
+        if ($this->dashDenyOnAppointment('take_payment', $appointment)) {
+            return;
+        }
 
         try {
-            // The unified invoice always lives on the parent (or self if standalone).
-            $invoiceOwner = $appointment->parent ?? $appointment;
-            $invoiceService = app(\App\Services\InvoiceService::class);
             $finalizationService = app(InvoiceFinalizationService::class);
-
-            // Ensure a draft invoice exists on the owner.
-            $invoice = $invoiceOwner->invoice()->first();
-            if (!$invoice) {
-                $invoice = $invoiceService->createDtaftInvoiceFromAppointment(
-                    $invoiceOwner,
-                    'cash',
-                    0
-                );
-            }
-
-            // CRITICAL: rebuild aggregated items BEFORE signing — this ensures
-            // TSE signs the correct total covering parent + all children.
-            $invoice = $invoiceService->rebuildAggregatedInvoice($invoiceOwner);
-
-            // Apply the final amount through the single source of truth. If the
-            // staff lowered the amount it is recorded as a discount (items total
-            // is kept, discount_amount is stored, net/tax/total are reconciled on
-            // the discounted gross). If they left the suggested amount untouched
-            // we pass null = "charge the full items total" (no accidental discount
-            // on aggregated invoices whose suggested amount was the parent only).
             $staffChangedAmount = abs($this->paymentAmount - $this->paymentBaseline) >= 0.005;
-            $invoice = $invoiceService->applyFinalAmount(
-                $invoice,
-                $staffChangedAmount ? (float) $this->paymentAmount : null
-            );
 
-            $paymentTypeValue = (string) $this->paymentType;
-
-            // finalizeDraftInvoice() now updates EVERY linked appointment
-            // (parent + children) to COMPLETED + matching payment_status.
-            // Pass the reconciled invoice total (post-discount) so the Payment
-            // record + amount_paid always match what was actually charged.
-            $finalizedInvoice = $finalizationService->finalizeDraftInvoice(
-                $invoice,
-                $paymentTypeValue,
-                (float) $invoice->total_amount,
-                null,
-                true
+            // MON-05: this is the canonical payment operation. Invoice rebuild,
+            // special-customer price, Payment row, numbering and linked booking
+            // completion happen atomically inside the service. TSE is disabled.
+            $finalizedInvoice = $finalizationService->finalizeAppointmentPayment(
+                appointment: $appointment,
+                paymentMethod: $this->paymentType,
+                finalAmount: $staffChangedAmount ? (float) $this->paymentAmount : null,
+                notes: null,
+                source: 'staff_dashboard',
             );
 
             $this->closePaymentModal();
@@ -866,27 +997,111 @@ class StaffDashboard extends Component {
             if ($finalizedInvoice && $finalizedInvoice->invoice_number) {
                 $this->dispatch('printInvoice', invoiceId: $finalizedInvoice->id);
             }
-        } catch (\Exception $e) {
-            Log::error('Payment error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        } catch (InvoiceAlreadyFinalizedException $e) {
+            // The SECOND request of a double-click, or a retry after a network
+            // drop where the first request actually landed. The money was taken
+            // and the invoice was issued — the cashier must not see a failure
+            // for a transaction that succeeded. Close the modal and reprint.
+            //
+            // Before MON-03 this path did not exist: the second request sailed
+            // past the unlocked status check and issued a DUPLICATE invoice
+            // number plus a second payment row for the same money.
+            Log::info('Duplicate finalization suppressed', [
+                'invoice_id' => $e->invoice->id,
+                'invoice_number' => $e->invoice->invoice_number,
+            ]);
+
+            $this->closePaymentModal();
+            $this->dispatch('notify', type: 'success', message: __('dashboard.payment_modal.success'));
+            $this->dispatch('printInvoice', invoiceId: $e->invoice->id);
+        } catch (\Throwable $e) {
+            Log::error('Payment error: '.$e->getMessage(), [
+                'exception' => $e::class,
+                'trace' => $e->getTraceAsString(),
+            ]);
             $this->dispatch('notify', type: 'error', message: $e->getMessage());
         }
     }
 
-    public function saveTimeOff() {
-        if ($this->dashDeny('manage_timeoff')) return;
+    /**
+     * Server-side sanity check for a leave, shared by both save paths.
+     *
+     * The dashboard modal validates nothing in the browser — it will happily post
+     * an end date before the start date, or an "hourly" leave with empty times —
+     * and neither save path checked either. Malformed rows then reach the
+     * availability and booking layers, where a half-filled time pair or an
+     * inverted range has no sensible meaning (BOOK-04).
+     *
+     * Times that run backwards are rejected rather than interpreted as crossing
+     * midnight: the salon does not trade through midnight, so 22:00 → 02:00 is
+     * far more likely a typo than a real overnight absence.
+     *
+     * @return string|null the error message, or null when the leave is valid.
+     */
+    private function timeOffValidationError(
+        int $type,
+        ?string $startDate,
+        ?string $endDate,
+        ?string $startTime,
+        ?string $endTime,
+    ): ?string {
+        if (empty($startDate)) {
+            return __('dashboard.time_off_modal.start_date_required');
+        }
+
+        if (! empty($endDate) && $endDate < $startDate) {
+            return __('dashboard.time_off_modal.end_date_before_start');
+        }
+
+        if ($type !== ProviderTimeOff::TYPE_HOURLY) {
+            return null;
+        }
+
+        if (empty($startTime) || empty($endTime)) {
+            return __('dashboard.time_off_modal.times_required');
+        }
+
+        if ($endTime <= $startTime) {
+            return __('dashboard.time_off_modal.end_time_after_start');
+        }
+
+        return null;
+    }
+
+    public function saveTimeOff()
+    {
+        if ($this->dashDeny('manage_timeoff')) {
+            return;
+        }
 
         // Providers may only add time off for themselves.
         if ($this->isCurrentUserProvider()) {
             $this->timeOffProviderId = $this->currentProviderId();
         }
 
-        if (!$this->timeOffProviderId) {
+        if (! $this->timeOffProviderId) {
             $this->dispatch('notify', type: 'error', message: 'Please select a provider');
+
             return;
         }
 
-        if (!$this->timeOffReasonId) {
+        if (! $this->timeOffReasonId) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.time_off_modal.reason_required'));
+
+            return;
+        }
+
+        $error = $this->timeOffValidationError(
+            (int) $this->timeOffType,
+            $this->timeOffStartDate,
+            $this->timeOffEndDate,
+            $this->timeOffStartTime,
+            $this->timeOffEndTime,
+        );
+
+        if ($error !== null) {
+            $this->dispatch('notify', type: 'error', message: $error);
+
             return;
         }
 
@@ -914,21 +1129,40 @@ class StaffDashboard extends Component {
         }
     }
 
-    public function saveTimeOffFromAlpine(array $data) {
-        if ($this->dashDeny('manage_timeoff')) return;
+    public function saveTimeOffFromAlpine(array $data)
+    {
+        if ($this->dashDeny('manage_timeoff')) {
+            return;
+        }
 
         // Providers may only add time off for themselves.
         $providerId = $this->isCurrentUserProvider()
             ? $this->currentProviderId()
             : ($data['providerId'] ?? null);
 
-        if (!$providerId) {
+        if (! $providerId) {
             $this->dispatch('notify', type: 'error', message: 'Please select a provider');
+
             return;
         }
 
         if (empty($data['reasonId'])) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.time_off_modal.reason_required'));
+
+            return;
+        }
+
+        $error = $this->timeOffValidationError(
+            (int) ($data['type'] ?? ProviderTimeOff::TYPE_FULL_DAY),
+            $data['startDate'] ?? null,
+            $data['endDate'] ?? null,
+            $data['startTime'] ?? null,
+            $data['endTime'] ?? null,
+        );
+
+        if ($error !== null) {
+            $this->dispatch('notify', type: 'error', message: $error);
+
             return;
         }
 
@@ -937,7 +1171,7 @@ class StaffDashboard extends Component {
                 'user_id' => (int) $providerId,
                 'type' => (int) ($data['type'] ?? 1),
                 'start_date' => $data['startDate'] ?? now()->format('Y-m-d'),
-                'end_date' => !empty($data['endDate']) ? $data['endDate'] : ($data['startDate'] ?? now()->format('Y-m-d')),
+                'end_date' => ! empty($data['endDate']) ? $data['endDate'] : ($data['startDate'] ?? now()->format('Y-m-d')),
                 'reason_id' => (int) $data['reasonId'],
             ];
 
@@ -962,24 +1196,30 @@ class StaffDashboard extends Component {
     /**
      * Open the "Add Service" modal anchored to an existing appointment.
      */
-    public function openAddServiceModal(int $appointmentId) {
-        if ($this->dashDeny('add_service')) return;
+    public function openAddServiceModal(int $appointmentId)
+    {
+        if ($this->dashDeny('add_service')) {
+            return;
+        }
 
         $appointment = Appointment::with(['parent', 'children', 'invoice', 'provider'])
             ->find($appointmentId);
 
         if (! $appointment) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.add_service.cannot_add'));
+
             return;
         }
 
         if (! $this->canActOnAppointment($appointment)) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.not_your_booking_denied'));
+
             return;
         }
 
         if (! $appointment->canAcceptNewService()) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.add_service.cannot_add'));
+
             return;
         }
 
@@ -998,7 +1238,8 @@ class StaffDashboard extends Component {
         $this->showAddServiceModal = true;
     }
 
-    public function closeAddServiceModal() {
+    public function closeAddServiceModal()
+    {
         $this->showAddServiceModal = false;
         $this->addServiceToAppointmentId = null;
         $this->addServiceForm = [
@@ -1016,7 +1257,8 @@ class StaffDashboard extends Component {
      * Called by Alpine after the user edits any add-service form field.
      * Returns an analysis payload so the UI can show fit/push/reduction options.
      */
-    public function analyzeAddServiceGap(): array {
+    public function analyzeAddServiceGap(): array
+    {
         if (! $this->addServiceToAppointmentId) {
             return ['is_possible' => false, 'reason' => 'no_anchor'];
         }
@@ -1062,9 +1304,11 @@ class StaffDashboard extends Component {
                 );
 
             $this->addServiceAnalysis = $result;
+
             return $result;
         } catch (\Throwable $e) {
-            Log::warning('analyzeAddServiceGap error: ' . $e->getMessage());
+            Log::warning('analyzeAddServiceGap error: '.$e->getMessage());
+
             return ['is_possible' => false, 'reason' => 'error', 'message' => $e->getMessage()];
         }
     }
@@ -1073,7 +1317,8 @@ class StaffDashboard extends Component {
      * Apply the maximum-available duration suggested by the analysis.
      * Called when the user clicks "Reduce to max".
      */
-    public function applyMaxDuration() {
+    public function applyMaxDuration()
+    {
         if (! empty($this->addServiceAnalysis['max_duration_available'])) {
             $this->addServiceForm['duration_minutes'] = (int) $this->addServiceAnalysis['max_duration_available'];
             $this->analyzeAddServiceGap();
@@ -1084,13 +1329,20 @@ class StaffDashboard extends Component {
      * Confirm and execute the add-service operation.
      * If push is required and applyPush=false → opens the push preview modal.
      */
-    public function confirmAddService(bool $applyPush = false) {
-        if (! $this->addServiceToAppointmentId) return;
+    public function confirmAddService(bool $applyPush = false)
+    {
+        if (! $this->addServiceToAppointmentId) {
+            return;
+        }
         $anchor = Appointment::with(['parent', 'children', 'provider'])
             ->find($this->addServiceToAppointmentId);
-        if (! $anchor) return;
+        if (! $anchor) {
+            return;
+        }
 
-        if ($this->dashDenyOnAppointment('add_service', $anchor)) return;
+        if ($this->dashDenyOnAppointment('add_service', $anchor)) {
+            return;
+        }
 
         try {
             $bookingService = app(BookingService::class);
@@ -1110,7 +1362,7 @@ class StaffDashboard extends Component {
                 : __('dashboard.add_service.added');
 
             if (! empty($result['pushed_appointments'])) {
-                $message .= ' ' . __('dashboard.add_service.pushed_count', ['count' => count($result['pushed_appointments'])]);
+                $message .= ' '.__('dashboard.add_service.pushed_count', ['count' => count($result['pushed_appointments'])]);
             }
 
             $this->dispatch('notify', type: 'success', message: $message);
@@ -1123,7 +1375,7 @@ class StaffDashboard extends Component {
         } catch (\InvalidArgumentException $e) {
             $this->dispatch('notify', type: 'error', message: $e->getMessage());
         } catch (\Exception $e) {
-            Log::error('addServiceToBooking error: ' . $e->getMessage(), [
+            Log::error('addServiceToBooking error: '.$e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
             ]);
             $this->dispatch('notify', type: 'error', message: $e->getMessage());
@@ -1134,11 +1386,13 @@ class StaffDashboard extends Component {
      * Called by Alpine when the user clicks "Confirm Push & Add Service"
      * in the push preview modal.
      */
-    public function confirmPushAndAddService() {
+    public function confirmPushAndAddService()
+    {
         $this->confirmAddService(applyPush: true);
     }
 
-    public function cancelPushPreview() {
+    public function cancelPushPreview()
+    {
         $this->showPushPreviewModal = false;
         $this->pushPreviewPlan = [];
     }
@@ -1147,18 +1401,24 @@ class StaffDashboard extends Component {
      * Print the unified invoice for a given appointment (parent, child, or standalone).
      * Always resolves to the parent's invoice when the appointment is a child.
      */
-    public function printInvoiceForAppointment(int $appointmentId) {
-        if ($this->dashDeny('print_invoice')) return;
+    public function printInvoiceForAppointment(int $appointmentId)
+    {
+        if ($this->dashDeny('print_invoice')) {
+            return;
+        }
 
         $appointment = Appointment::with(['invoice', 'parent.invoice'])
             ->find($appointmentId);
-        if (! $appointment) return;
+        if (! $appointment) {
+            return;
+        }
 
         $invoiceOwner = $appointment->parent ?? $appointment;
         $invoice = $invoiceOwner->invoice;
 
         if (! $invoice || ! $invoice->status->isPaid()) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.print.not_paid'));
+
             return;
         }
 
@@ -1171,33 +1431,42 @@ class StaffDashboard extends Component {
      * - Blocked for cancelled appointments.
      * - For child appointments, the controller resolves to the parent's combined ticket.
      */
-    public function printAppointmentTicket(int $appointmentId) {
-        if ($this->dashDeny('print_ticket')) return;
+    public function printAppointmentTicket(int $appointmentId)
+    {
+        if ($this->dashDeny('print_ticket')) {
+            return;
+        }
 
         $appointment = Appointment::find($appointmentId);
-        if (! $appointment) return;
+        if (! $appointment) {
+            return;
+        }
 
         $cancelledStatuses = [
-            \App\Enum\AppointmentStatus::USER_CANCELLED,
-            \App\Enum\AppointmentStatus::ADMIN_CANCELLED,
+            AppointmentStatus::USER_CANCELLED,
+            AppointmentStatus::ADMIN_CANCELLED,
         ];
         if (in_array($appointment->status, $cancelledStatuses, true)) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.print.order_cancelled'));
+
             return;
         }
 
         $this->dispatch('printAppointment', appointmentId: $appointment->id);
     }
 
-    public function getTimelineData(): array {
+    public function getTimelineData(): array
+    {
         $allProviders = $this->allProviders;
+
         return $this->getTimelineDataFromProviders($allProviders);
     }
 
-    public function getTimelineDataFromProviders($allProviders): array {
+    public function getTimelineDataFromProviders($allProviders): array
+    {
         $salonSchedule = $this->dashboardService->getSalonScheduleForDate($this->selectedDate);
 
-        if (!$salonSchedule || !$salonSchedule->is_open) {
+        if (! $salonSchedule || ! $salonSchedule->is_open) {
             return [
                 'is_open' => false,
                 'providers' => [],
@@ -1212,8 +1481,8 @@ class StaffDashboard extends Component {
         $endTime = substr($salonSchedule->close_time, 0, 5);
 
         $providers = $allProviders
-            ->filter(fn($provider) => $this->isProviderSelectableForTimeline($provider))
-            ->filter(fn($provider) => in_array($provider['id'], $this->selectedProviderIds, true))
+            ->filter(fn ($provider) => $this->isProviderSelectableForTimeline($provider))
+            ->filter(fn ($provider) => in_array($provider['id'], $this->selectedProviderIds, true))
             ->values();
 
         // Provider scoping (single enforcement point — cannot be bypassed from
@@ -1226,7 +1495,7 @@ class StaffDashboard extends Component {
         $forceMine = $this->isCurrentUserProvider() && ! $this->dashCan('view_team');
         if (($this->onlyMine || $forceMine) && $this->currentProviderId()) {
             $providers = $allProviders
-                ->filter(fn($provider) => (int) $provider['id'] === $this->currentProviderId())
+                ->filter(fn ($provider) => (int) $provider['id'] === $this->currentProviderId())
                 ->values();
         }
 
@@ -1243,10 +1512,10 @@ class StaffDashboard extends Component {
         $appointmentsByProvider = [];
         foreach ($appointments as $apt) {
             $pid = $apt->provider_id;
-            if (!isset($appointmentsByProvider[$pid])) {
+            if (! isset($appointmentsByProvider[$pid])) {
                 $appointmentsByProvider[$pid] = [];
             }
-            $services = $apt->services_record->map(fn($s) => $s->service_name)->implode(', ');
+            $services = $apt->services_record->map(fn ($s) => $s->service_name)->implode(', ');
             $primaryServiceColor = $apt->services_record
                 ->sortBy('sequence_order')
                 ->first()?->service?->color_code;
@@ -1293,7 +1562,7 @@ class StaffDashboard extends Component {
         $timeOffsByProvider = [];
         foreach ($timeOffs as $to) {
             $pid = $to->user_id;
-            if (!isset($timeOffsByProvider[$pid])) {
+            if (! isset($timeOffsByProvider[$pid])) {
                 $timeOffsByProvider[$pid] = [];
             }
             $timeOffsByProvider[$pid][] = [
@@ -1315,50 +1584,60 @@ class StaffDashboard extends Component {
         ];
     }
 
-    public function getCalendarData(): array {
+    public function getCalendarData(): array
+    {
         return $this->dashboardService->getBookingCountsForMonth($this->calendarYear, $this->calendarMonth);
     }
 
-    public function getCategoriesProperty() {
+    public function getCategoriesProperty()
+    {
         return $this->dashboardService->getCategories();
     }
 
-    public function getServicesForCategory(int $categoryId) {
+    public function getServicesForCategory(int $categoryId)
+    {
         return $this->dashboardService->getServicesByCategory($categoryId)->toArray();
     }
 
-    public function getProvidersForService(int $serviceId) {
+    public function getProvidersForService(int $serviceId)
+    {
         return $this->dashboardService->getProvidersForService($serviceId)->toArray();
     }
 
-    public function searchCustomers() {
+    public function searchCustomers()
+    {
         return $this->dashboardService->getCustomers($this->customerSearch)->toArray();
     }
 
-    public function getReasonLeavesProperty() {
+    public function getReasonLeavesProperty()
+    {
         return $this->dashboardService->getReasonLeaves();
     }
 
-    private function syncSelectedProvidersForSelectedDate(): void {
+    private function syncSelectedProvidersForSelectedDate(): void
+    {
         $this->selectedProviderIds = $this->getSelectableProviderIdsFromProviders(
             $this->allProviders
         );
     }
 
-    private function getSelectableProviderIdsFromProviders($providers): array {
+    private function getSelectableProviderIdsFromProviders($providers): array
+    {
         return $providers
-            ->filter(fn($provider) => $this->isProviderSelectableForTimeline($provider))
+            ->filter(fn ($provider) => $this->isProviderSelectableForTimeline($provider))
             ->pluck('id')
-            ->map(fn($providerId) => (int) $providerId)
+            ->map(fn ($providerId) => (int) $providerId)
             ->values()
             ->all();
     }
 
-    private function isProviderSelectableForTimeline(array $provider): bool {
-        return (bool) ($provider['is_work_day'] ?? false) && !((bool) ($provider['has_day_off'] ?? false));
+    private function isProviderSelectableForTimeline(array $provider): bool
+    {
+        return (bool) ($provider['is_work_day'] ?? false) && ! ((bool) ($provider['has_day_off'] ?? false));
     }
 
-    private function resetBookingForm() {
+    private function resetBookingForm()
+    {
         $this->customerType = 'existing';
         $this->selectedCustomerId = null;
         $this->guestName = '';
@@ -1370,7 +1649,8 @@ class StaffDashboard extends Component {
         $this->addEmptyBookingService();
     }
 
-    private function resetTimeOffForm() {
+    private function resetTimeOffForm()
+    {
         $this->timeOffProviderId = null;
         $this->timeOffType = '1';
         $this->timeOffStartDate = '';
@@ -1386,9 +1666,11 @@ class StaffDashboard extends Component {
      * Recompute today's attendance snapshot. Called at page load (mount) and
      * after a check-in/out — never on the 5s poll, to keep request volume low.
      */
-    private function refreshAttendanceState(): void {
+    private function refreshAttendanceState(): void
+    {
         if (! $this->isCurrentUserProvider()) {
             $this->attendanceState = [];
+
             return;
         }
 
@@ -1399,16 +1681,19 @@ class StaffDashboard extends Component {
      * Open the check-in confirmation modal: shows the current time and the
      * provider's last checkout time before they confirm.
      */
-    public function openCheckInModal(): void {
-        if (! $this->isCurrentUserProvider()) return;
+    public function openCheckInModal(): void
+    {
+        if (! $this->isCurrentUserProvider()) {
+            return;
+        }
 
         $svc = app(AttendanceService::class);
         $lastOut = $svc->lastCheckOut($this->dashUser());
 
         $this->checkInPreview = [
-            'now'            => now()->format('H:i'),
-            'now_date'       => now()->isoFormat('ddd, D MMM YYYY'),
-            'last_out'       => $lastOut?->check_out_at?->format('Y-m-d H:i'),
+            'now' => now()->format('H:i'),
+            'now_date' => now()->isoFormat('ddd, D MMM YYYY'),
+            'last_out' => $lastOut?->check_out_at?->format('Y-m-d H:i'),
             'last_out_human' => $lastOut?->check_out_at?->diffForHumans(),
         ];
         $this->showCheckInModal = true;
@@ -1418,72 +1703,100 @@ class StaffDashboard extends Component {
      * Open the check-out confirmation modal: shows the open session's check-in
      * time and the resulting shift duration before they confirm.
      */
-    public function openCheckOutModal(): void {
-        if (! $this->isCurrentUserProvider()) return;
+    public function openCheckOutModal(): void
+    {
+        if (! $this->isCurrentUserProvider()) {
+            return;
+        }
 
         $svc = app(AttendanceService::class);
         $open = $svc->openSession($this->dashUser());
 
         if (! $open) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.attendance.no_open_session'));
+
             return;
         }
 
         $minutes = (int) $open->check_in_at->diffInMinutes(now());
 
         $this->checkOutPreview = [
-            'check_in'      => $open->check_in_at->format('H:i'),
+            'check_in' => $open->check_in_at->format('H:i'),
             'check_in_date' => $open->check_in_at->isoFormat('ddd, D MMM YYYY'),
-            'now'           => now()->format('H:i'),
-            'duration'      => $this->formatAttendanceMinutes($minutes),
+            'now' => now()->format('H:i'),
+            'duration' => $this->formatAttendanceMinutes($minutes),
         ];
         $this->showCheckOutModal = true;
     }
 
-    public function closeCheckInModal(): void  { $this->showCheckInModal = false; }
-    public function closeCheckOutModal(): void { $this->showCheckOutModal = false; }
+    public function closeCheckInModal(): void
+    {
+        $this->showCheckInModal = false;
+    }
+
+    public function closeCheckOutModal(): void
+    {
+        $this->showCheckOutModal = false;
+    }
 
     /** Confirm buttons inside the modals. */
-    public function confirmCheckIn(): void  { $this->checkIn();  $this->showCheckInModal = false; }
-    public function confirmCheckOut(): void { $this->checkOut(); $this->showCheckOutModal = false; }
+    public function confirmCheckIn(): void
+    {
+        $this->checkIn();
+        $this->showCheckInModal = false;
+    }
+
+    public function confirmCheckOut(): void
+    {
+        $this->checkOut();
+        $this->showCheckOutModal = false;
+    }
 
     /**
      * Open the attendance history popup (last 30 sessions, newest first).
      */
-    public function openAttendanceHistoryModal(): void {
-        if (! $this->isCurrentUserProvider()) return;
+    public function openAttendanceHistoryModal(): void
+    {
+        if (! $this->isCurrentUserProvider()) {
+            return;
+        }
 
         $this->attendanceHistory = app(AttendanceService::class)
             ->recentSessions($this->dashUser(), 30)
             ->map(fn ($s) => [
-                'date'     => $s->work_date?->format('Y-m-d'),
-                'day'      => $s->work_date?->isoFormat('ddd'),
-                'in'       => $s->check_in_at?->format('H:i'),
-                'out'      => $s->check_out_at?->format('H:i'),
+                'date' => $s->work_date?->format('Y-m-d'),
+                'day' => $s->work_date?->isoFormat('ddd'),
+                'in' => $s->check_in_at?->format('H:i'),
+                'out' => $s->check_out_at?->format('H:i'),
                 'duration' => $s->duration_minutes !== null ? $this->formatAttendanceMinutes($s->duration_minutes) : null,
-                'open'     => $s->check_out_at === null,
+                'open' => $s->check_out_at === null,
             ])
             ->all();
 
         $this->showAttendanceHistoryModal = true;
     }
 
-    public function closeAttendanceHistoryModal(): void {
+    public function closeAttendanceHistoryModal(): void
+    {
         $this->showAttendanceHistoryModal = false;
     }
 
-    private function formatAttendanceMinutes(int $minutes): string {
+    private function formatAttendanceMinutes(int $minutes): string
+    {
         $h = intdiv($minutes, 60);
         $m = $minutes % 60;
 
-        return $h > 0 ? ($h . 'h ' . $m . 'm') : ($m . 'm');
+        return $h > 0 ? ($h.'h '.$m.'m') : ($m.'m');
     }
 
     /**
      * Open a new attendance session for the logged-in provider.
      */
-    public function checkIn(): void {
-        if (! $this->isCurrentUserProvider()) return;
+    public function checkIn(): void
+    {
+        if (! $this->isCurrentUserProvider()) {
+            return;
+        }
 
         try {
             $result = app(AttendanceService::class)->checkIn($this->dashUser());
@@ -1502,8 +1815,11 @@ class StaffDashboard extends Component {
     /**
      * Close the provider's most recent open attendance session.
      */
-    public function checkOut(): void {
-        if (! $this->isCurrentUserProvider()) return;
+    public function checkOut(): void
+    {
+        if (! $this->isCurrentUserProvider()) {
+            return;
+        }
 
         try {
             app(AttendanceService::class)->checkOut($this->dashUser());
@@ -1520,15 +1836,18 @@ class StaffDashboard extends Component {
     /**
      * Post a new message to the board. Admin posts are pinned automatically.
      */
-    public function addMessage() {
-        if ($this->dashDeny('post_message')) return;
+    public function addMessage()
+    {
+        if ($this->dashDeny('post_message')) {
+            return;
+        }
 
         try {
             $this->messageService->add(auth()->user(), $this->newMessageBody, $this->selectedDate, $this->newMessageExpiry);
             $this->newMessageBody = '';
             $this->newMessageExpiry = 'never';
             $this->dispatch('notify', type: 'success', message: __('dashboard.messages.posted'));
-        } catch (\Illuminate\Validation\ValidationException $e) {
+        } catch (ValidationException $e) {
             $this->dispatch('notify', type: 'error', message: collect($e->errors())->flatten()->first());
         } catch (\Throwable $e) {
             $this->dispatch('notify', type: 'error', message: $e->getMessage());
@@ -1538,7 +1857,8 @@ class StaffDashboard extends Component {
     /**
      * Soft-delete a message (history preserved). Admin: any; member: own only.
      */
-    public function deleteMessage(int $messageId) {
+    public function deleteMessage(int $messageId)
+    {
         $deleted = $this->messageService->delete($messageId, auth()->user());
 
         if ($deleted) {
@@ -1552,24 +1872,26 @@ class StaffDashboard extends Component {
      * Active messages for the selected day, formatted for the sidebar board.
      * Changing the calendar day reloads this list automatically (Livewire render).
      */
-    private function getMessagesForView(): array {
+    private function getMessagesForView(): array
+    {
         $actor = auth()->user();
 
         return $this->messageService->listActive($this->selectedDate)->map(function (DashboardMessage $message) use ($actor) {
             $authorName = $message->user?->full_name ?: __('dashboard.messages.unknown_author');
 
             return [
-                'id'           => $message->id,
-                'body'         => $message->body,
-                'author_name'  => $authorName,
-                'is_pinned'    => $message->is_pinned,
+                'id' => $message->id,
+                'body' => $message->body,
+                'author_name' => $authorName,
+                'is_pinned' => $message->is_pinned,
                 'created_human' => $message->created_at?->diffForHumans() ?? '',
-                'can_delete'   => $actor ? $this->messageService->canDelete($message, $actor) : false,
+                'can_delete' => $actor ? $this->messageService->canDelete($message, $actor) : false,
             ];
         })->all();
     }
 
-    public function render() {
+    public function render()
+    {
         $allProviders = $this->allProviders;
         $this->selectedProviderIds = array_values(array_intersect(
             $this->selectedProviderIds,
@@ -1591,14 +1913,16 @@ class StaffDashboard extends Component {
 
     // getActiveLanguages() provided by ProvidesDashboardChrome trait
 
-    private function getPreloadedData(): array {
-        return cache()->remember('dashboard_preloaded_data_' . app()->getLocale(), 60, function () {
+    private function getPreloadedData(): array
+    {
+        return cache()->remember('dashboard_preloaded_data_'.app()->getLocale(), 60, function () {
             $serviceData = $this->dashboardService->getAllServicesGrouped();
+
             return [
                 'categories' => $serviceData['categories'],
-                'services'   => $serviceData['services'],
-                'customers'  => $this->dashboardService->getAllCustomers(),
-                'colors'     => $this->dashboardService->getAllColors(),
+                'services' => $serviceData['services'],
+                'customers' => $this->dashboardService->getAllCustomers(),
+                'colors' => $this->dashboardService->getAllColors(),
             ];
         });
     }

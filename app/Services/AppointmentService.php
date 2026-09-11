@@ -30,6 +30,10 @@ class AppointmentService
                     'provider:id,first_name,last_name,email,phone,avatar_url',
                     'services',
                     'services_record',
+                    // Live reminder only — AppointmentResource renders the
+                    // booking screen's toggle from it, and the relation is
+                    // already narrowed to the one active row.
+                    'activeReminder',
                 ]);
 
             if (!empty($filters['status']) && $filters['status'] !== 'ALL') {
@@ -107,6 +111,7 @@ class AppointmentService
                 'services:id,name,description,price,discount_price,duration_minutes,image_url,color_code',
                 'services.category:id,name,description',
                 'services_record',
+                'activeReminder',
             ])->findOrFail($appointmentId);
 
 
@@ -191,12 +196,16 @@ class AppointmentService
                 );
             }
 
-            if ($appointment->start_time <= now()) {
-                throw new InvalidArgumentException(
-                    'لا يمكن إلغاء الحجز بعد بدء الموعد'
-                );
-            }
-
+            // Deliberately NO "too late to cancel" rule here.
+            //
+            // This endpoint used to refuse once start_time had passed while
+            // /api/bookings/{id}/cancel allowed it, so the customer picked their
+            // own policy by picking an endpoint (BOOK-08). The two are unified on
+            // the permissive side: a customer who is not coming should be able to
+            // say so, and a late cancellation frees the chair and leaves an
+            // honest record instead of a booking that silently rots into a
+            // no-show. Repeat cancellers are handled by watching the pattern —
+            // see CancellationMonitor — rather than by blocking the button.
             $appointment->cancel($reason);
 
             return $appointment;

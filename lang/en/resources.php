@@ -192,6 +192,15 @@ return [
     ],
 
     'appointment' => [
+        'reminders' => 'Appointment reminders',
+        'no_reminders' => 'The customer has not set a reminder for this booking.',
+        'reminder_lead' => ':hours h before',
+        'reminder_no_channel' => 'no channel enabled',
+        'reminder_status' => [
+            'pending' => 'Scheduled',
+            'sent' => 'Sent',
+            'cancelled' => 'Cancelled',
+        ],
         'label' => 'Appointment',
         'plural_label' => 'Appointments',
         'navigation_label' => 'Appointments',

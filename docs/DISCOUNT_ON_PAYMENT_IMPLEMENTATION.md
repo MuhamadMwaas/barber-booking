@@ -2,7 +2,9 @@
 
 # خصم الدفع على الفاتورة — وثيقة هندسية عميقة للتعديل
 
-> **التاريخ:** 2026-06-08
+> **التاريخ الأصلي:** 2026-06-08
+>
+> **تحديث MON-05:** 2026-09-10 — صار `finalizeAppointmentPayment()` الكاتب الوحيد للدفع؛ الأجزاء التاريخية المتعلقة بالمسارات القديمة استُبدلت أدناه.
 > **النطاق:** توحيد منطق الخصم عند الدفع عبر **StaffDashboard** و **Filament** و **طبقة الخدمات** و **موديل الفاتورة** و **قوالب الطباعة**، بحيث يظهر الخصم على الإيصال المطبوع بشكل صحيح ومتسق، بلا منطق متضارب.
 
 ---
@@ -149,14 +151,10 @@ public function applyFinalAmount(Invoice $invoice, ?float $finalGross = null): I
 }
 ```
 
-**(ب) تنظيف `createInvoice()` (private):** حُذفت كتلة الخصم القديمة التي كانت تكتب في `invoice_data` وتقارن ضد `appointment->total_amount` (الذي يدهسه المتصل أولًا → الخصم دائمًا 0 = خطأ كامن). الخصم الآن في العمود عبر `applyFinalAmount`.
-
-**(ج) `createInvoiceFromAppointment()`:** بعد إنشاء البنود بالأسعار الكاملة:
-```php
-$this->createInvoiceItems($invoice, $appointment);
-$invoice = $this->applyFinalAmount($invoice, $amountPaid); // ← يسجّل الخصم ويوفّق المجاميع
-$this->updateAppointmentPaymentStatus($appointment, $paymentType);
-```
+**(ب) حدود الخدمة بعد MON-05:** حُذفت `createInvoiceFromAppointment()` وكل
+دالة تُصدر دفعاً من `InvoiceService`. بقي `applyFinalAmount()` عملية حسابية داخلية
+يستدعيها الكاتب الموحد بعد إعادة بناء الفاتورة، فلا يمكن لمسار قديم أن يطبّق
+خصماً ثم ينهي appointment واحداً فقط.
 
 ---
 
@@ -164,26 +162,20 @@ $this->updateAppointmentPaymentStatus($appointment, $paymentType);
 
 **(أ) خاصية جديدة** `public float $paymentBaseline = 0;`
 
-**(ب) `openPaymentModal()`** يحفظ المبلغ المقترح:
+**(ب) `openPaymentModal()`** يحفظ مجموع الفاتورة الموحدة:
 ```php
-$this->paymentAmount   = (float) $appointment->total_amount;
-$this->paymentBaseline = (float) $appointment->total_amount; // مرجع لكشف الخصم الحقيقي
+$groupTotal = (float) $appointment->linkedGroup()->sum('total_amount');
+$this->paymentAmount = $this->paymentBaseline = $groupTotal;
 ```
 
-**(ج) `processPayment()` — قلب التعديل:** استُبدلت كتلة دهس `total_amount` بـ:
+**(ج) `processPayment()` — adapter رفيع:**
 ```php
-$invoice = $invoiceService->rebuildAggregatedInvoice($invoiceOwner);
-
 $staffChangedAmount = abs($this->paymentAmount - $this->paymentBaseline) >= 0.005;
-$invoice = $invoiceService->applyFinalAmount(
-    $invoice,
-    $staffChangedAmount ? (float) $this->paymentAmount : null  // null = الكامل، لا خصم
-);
-// ...
-$finalizedInvoice = $finalizationService->finalizeDraftInvoice(
-    $invoice, $paymentTypeValue,
-    (float) $invoice->total_amount,  // ← الإجمالي الموفَّق (بعد الخصم) وليس المُدخل الخام
-    null, true
+$finalizedInvoice = $finalizationService->finalizeAppointmentPayment(
+    appointment: $appointment,
+    paymentMethod: $this->paymentType, // cash/card
+    finalAmount: $staffChangedAmount ? $this->paymentAmount : null,
+    source: 'staff_dashboard',
 );
 ```
 **فائدة `paymentBaseline`:** إن لم يغيّر الموظف المبلغ نمرّر `null` (= ادفع كامل مجموع الأصناف). هذا يمنع ظهور خصم وهمي على الفواتير المجمّعة (حيث المبلغ المقترح كان للأب فقط)، ويصلح أيضًا نقص تحصيل قديمًا.
@@ -192,23 +184,19 @@ $finalizedInvoice = $finalizationService->finalizeDraftInvoice(
 
 ### 3.5 `app/Filament/Resources/Appointments/Tables/AppointmentsTable.php` (المسار 2)
 
-داخل ترانزاكشن الدفع، بعد تحويل DRAFT→PENDING:
+لم يعد يحتوي transaction مالية أو ينشئ Payment بنفسه:
 ```php
-// Step 2b: نفس مصدر الحقيقة
-$invoice = $invoiceService->applyFinalAmount($invoice, (float) $data['amount_paid']);
-// Step 4: الدفع على الإجمالي الموفَّق (يتجنّب "exceeds remaining" عند القصّ)
-$payment = $invoicePaymentService->createFromInvoice(
-    invoice: $invoice, amount: (float) $invoice->total_amount, ...
+app(InvoiceFinalizationService::class)->finalizeAppointmentPayment(
+    appointment: $record,
+    paymentMethod: (int) $data['payment_method_id'],
+    finalAmount: (float) $data['amount_paid'],
+    source: 'filament_appointments',
 );
-// Step 4b: ضمان رقم فاتورة تسلسلي عند PAID (كان مفقودًا في هذا المسار)
-$invoice->refresh();
-if ($invoice->status === InvoiceStatus::PAID && empty($invoice->invoice_number)) {
-    $invoice->update(['invoice_number' => Invoice::generateInvoiceNumber()]);
-}
 ```
-**ملاحظة:** `InvoicePaymentService` كان يعامل الدفع الأقل كـ **PARTIALLY_PAID** (وليس خصمًا) ولا يولّد رقم فاتورة. الآن بعد `applyFinalAmount` يصبح `amount == total` → **PAID كامل** مع خصم مسجّل ورقم تسلسلي.
+`InvoicePaymentService` حُذفت، فلا يعود الدفع الأقل `PARTIALLY_PAID` في هذا المسار.
 
-> **المسار 3** (Providers RelationManager) موحَّد تلقائيًا لأنه يستدعي `createInvoiceFromAppointment()` المعدّلة.
+> **المسار 3** (Providers RelationManager) يستدعي نفس العملية بقيمة
+> `source='provider_appointments'`، وخياري `cash`/`card` فقط.
 
 ---
 
@@ -267,11 +255,12 @@ order 7  two_column  Summe/Total                       → invoice.total
 
 | المسار | الواجهة | قبل | بعد |
 |--------|---------|-----|-----|
-| 1 | StaffDashboard | يدهس `total_amount` فقط (مكسور) | `applyFinalAmount()` |
-| 2 | Filament AppointmentsTable | دفع أقل = PARTIALLY_PAID، بلا رقم فاتورة | `applyFinalAmount()` → PAID كامل + رقم |
-| 3 | Providers RelationManager | خصم في JSON ودائمًا 0 (خطأ) | `createInvoiceFromAppointment()` → `applyFinalAmount()` |
+| 1 | StaffDashboard | يدهس `total_amount` فقط (مكسور) | adapter إلى `finalizeAppointmentPayment()` |
+| 2 | Filament AppointmentsTable | دفع أقل = PARTIALLY_PAID، بلا رقم فاتورة | adapter إلى العملية نفسها مع PaymentMethod id |
+| 3 | Providers RelationManager | خصم في JSON ودائمًا 0 (خطأ) | adapter إلى العملية نفسها مع cash/card |
 
-الثلاثة الآن: عمود `discount_amount` واحد + ضريبة عكسية واحدة + ثابت `subtotal + tax == total`. والطباعة موحّدة لأن كل المسارات تطبع عبر نفس القالب/الحقول الديناميكية.
+الثلاثة الآن لا تملك منطقاً مالياً. الكاتب الواحد يعيد البناء ويطبّق
+`discount_amount` ويصدر Invoice/Payment ويكمل المجموعة كلها ذرياً.
 
 ---
 
@@ -282,11 +271,12 @@ order 7  two_column  Summe/Total                       → invoice.total
 2) openPaymentModal() → paymentAmount = paymentBaseline = total المقترح
 3) (اختياري) الموظف يخفّض المبلغ (40 → 30) = خصم
 4) processPayment():
-     a. rebuildAggregatedInvoice()   → بنود مجمّعة، itemsGross = 40
+     a. finalizeAppointmentPayment(appointment, cash/card, 30 أو null)
+        وداخلها: rebuildAggregatedInvoice() → بنود مجمّعة، itemsGross = 40
      b. applyFinalAmount(invoice, 30 أو null إن لم يُغيَّر)
             → discount=10, subtotal=25.21, tax=4.79, total=30
-     c. finalizeDraftInvoice(invoice, type, total=30)
-            → رقم فاتورة + PAID + سجل Payment + تحديث كل الحجوزات المرتبطة
+     c. رقم فاتورة + PAID + Payment full بربط method + تحديث كل المجموعة
+        + tse_enabled=false دون اتصال Fiskaly
      d. dispatch('printInvoice') → نافذة الطباعة
 5) الإيصال يطبع: Artikel 40 / Rabatt -10 / Netto 25.21 / MwSt 4.79 / Summe 30
 ```
@@ -298,7 +288,7 @@ order 7  two_column  Summe/Total                       → invoice.total
 | الحالة | السلوك |
 |--------|--------|
 | لا خصم (دفع كامل) | `discount_amount=0` → سطرا الخصم يختفيان (الشكل القديم نظيف) |
-| دفع زائد عن الإجمالي | يُقصّ إلى الإجمالي، `discount=0` (لا خصم سالب) |
+| دفع زائد عن الإجمالي | يُرفض وتُلغى transaction؛ لا يُفسر كخصم سالب |
 | فاتورة مجمّعة + مبلغ غير مُغيَّر | `null` → تحصيل كامل المجموع المجمّع (يمنع خصمًا وهميًا) |
 | إعادة طباعة (COPY) | الأرقام محفوظة بالعمود → تبقى صحيحة |
 | تعديل بنود لاحقًا | `calculateTotals()` الواعي يحافظ على الخصم |
@@ -332,8 +322,11 @@ php artisan db:seed --class=Database\\Seeders\\InvoiceTemplateSeeder
 
 ---
 
-## 9. ديون تقنية لوحظت (خارج النطاق، لم تُغيَّر)
+## 9. حالة الديون السابقة بعد MON-05
 
-- `InvoiceService::finalizeDraftInvoice()` (البسيطة) تبدو غير مستخدمة؛ المستخدم فعليًا هو `InvoiceFinalizationService::finalizeDraftInvoice()`.
-- `applyTSESignature()` في `InvoiceFinalizationService` ما زال placeholder (تكامل Fiskaly غير منفّذ بعد).
-- المسار 2/3 لا يستدعيان `rebuildAggregatedInvoice()`؛ مناسب للمواعيد المستقلة، وملاحظ للحجوزات المجمّعة في Filament.
+- حُذفت `InvoiceService::finalizeDraftInvoice()`.
+- حُذفت `InvoicePaymentService` و`createInvoiceFromAppointment()`.
+- كل المسارات تستدعي `rebuildAggregatedInvoice()` عبر الكاتب الموحد، بما فيها
+  المواعيد المجمعة في Filament.
+- TSE متوقف صراحةً ولا توجد محاولة placeholder أو اتصال Fiskaly أثناء الدفع؛
+  تفعيله مستقبلاً مشروع مستقل قبل production.

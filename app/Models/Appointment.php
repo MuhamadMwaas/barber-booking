@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enum\AppointmentStatus;
+use App\Services\CancellationMonitor;
 use App\Enum\BookingSource;
 use App\Enum\InvoiceStatus;
 use App\Enum\PaymentStatus;
@@ -98,6 +99,46 @@ class Appointment extends Model
             $reminderService->cancelRemindersForAppointment($appointment);
 
         });
+
+        /*
+         * Retire the live reminder the moment the booking is cancelled.
+         *
+         * Hooked on the STATUS COLUMN rather than added inside cancel(), because
+         * cancel() is only the customer's path: staff write ADMIN_CANCELLED
+         * straight onto the model from the dashboard and Filament, and those
+         * paths would each have needed the same line. Watching the column covers
+         * every writer, present and future — the same reasoning that keeps the
+         * "provider is busy" rule in one scope instead of inline conditions.
+         *
+         * Nothing wrong was ever DELIVERED without this: SendAppointmentReminderJob
+         * already refuses to fire for a cancelled appointment. What it fixes is
+         * the record — the row used to sit at `pending` forever, and now that the
+         * API exposes the live reminder, a cancelled booking would report a
+         * reminder the customer can no longer turn off.
+         *
+         * Failures are logged, never rethrown: a reminder outliving its booking
+         * is untidy, a cancellation that fails to save is a lost slot.
+         */
+        static::updated(function ($appointment) {
+            if (! $appointment->wasChanged('status')) {
+                return;
+            }
+
+            $status = $appointment->status?->value ?? $appointment->status;
+
+            if (! in_array($status, AppointmentStatus::getCancelledStatuses(), true)) {
+                return;
+            }
+
+            try {
+                app(AppointmentReminderService::class)->cancelRemindersForAppointment($appointment);
+            } catch (\Throwable $e) {
+                Log::error('Failed to cancel reminders for a cancelled appointment', [
+                    'appointment_id' => $appointment->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        });
     }
 
 
@@ -128,6 +169,20 @@ class Appointment extends Model
     public function reminders(): HasMany
     {
         return $this->hasMany(AppointmentReminder::class, 'appointment_id', 'id');
+    }
+
+    /**
+     * The one reminder still waiting to fire, if any.
+     *
+     * HasOne rather than HasMany because the unique index
+     * `appointment_reminders_one_active` guarantees there is at most one. Exposed
+     * as its own relation so the API can eager-load just the live reminder
+     * instead of pulling the whole cancelled/sent history on every listing.
+     */
+    public function activeReminder(): HasOne
+    {
+        return $this->hasOne(AppointmentReminder::class, 'appointment_id', 'id')
+            ->whereNotNull('active_slot');
     }
 
     /**
@@ -193,15 +248,32 @@ class Appointment extends Model
     }
 
     /**
-     * Cancel the appointment
+     * Cancel the appointment on the CUSTOMER's behalf.
+     *
+     * Hardcodes USER_CANCELLED, so this is the one place a self-cancellation
+     * happens — staff cancellations write ADMIN_CANCELLED directly and never come
+     * through here. That makes it the natural place to notice a customer who
+     * keeps cancelling: both customer-facing cancel endpoints funnel into it.
+     *
+     * The monitor is called after a successful write and swallows its own errors,
+     * so alerting can never undo the cancellation.
      */
     public function cancel(?string $reason = null): bool
     {
-        return $this->update([
+        $cancelled = $this->update([
             'status' => AppointmentStatus::USER_CANCELLED,
             'cancellation_reason' => $reason,
             'cancelled_at' => now(),
         ]);
+
+        if ($cancelled) {
+            // The reminder is retired by the `updated` hook in boot(), which
+            // watches the status column itself — so staff cancellations that
+            // write ADMIN_CANCELLED directly are covered by the same rule.
+            app(CancellationMonitor::class)->recordCustomerCancellation($this);
+        }
+
+        return $cancelled;
     }
 
 
@@ -364,6 +436,47 @@ class Appointment extends Model
     public function scopeForProvider(Builder $query, int $providerId): Builder
     {
         return $query->where('provider_id', $providerId);
+    }
+
+    /**
+     * THE single definition of "this appointment occupies the provider's time".
+     *
+     * Every layer that asks "is the provider busy?" MUST go through this scope:
+     * the availability layer (what the customer is offered), the booking layer
+     * (what the server accepts), and the staff dashboard. Before this existed
+     * the availability layer and BookingValidationService carried two different
+     * hand-written conditions, so a slot could be hidden with nothing booked on
+     * it, or offered and then rejected on submit (BOOK-01).
+     *
+     *  - created_status = 1 → the booking is real. Since there is no online
+     *    payment, every booking is created confirmed, so this is effectively
+     *    always true today; it stays in the definition so a future deposit /
+     *    online-payment flow only has to flip the column.
+     *  - PENDING blocks: the service has not happened yet.
+     *  - COMPLETED blocks: a booking marked done early still owns the rest of
+     *    its scheduled window.
+     *  - Cancelled / no-show do NOT block: the chair is genuinely free.
+     */
+    public function scopeBlocksProviderTime(Builder $query): Builder
+    {
+        return $query->where('created_status', 1)
+            ->whereIn('status', [
+                AppointmentStatus::PENDING->value,
+                AppointmentStatus::COMPLETED->value,
+            ]);
+    }
+
+    /**
+     * Half-open interval overlap: [start, end) vs [$startTime, $endTime).
+     *
+     * Strict < and > are deliberate — back-to-back bookings (10:00-10:30 then
+     * 10:30-11:00) do not overlap. Paired with scopeBlocksProviderTime() this
+     * is the whole conflict rule.
+     */
+    public function scopeOverlapping(Builder $query, Carbon $startTime, Carbon $endTime): Builder
+    {
+        return $query->where('start_time', '<', $endTime)
+            ->where('end_time', '>', $startTime);
     }
 
     /**

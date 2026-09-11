@@ -3,11 +3,12 @@
 namespace App\Http\Requests;
 
 use App\Enum\RegistrationMethod;
+use App\Rules\PasswordRequirements;
+use App\Rules\PhoneNumber;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Rules\Password;
 
 class RegisterRequest extends FormRequest
 {
@@ -42,24 +43,30 @@ class RegisterRequest extends FormRequest
                 'nullable',
                 'string',
                 'max:255',
+                // AUTH-07: the number entering the system is the one every later
+                // OTP is texted to. Checking it here is cheaper than discovering
+                // at delivery time that it was never a number.
+                new PhoneNumber,
                 'unique:users,phone',
             ],
             'password' => [
                 'required',
                 'string',
-                'min:8',
                 'confirmed',
-                Password::min(8)
-                    ->mixedCase()->letters()->numbers()->symbols()
+                new PasswordRequirements,
             ],
         ];
     }
 
     protected function prepareForValidation(): void
     {
-        if ($this->has('registration_method')) {
+        // See LoginRequest::prepareForValidation() — an array here casts to string
+        // and turns an unauthenticated request into a 500 instead of a 422.
+        $method = $this->input('registration_method');
+
+        if (is_string($method)) {
             $this->merge([
-                'registration_method' => strtolower((string) $this->input('registration_method')),
+                'registration_method' => strtolower($method),
             ]);
         }
 

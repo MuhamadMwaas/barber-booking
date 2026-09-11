@@ -22,11 +22,32 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * Denied users are redirected to the Staff Dashboard instead of being shown a
  * dead end, unless they cannot access that either.
+ *
+ * ── Why LOGOUT is exempt ─────────────────────────────────────────────────────
+ *
+ * The same reasoning that keeps this check out of canAccessPanel() applies to
+ * signing OUT, and was originally missed. The Staff Dashboard is not a Filament
+ * panel and has no logout route of its own — its logout button posts to the
+ * PANEL's `filament.admin.auth.logout`, which lives inside `authMiddleware` and
+ * therefore ran through this class. For a provider whose `view_admin` had been
+ * revoked the branch below matched, the request was redirected back to the
+ * dashboard, and Filament's logout handler NEVER RAN: the session stayed alive
+ * and the logout button silently did nothing. Revoking a "may view /admin"
+ * permission must never be able to trap someone in a session they cannot end.
+ *
+ * The pattern is matched (not the literal `filament.admin.*`) so a second panel
+ * cannot reintroduce the trap. Ending a session is never something a *viewing*
+ * permission may gate, on any panel.
  */
 class EnsureCanViewAdminPanel
 {
     public function handle(Request $request, Closure $next): Response
     {
+        // Signing out is always allowed — see the class docblock.
+        if ($request->routeIs('filament.*.auth.logout')) {
+            return $next($request);
+        }
+
         $user = filament()->auth()->user() ?? $request->user();
 
         if (! $user) {

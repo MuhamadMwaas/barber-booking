@@ -192,18 +192,60 @@
                     </div>
                 @endif
 
-                {{-- Logout --}}
-                <form method="POST" action="{{ route('filament.admin.auth.logout') }}" class="p-2">
-                    @csrf
-                    <button type="submit"
-                        class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-50 hover:text-rose-600 transition">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                        </svg>
-                        {{ __('dashboard.attendance.logout') }}
-                    </button>
-                </form>
+                {{-- Logout.
+
+                     Posts to the dashboard's OWN logout (staff.dashboard.logout),
+                     not the Filament panel's. The panel's logout sits inside its
+                     `authMiddleware`, so once EnsureCanViewAdminPanel was added
+                     there, revoking a provider's StaffDashboard:view_admin made
+                     this button silently do nothing: the request was redirected
+                     back to the dashboard before Filament's logout handler ran
+                     and the session survived. Ending a session must never be
+                     gated by a permission about *viewing* something.
+
+                     When the provider is still clocked in we ask rather than
+                     decide: stepping out for ten minutes and going home both look
+                     like pressing logout, and only they know which it is. --}}
+                <div class="p-2" x-data="{ confirmingLogout: false }">
+                    <form method="POST" action="{{ route('staff.dashboard.logout') }}">
+                        @csrf
+
+                        <template x-if="!confirmingLogout">
+                            <button type="{{ $isProvider && $attStatus === 'open' ? 'button' : 'submit' }}"
+                                @if ($isProvider && $attStatus === 'open') @click="confirmingLogout = true" @endif
+                                class="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-50 hover:text-rose-600 transition">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                </svg>
+                                {{ __('dashboard.attendance.logout') }}
+                            </button>
+                        </template>
+
+                        <template x-if="confirmingLogout">
+                            <div class="space-y-2">
+                                <div class="px-1">
+                                    <p class="text-xs font-semibold text-gray-700">
+                                        {{ __('staff_auth.logout_confirm_title') }}</p>
+                                    <p class="text-xs text-gray-500 mt-0.5">
+                                        {{ __('staff_auth.logout_confirm_body') }}</p>
+                                </div>
+                                <button type="submit" name="check_out" value="1"
+                                    class="w-full px-3 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition">
+                                    {{ __('staff_auth.logout_with_check_out') }}
+                                </button>
+                                <button type="submit"
+                                    class="w-full px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-rose-600 rounded-lg transition">
+                                    {{ __('staff_auth.logout_only') }}
+                                </button>
+                                <button type="button" @click="confirmingLogout = false"
+                                    class="w-full px-3 py-2 text-xs text-gray-400 hover:text-gray-600 transition">
+                                    {{ __('staff_auth.cancel') }}
+                                </button>
+                            </div>
+                        </template>
+                    </form>
+                </div>
             </div>
         </div>
     </div>

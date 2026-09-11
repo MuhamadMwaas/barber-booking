@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\DB;
 
 class Payment extends Model
 {
@@ -149,43 +150,60 @@ class Payment extends Model
         return $this->update(['status' => PaymentStatus::REFUNDED]);
     }
 
+    /**
+     * سجّل استرجاعاً كسجل دفع مقابل، وحدِّث حالة السجل الأصلي.
+     *
+     * ملفوفة بمعاملة: الاسترجاع وتحديث حالة الأصل تغييران يجب أن يقعا معاً
+     * أو لا يقع أيٌّ منهما — وإلا بقي سجل استرجاع بلا أصلٍ معلَّم، أو أصلٌ
+     * معلَّم مسترجَعاً بلا سجل يقابله. وهي أيضاً شرطُ حجز رقم الدفع ذرّياً:
+     * `DocumentNumberGenerator` يرفض النداء خارج معاملة، لأن القفل على
+     * العدّاد يُحرَّر قبل استهلاك الرقم فلا يحجز شيئاً (`MON-03`).
+     */
     public function refund(?float $amount = null): self
     {
         $refundAmount = $amount ?? $this->amount;
 
-        $refund = self::create([
-            'payment_method_id' => $this->payment_method_id,
-            'payment_number' => self::generatePaymentNumber(),
-            'amount' => $refundAmount,
-            'subtotal' => $refundAmount,
-            'status' => PaymentStatus::REFUNDED,
-            'tax_amount' => 0,
-            'type' => self::TYPE_REFUND,
-            'paymentable_id' => $this->paymentable_id,
-            'paymentable_type' => $this->paymentable_type,
-            'payment_metadata' => [
-                'original_payment_id' => $this->id,
-                'refund_date' => now()->toDateTimeString(),
-            ],
-        ]);
+        return DB::transaction(function () use ($refundAmount) {
+            $refund = self::create([
+                'payment_method_id' => $this->payment_method_id,
+                'payment_number' => self::generatePaymentNumber(),
+                'amount' => $refundAmount,
+                'subtotal' => $refundAmount,
+                'status' => PaymentStatus::REFUNDED,
+                'tax_amount' => 0,
+                'type' => self::TYPE_REFUND,
+                'paymentable_id' => $this->paymentable_id,
+                'paymentable_type' => $this->paymentable_type,
+                'payment_metadata' => [
+                    'original_payment_id' => $this->id,
+                    'refund_date' => now()->toDateTimeString(),
+                ],
+            ]);
 
-        if ($refundAmount < $this->amount) {
-            $this->update(['status' => PaymentStatus::PARTIALLY_REFUNDED]);
-        } else {
-            $this->update(['status' => PaymentStatus::REFUNDED]);
-        }
+            if ($refundAmount < $this->amount) {
+                $this->update(['status' => PaymentStatus::PARTIALLY_REFUNDED]);
+            } else {
+                $this->update(['status' => PaymentStatus::REFUNDED]);
+            }
 
-        return $refund;
+            return $refund;
+        });
     }
 
     // Generate unique payment number
+    /**
+     * الرقم المتسلسل التالي لسجل الدفع، محجوزاً ذرّياً.
+     *
+     * كان: `PAY-Ymd-` + آخر 6 خانات من `uniqid()`. و`uniqid()` مبنيّ على
+     * الميكروثانية، فنداءان في نفس الميكروثانية يُنتجان الرقم نفسه — وبخلاف
+     * `appointments.number` لم تكن هنا حلقة `do…while (exists())` ولا قيد
+     * فريد يلتقط الاصطدام. صار متسلسلاً عبر نفس العدّاد المقفول (`MON-03`).
+     *
+     * ⚠️ يجب أن يُنادى داخل معاملة — انظر DocumentNumberGenerator::next().
+     */
     public static function generatePaymentNumber(): string
     {
-        $prefix = 'PAY';
-        $date = now()->format('Ymd');
-        $random = strtoupper(substr(uniqid(), -6));
-
-        return "{$prefix}-{$date}-{$random}";
+        return \App\Services\DocumentNumberGenerator::next('payment', 'PAY');
     }
 
     // Static Methods

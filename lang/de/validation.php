@@ -108,6 +108,7 @@ return [
     'not_in' => 'Der ausgewaehlte Wert fuer :attribute ist ungueltig.',
     'not_regex' => 'Das Format des Feldes :attribute ist ungueltig.',
     'numeric' => 'Das Feld :attribute muss eine Zahl sein.',
+    'phone' => 'Das Feld :attribute muss eine gueltige internationale Telefonnummer sein, z. B. +49 30 1234567.',
     'password' => [
         'letters' => 'Das Feld :attribute muss mindestens einen Buchstaben enthalten.',
         'mixed' => 'Das Feld :attribute muss mindestens einen Gross- und einen Kleinbuchstaben enthalten.',

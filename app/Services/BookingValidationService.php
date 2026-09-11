@@ -2,20 +2,20 @@
 
 namespace App\Services;
 
+use App\Enum\AppointmentStatus;
+use App\Exceptions\SlotUnavailableException;
 use App\Models\Appointment;
 use App\Models\ProviderTimeOff;
-use App\Models\SalonSetting;
 use App\Models\Service;
 use App\Models\User;
-use App\Enum\AppointmentStatus;
+use App\Support\PhoneNumber;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
-
 
 class BookingValidationService
 {
-
     public function validateBasicData(array $services, string $date): void
     {
         if (empty($services)) {
@@ -38,7 +38,7 @@ class BookingValidationService
         $max_booking_days = intval(SettingsService::get('max_booking_days', 10));
 
         if ($bookingDate->gt(Carbon::today()->addDays($max_booking_days))) {
-            throw new InvalidArgumentException('Cannot book more than ' . $max_booking_days . ' days in advance');
+            throw new InvalidArgumentException('Cannot book more than '.$max_booking_days.' days in advance');
         }
 
         $serviceIds = array_column($services, 'service_id');
@@ -47,30 +47,78 @@ class BookingValidationService
         }
     }
 
+    /**
+     * @param  User|null     $provider            null when the id resolved to nothing
+     * @param  Service|null  $service             null when the id resolved to nothing
+     * @param  int|null      $requestedProviderId the id that was asked for, for the log
+     * @param  int|null      $requestedServiceId  the id that was asked for, for the log
+     */
+    public function validateProviderOffersService(
+        ?User $provider,
+        ?Service $service,
+        ?int $requestedProviderId = null,
+        ?int $requestedServiceId = null,
+    ): void {
+        // Nullable on purpose. Callers resolve ids into models before getting here,
+        // and that lookup can come back empty — most easily because the row was
+        // soft-deleted, since `exists:` rules query the table raw and match deleted
+        // rows that Eloquent's global scope then hides. Typed non-null parameters
+        // turned that into a TypeError, which is an Error rather than an Exception
+        // and so escaped every catch on the way out: a bare 500 (BOOK-09).
+        //
+        // A missing row is rejected exactly like an unavailable pair, and for the
+        // same reason as the cases below: telling the caller WHICH id does not
+        // exist hands them a way to enumerate services and users.
+        if ($provider === null || $service === null) {
+            $this->rejectProviderServicePair(
+                $provider?->id ?? $requestedProviderId,
+                $service?->id ?? $requestedServiceId,
+                $provider === null && $service === null
+                    ? 'provider_and_service_not_found'
+                    : ($provider === null ? 'provider_not_found' : 'service_not_found'),
+            );
+        }
 
-    public function validateProviderOffersService(User $provider, Service $service): void
-    {
+        // This method is also called by trusted staff flows that do not pass through
+        // BookingCreateRequest. Keep the authorization invariant here as a second
+        // boundary: a bookable provider must be an active user with provider role.
+        if (! $provider->is_active || ! $provider->hasRole('provider')) {
+            $this->rejectProviderServicePair($provider->id, $service->id, 'user_is_not_an_active_provider');
+        }
+
+        if (! $service->is_active) {
+            $this->rejectProviderServicePair($provider->id, $service->id, 'service_is_inactive');
+        }
+
         $offers = DB::table('provider_service')
             ->where('provider_id', $provider->id)
             ->where('service_id', $service->id)
             ->where('is_active', true)
             ->exists();
 
-        if (!$offers) {
-            throw new InvalidArgumentException(
-                "Provider '{$provider->full_name}' does not offer service '{$service->name}'"
-            );
-        }
-
-        if (!$provider->is_active) {
-            throw new InvalidArgumentException("Provider '{$provider->full_name}' is not active");
-        }
-
-        if (!$service->is_active) {
-            throw new InvalidArgumentException("Service '{$service->name}' is not active");
+        if (! $offers) {
+            $this->rejectProviderServicePair($provider->id, $service->id, 'provider_service_pair_is_unavailable');
         }
     }
 
+    /**
+     * Keep provider/service identifiers in the private log context while returning
+     * one public message that cannot be used to enumerate users or infer names.
+     *
+     * Takes ids rather than models so the "row not found" case can report which id
+     * was asked for — the whole point is that the caller learns nothing while the
+     * log learns everything.
+     */
+    private function rejectProviderServicePair(?int $providerId, ?int $serviceId, string $reason): never
+    {
+        Log::notice('Booking provider/service validation failed.', [
+            'reason' => $reason,
+            'provider_id' => $providerId,
+            'service_id' => $serviceId,
+        ]);
+
+        throw new InvalidArgumentException(__('booking.provider_unavailable_for_service'));
+    }
 
     public function validateSequentialTiming(?Carbon $previousEndTime, Carbon $currentStartTime, int $serviceIndex): void
     {
@@ -80,9 +128,9 @@ class BookingValidationService
 
         if ($currentStartTime->lt($previousEndTime)) {
             throw new InvalidArgumentException(
-                "Service at position {$serviceIndex} start time ({$currentStartTime->format('H:i')}) " .
-                "must be after or equal to previous service end time ({$previousEndTime->format('H:i')}). " .
-                "Services must be sequential."
+                "Service at position {$serviceIndex} start time ({$currentStartTime->format('H:i')}) ".
+                "must be after or equal to previous service end time ({$previousEndTime->format('H:i')}). ".
+                'Services must be sequential.'
             );
         }
 
@@ -91,7 +139,6 @@ class BookingValidationService
             // You can add a warning or log here
         }
     }
-
 
     public function validateTimeSlotAvailability(
         User $provider,
@@ -122,32 +169,50 @@ class BookingValidationService
             $this->validateProviderScheduleWindow($provider, $startTime, $endTime);
         }
 
-        // 5. Check for conflicting appointments
-        $hasConflictingAppointment = Appointment::where('provider_id', $provider->id)
-            ->whereDate('appointment_date', $date)
-            // TODO: rmov created_status check and make job for cleaning unpaid bookings
-            ->where('created_status', 1)
-            ->whereIn('status', [AppointmentStatus::PENDING->value, AppointmentStatus::COMPLETED->value])
-            ->where(function ($query) use ($startTime, $endTime) {
-                $query->where(function ($q) use ($startTime, $endTime) {
-                    $q->where('start_time', '<', $endTime)
-                        ->where('end_time', '>', $startTime);
-                });
-            })
-            ->exists();
-
-        if ($hasConflictingAppointment) {
-            throw new InvalidArgumentException(
-                "Time slot {$startTime->format('H:i')} - {$endTime->format('H:i')} " .
-                "is already booked for provider '{$provider->full_name}'"
-            );
-        }
+        // 5. Check for conflicting appointments.
+        $this->assertNoConflictingAppointment($provider, $startTime, $endTime);
 
         // 6 + 7. Past-time / minimum-advance guard.
         //   Isolated in validateNotInPast() so trusted staff paths can opt-in to
         //   same-day back-dating WITHOUT touching any rule above (provider hours,
         //   conflicts, time-off all stay intact).
         $this->validateNotInPast($startTime, $allowSameDayPast);
+    }
+
+    /**
+     * THE conflict check: is this provider already occupied in [start, end)?
+     *
+     * Public and standalone because it has more than one caller. Every path that
+     * puts an appointment onto a provider's calendar — creating a booking,
+     * moving one in StaffDashboard, adding a service to an existing booking —
+     * must ask this exact question, or they drift apart the way the availability
+     * and booking layers once did (BOOK-01).
+     *
+     * $ignoreAppointmentId exists for the move case: an appointment must not be
+     * considered to be in conflict with itself when its own time is edited.
+     *
+     * MUST be called inside the booking transaction, after the provider row is
+     * locked — see BookingLockService. Calling it outside a lock only tells you
+     * the slot was free a moment ago (BOOK-02).
+     *
+     * @throws SlotUnavailableException when the window is taken.
+     */
+    public function assertNoConflictingAppointment(
+        User $provider,
+        Carbon $startTime,
+        Carbon $endTime,
+        ?int $ignoreAppointmentId = null,
+    ): void {
+        $hasConflict = Appointment::where('provider_id', $provider->id)
+            ->whereDate('appointment_date', $startTime->format('Y-m-d'))
+            ->blocksProviderTime()
+            ->overlapping($startTime, $endTime)
+            ->when($ignoreAppointmentId, fn ($query) => $query->whereKeyNot($ignoreAppointmentId))
+            ->exists();
+
+        if ($hasConflict) {
+            throw new SlotUnavailableException(__('booking.time_slot_unavailable'));
+        }
     }
 
     /**
@@ -176,52 +241,53 @@ class BookingValidationService
             ->where('is_active', true)
             ->first();
 
-        if (!$schedule) {
-            throw new InvalidArgumentException(
-                "Provider '{$provider->full_name}' does not work on " . $startTime->format('l')
-            );
+        if (! $schedule) {
+            throw new InvalidArgumentException(__('booking.provider_unavailable_on_date'));
         }
 
         // 2. Check time is within working hours
-        $workStart = Carbon::parse($date . ' ' . $schedule->start_time);
-        $workEnd = Carbon::parse($date . ' ' . $schedule->end_time);
+        $workStart = Carbon::parse($date.' '.$schedule->start_time);
+        $workEnd = Carbon::parse($date.' '.$schedule->end_time);
 
         if ($startTime->lt($workStart) || $endTime->gt($workEnd)) {
             throw new InvalidArgumentException(
-                "Time slot is outside provider's working hours " .
+                "Time slot is outside provider's working hours ".
                 "({$workStart->format('H:i')} - {$workEnd->format('H:i')})"
             );
         }
 
-        // 3. Check for full day time off
+        // 3. Check for full day time off.
+        //    scopeCoveringDate() is the shared range rule: it honours a multi-day
+        //    leave and reads a null end_date as "start_date only". The old
+        //    `end_date >= $date` silently dropped null-ended rows, because in SQL
+        //    `NULL >= '2026-09-10'` is UNKNOWN, not false (BOOK-04).
         $hasFullDayOff = ProviderTimeOff::where('user_id', $provider->id)
             ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
-            ->where('start_date', '<=', $date)
-            ->where('end_date', '>=', $date)
+            ->coveringDate($date)
             ->exists();
 
         if ($hasFullDayOff) {
-            throw new InvalidArgumentException(
-                "Provider '{$provider->full_name}' is not available on " . $startTime->format('Y-m-d')
-            );
+            throw new InvalidArgumentException(__('booking.provider_unavailable_on_date'));
         }
 
-        // 4. Check for hourly time off conflicts
-        $hasHourlyTimeOff = ProviderTimeOff::where('user_id', $provider->id)
+        // 4. Check for hourly time off conflicts.
+        //    Candidates are filtered by the shared date scope and then evaluated
+        //    with blocksWindow(), the same call ServiceAvailabilityService makes,
+        //    so the two layers cannot disagree about which hours a leave eats.
+        //    Previously this matched only `start_date = $date`, so every day of a
+        //    multi-day hourly leave except the first was invisible here while the
+        //    availability layer was hiding all of them.
+        $hourlyTimeOffs = ProviderTimeOff::where('user_id', $provider->id)
             ->where('type', ProviderTimeOff::TYPE_HOURLY)
-            ->whereDate('start_date', $date)
-            ->where(function ($query) use ($startTime, $endTime, $date) {
-                $query->where(function ($q) use ($startTime, $endTime, $date) {
-                    $q->whereRaw("TIME(CONCAT(?, ' ', start_time)) < ?", [$date, $endTime->format('H:i:s')])
-                        ->whereRaw("TIME(CONCAT(?, ' ', end_time)) > ?", [$date, $startTime->format('H:i:s')]);
-                });
-            })
-            ->exists();
+            ->coveringDate($date)
+            ->get();
 
-        if ($hasHourlyTimeOff) {
-            throw new InvalidArgumentException(
-                "Provider has time off during the requested time slot"
-            );
+        foreach ($hourlyTimeOffs as $timeOff) {
+            if ($timeOff->blocksWindow($startTime, $endTime)) {
+                throw new InvalidArgumentException(
+                    'Provider has time off during the requested time slot'
+                );
+            }
         }
     }
 
@@ -252,7 +318,7 @@ class BookingValidationService
         // 6. Check time slot is not in the past
         if ($startTime->lt(Carbon::now())) {
             throw new InvalidArgumentException(
-                "Cannot book time slot in the past"
+                'Cannot book time slot in the past'
             );
         }
 
@@ -267,56 +333,70 @@ class BookingValidationService
     }
 
     /**
-     * Validate no duplicate booking
-     */
-    public function validateNoDuplicateBooking(User $customer, Carbon $startTime, array $serviceIds): void
-    {
-        $existingBooking = Appointment::where('customer_id', $customer->id)
-            ->where('start_time', $startTime)
-            ->whereIn('status', [AppointmentStatus::PENDING->value])
-            ->whereHas('services', function ($query) use ($serviceIds) {
-                $query->whereIn('services.id', $serviceIds);
-            })
-            ->exists();
-
-        if ($existingBooking) {
-            throw new InvalidArgumentException(
-                'You already have a booking for the same time and services'
-            );
-        }
-    }
-
-
-        /**
-     * Validate no duplicate booking for guest customers using phone number
+     * The customer cannot be in two places at once.
      *
-     * @param string|null $customerPhone
-     * @param Carbon $startTime
-     * @param array $serviceIds
-     * @throws InvalidArgumentException
+     * This replaced a check that asked a much narrower question — "do you already
+     * have a booking starting at this EXACT instant that shares at least one
+     * service?" — which let two real problems through (BOOK-06):
+     *
+     *   - same instant, different provider, no shared service: accepted, so the
+     *     customer held two simultaneous appointments;
+     *   - partial overlap (10:00-11:00 already booked, new booking at 10:30):
+     *     accepted, because the start times were not identical.
+     *
+     * The rule is now simply time overlap, and it says nothing about services or
+     * providers: booking a haircut at 10:00 and a face mask at 10:30 is fine when
+     * the haircut ends at 10:30, and refused when it does not. Overlap is
+     * half-open, so a booking may start exactly when the previous one ends.
+     *
+     * Identity spans both shapes a customer can take. A registered customer is
+     * matched by id AND by phone, so somebody who booked once as a guest and once
+     * from their account is still recognised as one person; guests are matched on
+     * the phone number alone, through PhoneNumber's comparison key rather than
+     * raw string equality.
+     *
+     * @param  int|null  $ignoreAppointmentId  the appointment being moved, which
+     *                                         must not conflict with itself.
+     *
+     * @throws InvalidArgumentException when the customer is already busy.
      */
-    public function validateNoDuplicateBookingByPhone(
+    public function assertCustomerIsFree(
+        ?User $customer,
         ?string $customerPhone,
         Carbon $startTime,
-        array $serviceIds
+        Carbon $endTime,
+        ?int $ignoreAppointmentId = null,
     ): void {
+        $phoneKey = PhoneNumber::key($customerPhone ?? $customer?->phone);
 
-        if (empty($customerPhone)) {
+        // Nothing to match on: an anonymous booking with no phone cannot be tied
+        // to any earlier one, and guessing would collide every such customer.
+        if ($customer === null && $phoneKey === null) {
             return;
         }
 
-        $existingBooking = Appointment::where('customer_phone', $customerPhone)
-            ->where('start_time', $startTime)
-            ->whereIn('status', [AppointmentStatus::PENDING->value])
-            ->whereHas('services', function ($query) use ($serviceIds) {
-                $query->whereIn('services.id', $serviceIds);
-            })
-            ->exists();
+        // Candidates are the appointments that occupy this exact window on this
+        // day - across all providers, since the clash is with the customer, not a
+        // chair. Anchoring on the window keeps the set tiny (at most one per
+        // provider), which is what makes it affordable to compare phone keys in
+        // PHP instead of trying to normalise phone numbers in SQL.
+        $candidates = Appointment::query()
+            ->whereDate('appointment_date', $startTime->format('Y-m-d'))
+            ->blocksProviderTime()
+            ->overlapping($startTime, $endTime)
+            ->when($ignoreAppointmentId, fn ($query) => $query->whereKeyNot($ignoreAppointmentId))
+            ->get(['id', 'customer_id', 'customer_phone']);
 
-        if ($existingBooking) {
-            throw new InvalidArgumentException(
-                'You already have a booking for the same time and services'
-            );
+        foreach ($candidates as $candidate) {
+            $sameAccount = $customer !== null
+                && (int) $candidate->customer_id === (int) $customer->id;
+
+            $samePhone = $phoneKey !== null
+                && $phoneKey === PhoneNumber::key($candidate->getRawOriginal('customer_phone'));
+
+            if ($sameAccount || $samePhone) {
+                throw new InvalidArgumentException(__('booking.customer_already_booked'));
+            }
         }
     }
 
@@ -326,8 +406,6 @@ class BookingValidationService
     public function validateDailyBookingLimit(User $customer, string $date): void
     {
         $max_daily_bookings = SettingsService::get('max_daily_bookings', 10);
-
-
 
         if ($max_daily_bookings) {
             $todayBookingsCount = Appointment::where('customer_id', $customer->id)
@@ -342,6 +420,4 @@ class BookingValidationService
             }
         }
     }
-
-
 }

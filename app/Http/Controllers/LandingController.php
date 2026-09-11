@@ -7,6 +7,7 @@ use App\Models\Language;
 use App\Models\LandingSection;
 use App\Services\Cms\CmsPageTransformer;
 use App\Services\Landing\LandingContent;
+use App\Services\Landing\LegalDocument;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -73,10 +74,25 @@ class LandingController extends Controller
         // reading the German site gets the German Impressum.
         $payload = $transformer->transform($page, $this->landing()->locale());
 
-        return view('landing.page', [
+        $doc = LegalDocument::build($page, $payload['blocks']);
+
+        return view('landing.legal', [
             ...$this->viewData(),
-            'page'    => $page,
-            'blocks'  => $payload['blocks'],
+
+            // Overrides viewData()'s value, which is the landing page's marketing
+            // description. Every /page/* used to share it, so three legal
+            // documents advertised haircuts to search engines and link previews.
+            'seoDescription' => $doc->description ?: $this->landing()->text('seo.description'),
+
+            'page' => $page,
+            'doc'  => $doc,
+
+            // The sibling documents, minus the one being read — so the AGB can
+            // hand the reader the Impressum they were probably looking for.
+            'siblingLegalLinks' => array_values(array_filter(
+                $this->landing()->items('footer.legal_links'),
+                fn (array $link): bool => ($link['url'] ?? null) !== "/page/{$page->slug}",
+            )),
         ]);
     }
 

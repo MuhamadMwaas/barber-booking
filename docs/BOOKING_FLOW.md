@@ -154,8 +154,13 @@ public function store(BookingCreateRequest $request): JsonResponse
 | الحالة | الكود | السبب |
 |--------|-------|-------|
 | نجاح | `201 Created` | الحجز أُنشئ بنجاح |
-| `InvalidArgumentException` | `422` | خطأ في المنطق (تعارض، وقت محجوز، ...) |
+| `SlotUnavailableException` | `409` | الوقت محجوز — `error_type: slot_conflict` |
+| `InvalidArgumentException` | `422` | خطأ في المنطق (خارج الدوام، إجازة، حد يومي، ...) |
 | `Exception` عامة | `500` | خطأ في السيرفر |
+
+> **ليش 409 منفصلة عن 422؟** الطلب كان سليماً والفتحة كانت معروضة فعلاً — شخص آخر
+> سبقه إليها. التمييز يسمح للتطبيق أن يحدّث قائمة الفتحات تلقائياً بدل أن يعرض
+> «بياناتك غير صحيحة» على شيء ليس خطأ العميل.
 
 ---
 
@@ -303,11 +308,11 @@ $totals = $this->calculateTotals($preparedServices);
 
 ```php
 return DB::transaction(function () use (...) {
-    // تحديد حالة الحجز بناءً على طريقة الدفع
-    $createdStatus = $paymentMethod == 'cash' ? 1 : 0;
-    $paymentStatus = $paymentMethod == 'cash'
-        ? PaymentStatus::PAID_ONSTIE_CASH   // = 2
-        : PaymentStatus::PENDING;            // = 0
+    // لا يوجد دفع أونلاين — كل الحجوزات تُدفع نقداً في المحل — لذلك:
+    //  - كل حجز يُنشأ مؤكداً ويحجب وقته فوراً
+    //  - ولا يُعلَّم مدفوعاً أبداً عند الإنشاء (العميل لم يصل بعد)
+    $createdStatus = 1;
+    $paymentStatus = PaymentStatus::PENDING;   // = 0
 
     // 1. إنشاء سجل الحجز الرئيسي
     $appointment = Appointment::create([...]);
@@ -337,10 +342,32 @@ return DB::transaction(function () use (...) {
 
 | `payment_method` | `created_status` | `payment_status` | المعنى |
 |-----------------|-----------------|-----------------|--------|
-| `cash` | `1` | `PAID_ONSTIE_CASH (2)` | الحجز مؤكد، الدفع نقداً عند الحضور |
-| `online` | `0` | `PENDING (0)` | الحجز معلق انتظاراً لإتمام الدفع |
+| `cash` أو `online` | `1` | `PENDING (0)` | الحجز مؤكد ويحجب وقته، والمال لم يدخل بعد |
 
-> **ملاحظة تقنية:** في `validateTimeSlotAvailability()` السطر 165، يُفلتر على `created_status = 1` فقط عند التحقق من التعارض. هذا يعني أن الحجوزات بـ `payment_method = online` و `created_status = 0` **لا تُحسب كتعارض**. يوجد تعليق TODO في الكود يشير إلى ضرورة عمل Job لتنظيف هذه الحجوزات غير المدفوعة.
+`payment_method` صار **نية فقط** ولا يقرر أبداً إن كان الحجز حقيقياً. الدفع كله نقدي في المحل، فالحجز يُنشأ مؤكداً دائماً، و`payment_status` يبقى `PENDING` حتى يُنهي الموظف الفاتورة على الكاشير.
+
+#### ما الذي يحدث لاحقاً عند الدفع؟ — MON-05
+
+الدفع لا يتم من API ولا من `BookingService`. بعد تقديم الخدمة يفتح الموظف نافذة
+الدفع في `StaffDashboard` ويختار `cash` أو `card`. كل شاشات الإدارة الأخرى مجرد
+واجهات لنفس العملية:
+
+```php
+app(InvoiceFinalizationService::class)->finalizeAppointmentPayment(
+    appointment: $appointment,
+    paymentMethod: 'cash', // أو card / PaymentMethod id من Filament
+    finalAmount: 80.00,    // null = السعر الكامل؛ الأقل = سعر خاص كامل
+    source: 'staff_dashboard',
+);
+```
+
+داخل transaction واحدة تُعاد قراءة خدمات الأب وكل المواعيد الأبناء، ويُطبّق
+السعر الخاص كخصم، ثم تصدر فاتورة واحدة و`Payment` واحد، وتتحول كل المواعيد
+المشمولة إلى `COMPLETED`. لا توجد دفعة جزئية في السياسة الحالية، وTSE متوقف
+عمداً ولا يُستدعى Fiskaly. التفاصيل والاختبارات في
+[`docs/fixes/MON-05_unified_payment_flow.md`](fixes/MON-05_unified_payment_flow.md).
+
+> **ملاحظة تقنية:** تعريف «المزوّد مشغول» موجود بمكان واحد فقط: `Appointment::scopeBlocksProviderTime()` (`created_status = 1` و status ضمن `PENDING`/`COMPLETED`) مع `scopeOverlapping()`. طبقة التوفّر وطبقة الحجز تستعملان الاثنين معاً، فلا يمكن أن تُعرض فتحة ثم تُرفض، ولا أن تُخفى فتحة بلا سبب حقيقي (كانت هذه المشكلة `BOOK-01`).
 
 ---
 
@@ -360,8 +387,8 @@ return DB::transaction(function () use (...) {
 | `total_amount` | السعر الإجمالي شامل الضريبة | `calculateTotals()` |
 | `status` | `PENDING (0)` | ثابت عند الإنشاء |
 | `payment_method` | `cash` أو `online` | من الـ request |
-| `payment_status` | `PAID_ONSTIE_CASH (2)` أو `PENDING (0)` | بناءً على payment_method |
-| `created_status` | `1` أو `0` | بناءً على payment_method |
+| `payment_status` | `PENDING (0)` | ثابت عند الإنشاء — المال يُسجَّل عند إنهاء الفاتورة |
+| `created_status` | `1` | ثابت — لا يوجد دفع أونلاين |
 | `customer_name` | اسم المستخدم | من User model |
 | `customer_email` | بريد المستخدم | من User model |
 | `customer_phone` | هاتف المستخدم | من User model |
@@ -563,6 +590,13 @@ public function cancelBooking(Appointment $appointment, ?string $reason = null):
 }
 ```
 
+> **لا يوجد حاجز «فات الأوان»** بأي من المسارين. `/api/appointments/{id}/cancel`
+> كان يرفض بعد بدء الموعد بينما `/api/bookings/{id}/cancel` يسمح — فكان العميل
+> يختار السياسة باختيار الـ endpoint (`BOOK-08`). وُحِّدا على السماح: من لن يحضر
+> يجب أن يستطيع قول ذلك، والإلغاء المتأخر يحرّر الكرسي ويترك سجلاً صادقاً بدل موعد
+> يتحول بصمت إلى `NO_SHOW`. الردع صار بالمراقبة (أدناه)، و`cancellation_hours`
+> يبقى معطلاً عمداً.
+
 ### Appointment::cancel()
 
 ```php
@@ -627,10 +661,10 @@ start_time للخدمة الحالية >= end_time للخدمة السابقة
    (start_time >= work_start AND end_time <= work_end)
 
 3. لا يوجد إجازة يوم كامل
-   (provider_time_offs: type=FULL_DAY, يشمل التاريخ)
+   (type=FULL_DAY + ProviderTimeOff::scopeCoveringDate)
 
 4. لا يوجد إجازة بالساعة تتعارض
-   (provider_time_offs: type=HOURLY, يتداخل مع الوقت المطلوب)
+   (type=HOURLY + scopeCoveringDate ثم blocksWindow)
 
 5. لا يوجد حجز مُؤكد (created_status=1) يتعارض
    (appointments: provider_id, status IN [PENDING,COMPLETED], time overlap)
@@ -649,16 +683,35 @@ start_time للخدمة الحالية >= end_time للخدمة السابقة
 ->where('end_time',   '>', $startTime)
 ```
 
-### 5. validateNoDuplicateBooking() / validateNoDuplicateBookingByPhone()
+### 5. assertCustomerIsFree() — العميل لا يكون في مكانين
 
 ```
-للمستخدم المسجل:
-    نفس customer_id + نفس start_time + نفس service_id + status=PENDING
-
-للزبون بدون حساب (phone):
-    نفس customer_phone + نفس start_time + نفس service_id + status=PENDING
-    (إذا phone فارغة، يتجاهل هذا الفحص)
+هل للعميل موعد آخر يتداخل زمنياً مع [start, end)؟
+    - عند أي مزوّد، وبأي خدمة — المزوّد والخدمة لا يدخلان في القاعدة
+    - الحالات المانعة: PENDING + COMPLETED (نفس قاعدة المزوّد)
+    - التداخل نصف مفتوح: 10:00–11:00 ثم 11:00 مسموح
 ```
+
+**هوية العميل:**
+
+| الشكل | المطابقة |
+|---|---|
+| مسجّل | `customer_id` **أو** مفتاح هاتفه |
+| ضيف | مفتاح الهاتف فقط |
+| ضيف بلا هاتف | لا مطابقة (لا يُربط بأحد) |
+
+مفتاح الهاتف = آخر 9 خانات بعد تجريد كل ما ليس رقماً (`App\Support\PhoneNumber`)،
+فـ `+49 176 1234567` و`0176 1234567` شخص واحد. المقارنة تتم في PHP لأن تطبيع
+الهاتف في SQL غير محمول بين MySQL وSQLite، والمرشحون محصورون بالمواعيد المتداخلة
+مع هذه النافذة تحديداً فعددهم ضئيل.
+
+**التجاوز:** `allow_customer_overlap` — يُرفع خادمياً بعد فحص صلاحية `force_booking`
+فقط. منفصل عمداً عن `bypass_availability`. سببه أن بعض عمل الصالون متوازٍ فعلاً
+(مانيكير أثناء تفاعل الصبغة).
+
+> **استبدل** `validateNoDuplicateBooking()` و`validateNoDuplicateBookingByPhone()`
+> اللتين كانتا تسألان: «نفس لحظة البداية بالضبط + خدمة مشتركة؟» — فكانتا تسمحان
+> بحجز متزامن عند مزوّد آخر بخدمة مختلفة، وبأي تداخل جزئي (`BOOK-06`).
 
 ---
 
@@ -666,29 +719,47 @@ start_time للخدمة الحالية >= end_time للخدمة السابقة
 
 **الملف:** [`app/Services/BookingService.php`](../app/Services/BookingService.php) — السطر 213-290
 
-يستخدم **bcmath** لدقة عالية في العمليات الحسابية المالية (تجنب أخطاء الـ float).
+`calculateTotals()` **لا تحتوي حساباً خاصاً بها** — تستدعي
+`TaxCalculatorService::calculateBulk()`، وهو **التنفيذ الوحيد لحساب الضريبة في
+المشروع كله**.
 
 ### الخوارزمية:
 
 ```
-tax_rate = get_setting('tax_rate', '0')  // مثال: "19"
-factor   = 1 + (tax_rate / 100)          // مثال: 1.190000
+tax_rate = get_setting('tax_rate', '0')     // مثال: "19" أو "19.5"
 
-لكل خدمة:
-    gross = price (السعر الإجمالي شامل الضريبة)
-    net   = gross / factor                 // السعر قبل الضريبة
-    tax   = gross - net                    // مبلغ الضريبة
+TaxCalculatorService::calculateBulk(services, precision = 2)
+    │
+    │  الدقة الداخلية = max(10, precision + 8)   ← أوسع من الناتج دائماً
+    │
+    └── لكل خدمة:
+            factor = 1 + (tax_rate / 100)          // بالدقة الداخلية
+            net    = gross / factor                 // بالدقة الداخلية
+            tax    = gross - net                    // بالدقة الداخلية
+            تقريب net و tax إلى منزلتين  ← التقريب هنا فقط، مرة واحدة
 
-    تقريب net و tax إلى منزلتين عشريتين
-    إضافة إلى netTotal و taxTotal
-
-grossTotal = مجموع كل gross (مُقرَّب)
-
-// تصحيح فرق التقريب:
-diff = grossTotal - (netTotal + taxTotal)
-إذا diff != 0.00:
-    taxTotal += diff   // تُعدَّل الضريبة لضمان: gross = net + tax
+        جمع البنود، ثم تسوية أخيرة:
+            diff = grossTotal - (netTotal + taxTotal)
+            إذا diff != 0.00:  taxTotal += diff     // الضريبة دائماً، لا الصافي
 ```
+
+### ⚠️ لماذا الدقة الداخلية واسعة؟ (`MON-01`)
+
+`bcdiv` في PHP **تقتطع ولا تقرّب**. القسمة بدقة الناتج المطلوب تفقد الخانة التي
+كان يجب تقريبها، وتقريبُها بعد ذلك بلا فائدة:
+
+```
+50.00 ÷ 1.19 = 42.016806722689...
+
+bcdiv(..., 2)  →  "42.01"    ← اقتطاع  ⇒ الضريبة 7.99  (خطأ)
+التقريب الصحيح →  42.02      ⇒ الضريبة 7.98  (صحيح)
+```
+
+كانت `TaxCalculatorService` تقسم بدقة 2 بينما `BookingService` بدقة 6، فتنتج
+**معاملة واحدة ضريبتين مختلفتين**: صف `appointments` يقول 7.98 وصف `invoices`
+يقول 7.99 لنفس الـ 50 يورو — وإيميل التأكيد والإيصال المطبوع يعرضان الرقمين
+على الزبون. وُحِّدت الطبقات كلها 2026-09-10؛ التفاصيل في
+[`docs/fixes/MON-01_vat_calculation_unified.md`](fixes/MON-01_vat_calculation_unified.md).
 
 ### مثال عملي (tax_rate = 19%):
 
@@ -698,7 +769,9 @@ diff = grossTotal - (netTotal + taxTotal)
 | لحية | 25.00 | 21.01 | 3.99 |
 | **المجموع** | **75.00** | **63.03** | **11.97** |
 
-**ملاحظة:** `calculateTotalsInverse()` (السطر 320) موجودة في الكود لكن **لا تُستخدم**. هي نسخة قديمة تستخدم `float` بدلاً من `bcmath`.
+**ملاحظة:** `calculateTotalsInverse()` و`bcRound()` الخاصتان بـ `BookingService`
+**حُذفتا** — الأولى كانت كوداً ميتاً يحسب الضريبة بالاتجاه الخطأ، والثانية لم
+تكن تُستدعى إلا من `calculateTotals` التي صارت تفوّض للحاسبة.
 
 ---
 
@@ -817,32 +890,38 @@ BookingController::store()
         ▼
 BookingService::createBooking($customer, $data)
         │
-        ├─ validateBasicData()
-        │       │ ← InvalidArgumentException → 422
-        │
-        ├─ validateDailyBookingLimit()  [مسجل فقط]
+        ├─ validateBasicData()          ← شكل الطلب فقط، خارج المعاملة
         │       │ ← InvalidArgumentException → 422
         │
         ├─ sortServicesByStartTime()
         │
-        ├─ validateAndPrepareServices()
-        │       │
-        │       ├─ [لكل خدمة]:
-        │       │   ├─ validateProviderOffersService() ← 422
-        │       │   ├─ getEffectiveDuration()
-        │       │   ├─ getEffectivePrice()
-        │       │   ├─ validateSequentialTiming()      ← 422
-        │       │   ├─ validateTimeSlotAvailability()  ← 422
-        │       │   └─ validateNoDuplicateBooking()    ← 422
-        │
-        ├─ calculateTotals()
-        │
-        └─ DB::transaction()
+        └─ DB::transaction()  ◄══ كل ما يعتمد على حالة مشتركة صار هنا
+                │
+                ├─ BookingLockService::lockUsers([المزوّدون…, العميل])
+                │       └─ SELECT … FOR UPDATE مرتّب بالـ id (لا deadlock)
+                │
+                ├─ validateDailyBookingLimit()   ← يُعاد عدّه تحت القفل
+                │       │ ← InvalidArgumentException → 422
+                │
+                ├─ validateAndPrepareServices()
+                │       │
+                │       ├─ [لكل خدمة]:
+                │       │   ├─ validateProviderOffersService()    ← 422
+                │       │   ├─ getEffectiveDuration()
+                │       │   ├─ getEffectivePrice()
+                │       │   ├─ validateSequentialTiming()         ← 422
+                │       │   ├─ validateTimeSlotAvailability()     ← 422 (نافذة الدوام/الإجازة)
+                │       │   │      └─ assertNoConflictingAppointment() ← 409 (الوقت محجوز)
+                │       │   └─ validateNoDuplicateBooking()       ← 422
+                │
+                ├─ calculateTotals()
                 │
                 ├─ Appointment::create()
                 ├─ AppointmentService::create() × N
                 ├─ InvoiceService::createDraftInvoice()
                 └─ return $appointment->load([...])
+
+أي رفض داخل المعاملة يعني ROLLBACK كامل: لا موعد، ولا خدمات، ولا فاتورة مسودة.
                         │
                         ▼
               AppointmentResource::toArray()
@@ -902,41 +981,48 @@ $customerName = $bookingData['customer_name'] ?? ($customer->full_name ?? null);
 
 ---
 
-#### 4. رقم الحجز قد يتكرر
-**الملف:** [`BookingService.php:377`](../app/Services/BookingService.php#L377)
+#### 4. ~~رقم الحجز قد يتكرر~~ — ✅ مُصلَحة
 
-```php
-$random = strtoupper(substr(uniqid(), -6));
-```
-`uniqid()` يعتمد على الوقت ويمكن أن يولد نفس القيمة تحت ضغط عالٍ. لا يوجد `UNIQUE index` موثق أو retry mechanism.
+`generateAppointmentNumber()` صار يستخدم `random_bytes(3)` داخل حلقة
+`do…while (exists())`، و`appointments.number` صار يحمل قيداً فريداً
+(`appointments_number_unique`) — فالحماية بطبقتين: الحلقة تمنع التكرار،
+والقيد يمنع كل ما تفوّته الحلقة تحت التزامن.
 
----
-
-#### 5. حجوزات online بـ created_status=0 لا تُنظَّف
-**الملف:** [`BookingValidationService.php:165`](../app/Services/BookingValidationService.php#L165)
-
-```php
-->where('created_status', 1)  // ← يتجاهل created_status=0
-```
-الحجوزات بـ `payment_method=online` لا تُحسب كتعارض وتبقى في DB إلى الأبد. يوجد TODO في الكود لكن لم يُنفَّذ.
+وأرقام الفواتير والمدفوعات لم تعد عشوائية أصلاً: صارت متسلسلة من صفّ عدّاد
+مقفول (`INV-2026-000001` / `PAY-2026-000001`). التفاصيل في
+[`docs/fixes/MON-03_document_numbering.md`](fixes/MON-03_document_numbering.md)
+(`MON-03` / `DB-01`).
 
 ---
 
-#### 6. calculateTotalsInverse() غير مُستخدمة
-**الملف:** [`BookingService.php:320`](../app/Services/BookingService.php#L320)
+#### 5. ~~حجوزات online بـ created_status=0 لا تُنظَّف~~ — ✅ مُصلَحة
 
-دالة ميتة (dead code) تستخدم `float` القديمة. يجب حذفها لتجنب الالتباس.
+لم يعد أي مسار ينتج `created_status = 0`: كل حجز يُنشأ بـ `1`، وقيمة العمود الافتراضية في قاعدة البيانات صارت `1` كذلك. وطبقتا التوفّر والحجز صارتا تقرآن الشرط نفسه من `Appointment::scopeBlocksProviderTime()`، فلا حجوزات ميتة تحجب وقتاً ولا TODO معلّق.
+
+---
+
+#### 6. ~~calculateTotalsInverse() غير مُستخدمة~~ — ✅ مُصلَحة
+
+حُذفت مع `bcRound()` الخاصة بـ `BookingService`، وصارت `calculateTotals()` تفوّض
+لـ `TaxCalculatorService` (`MON-01`، 2026-09-10). وحُذف معها ملف
+`BookingService2.php` كاملاً (428 سطراً، صفر مستدعين، وفيه نسخة ثالثة من الضريبة
+بالاتجاه الخطأ).
 
 ---
 
 ### 🟡 ملاحظات تصميمية
 
-#### 7. فاتورة المسودة تُنشأ دائماً بـ cash
+#### 7. قيمة `cash` عند إنشاء المسودة لا تعني أن الدفع حصل
 ```php
 $InvoiceService->createDtaftInvoiceFromAppointment(
-    $appointment, 'cash', 0  // ← ثابت 'cash' حتى لو payment_method = 'online'
+    $appointment, 'cash', 0
 );
 ```
+
+هذه معاملات تاريخية في API إنشاء المسودة ولا تصدر فاتورة مدفوعة ولا تنشئ
+`Payment`. طريقة التحصيل الفعلية لا تُحسم إلا لاحقاً بواسطة
+`InvoiceFinalizationService::finalizeAppointmentPayment()`، والتي تربط صف
+`PaymentMethod` الفعلي وتوحّد `appointments.payment_method` على `cash`/`card`.
 
 #### 8. provider_id يُؤخذ من أول خدمة فقط
 ```php
@@ -946,6 +1032,156 @@ $InvoiceService->createDtaftInvoiceFromAppointment(
 
 #### 9. الـ request يقبل خدمات لمزودين مختلفين
 لا يوجد تحقق يمنع إرسال خدمات لـ `provider_id` مختلفة في نفس الطلب، مما قد يسبب تعقيداً في الجدولة.
+
+---
+
+---
+
+## المعرّفات المفقودة والحذف الناعم (BOOK-09 — مُصلَحة 2026-09-07)
+
+### الفخ
+
+`exists:services,id` ينفّذ استعلاماً **خاماً** على الجدول، فلا يعرف شيئاً عن
+`SoftDeletes` ويطابق الصفوف المحذوفة. ثم يحمّل `BookingService` نفس المعرّف عبر
+Eloquent فيُخفيه الـ global scope ويعود `null` — والتوقيع الصارم يرمي `TypeError`.
+
+**حذف خدمة واحدة من اللوحة كان كافياً لإرجاع 500 على كل حجز عليها.**
+
+### الحراسة بطبقتين
+
+| الطبقة | ماذا تفعل |
+|---|---|
+| `BookingCreateRequest` | `whereNull('deleted_at')` في قاعدتَي الخدمة والمزوّد → `422` |
+| `validateProviderOffersService()` | يقبل `?User` و`?Service` ويرفض `null` كأي زوج غير متاح |
+
+الطبقة الثانية هي الأهم: **StaffDashboard يبني الحمولة يدوياً ويستدعي
+`BookingService` مباشرة** بلا Form Request، فقواعد التحقق لا تمرّ عليه أصلاً.
+
+### `TypeError` ليس `Exception`
+
+`TypeError` يرث `Error`، وهما شقيقان تحت `Throwable`. فـ `catch (\Exception)` كان
+يفوّته: في الـ API يهرب إلى معالج Laravel، وفي الداشبورد **يُسقط مكوّن Livewire**.
+نقاط دخول الحجز صارت تلتقط `\Throwable` وتسجّل `$e::class`.
+
+### ⚠️ قاعدة يجب عدم كسرها: لا تمييز بين «غير موجود» و«غير متاح»
+
+`rejectProviderServicePair()` تُرجع **رسالة واحدة** لكل أسباب الرفض (غير موجود /
+معطّل / الزوج غير مرتبط) والسبب الحقيقي يذهب إلى `Log::notice` فقط. الغرض منع
+تعداد معرّفات الخدمات والمستخدمين. أي مسار رفض جديد يجب أن يمرّ من هنا.
+---
+
+## مراقبة الإلغاء المتكرر (BOOK-08 — مُصلَحة 2026-09-07)
+
+### القاعدة
+
+من الإلغاء **الثاني** خلال **7 أيام متحركة** — ومع كل إلغاء بعده — يصل إشعار
+Filament لكل مستخدم نشط بدور `admin` أو `manager`.
+
+| البند | القيمة |
+|---|---|
+| ما يُعدّ | `USER_CANCELLED` فقط |
+| عمود النافذة | `cancelled_at` (لحظة انسحاب العميل، لا تاريخ الموعد) |
+| العتبة | 2 فأكثر |
+| المستقبِلون | `admin` + `manager` النشطون |
+
+`ADMIN_CANCELLED` لا يُحسب: إلغاء الإدارة (حلاق مريض مثلاً) ليس ذنب الزبون،
+وحسابه عليه ينتج إشعارات لا يستطيع أحد التصرف بناءً عليها.
+
+### المسار
+
+```text
+العميل يلغي
+  -> Appointment::cancel()   ← المكان الوحيد الذي يكتب USER_CANCELLED
+  -> CancellationMonitor::recordCustomerCancellation()
+       -> عدّ آخر 7 أيام
+       -> >= 2 ? إشعار Filament لكل admin/manager : صمت
+```
+
+`Appointment::cancel()` لها مستدعيان فقط وكلاهما مسار عميل، بينما إلغاء الموظف
+يكتب `ADMIN_CANCELLED` مباشرة ولا يمرّ بها — لذلك هي نقطة الوصل الطبيعية.
+
+### ضمانات
+
+- الإشعار **لا يمنع ولا يُلغي** شيئاً — معلومة للمدير فقط.
+- فشل الإشعار **لا يُبطل الإلغاء**: `CancellationMonitor` يبتلع أخطاءه ويسجّلها
+  بـ `Log::warning` (وهذا ما كشف أن اسم صنف الـ Action كان خاطئاً في Filament 4).
+
+---
+
+## الإجازات: نطاق التواريخ ودلالة الامتداد (BOOK-04 — مُصلَحة 2026-09-07)
+
+### المصدر الوحيد
+
+| الدالة | تجيب عن |
+|---|---|
+| `ProviderTimeOff::scopeCoveringDate($date)` | هل تنطبق هذه الإجازة على ذلك اليوم؟ |
+| `ProviderTimeOff::blockedWindowOn($date)` | أي شريحة من ذلك اليوم تشغلها؟ |
+| `ProviderTimeOff::blocksWindow($start, $end)` | هل تتعارض مع هذه الفترة؟ (نصف مفتوحة) |
+
+طبقة التوفّر وطبقة الحجز تستدعيان الثلاثة، فلا يمكن أن تختلفا.
+
+### `end_date = NULL` تعني يوم واحد
+
+`COALESCE(end_date, start_date)` في الطبقتين. الشرط القديم `end_date >= :date`
+كان **يُسقط** هذه الصفوف بصمت، لأن `NULL >= '2026-09-10'` في SQL تساوي `UNKNOWN`
+لا `FALSE`، و`WHERE` لا يُرجع الصف.
+
+### الإجازة الساعية الممتدة = غياب متصل واحد
+
+`10/9 12:00 → 15/9 13:00` تعني غياباً متواصلاً، وليس نافذة تتكرر كل صباح:
+
+| اليوم | المحجوب |
+|---|---|
+| البداية | من `start_time` حتى نهاية اليوم |
+| الأوسط | اليوم بأكمله |
+| النهاية | من بداية اليوم حتى `end_time` |
+| يوم واحد | من `start_time` حتى `end_time` |
+
+### تحقق الإدخال
+
+`StaffDashboard::timeOffValidationError()` يُطبَّق على مساري الحفظ:
+`end_date >= start_date`، وللساعية `start_time`/`end_time` مطلوبان و
+`end_time > start_time`. الأوقات المعكوسة تُرفض ولا تُفسَّر كعبور لمنتصف الليل —
+الصالون لا يعمل بعد منتصف الليل، فـ `22:00 → 02:00` خطأ إدخال على الأرجح.
+
+---
+
+## التزامن ومنع الحجز المزدوج (BOOK-02 — مُصلَحة 2026-09-07)
+
+### المشكلة التي كانت
+
+`SELECT` ناجح **لا يحجز شيئاً**. كان فحص التعارض يقع خارج `DB::transaction()`،
+فطلبان متزامنان يقرآن «الفتحة فاضية» ثم يكتب كلاهما.
+
+### القاعدة الآن
+
+| العنصر | التفصيل |
+|---|---|
+| القفل | `BookingLockService::lockUsers()` → `SELECT … FOR UPDATE` على `users` |
+| لماذا `users` وليس `appointments`؟ | الحالة المحمية هي **غياب** موعد، ولا يمكن قفل صفوف غير موجودة. صف المزوّد موجود دائماً. |
+| منع الـ deadlock | المزوّدون والعميل كلهم صفوف في `users` → قفل واحد مرتّب تصاعدياً بالـ `id` |
+| الفحص | `BookingValidationService::assertNoConflictingAppointment()` بعد القفل، داخل المعاملة |
+| الفهرس | `appointments_conflict_lookup_idx` على `(provider_id, appointment_date, created_status, status)` |
+| رد الخسارة | `409` + `error_type: slot_conflict` |
+
+### المسارات الثلاثة التي تكتب على تقويم المزوّد
+
+| المسار | قفل | فحص تعارض |
+|---|---|---|
+| `BookingService::createBooking()` | ✅ | ✅ |
+| `BookingService::addServiceToBooking()` | ✅ | ✅ يعيد التأكد من نافذة التحليل |
+| `StaffDashboard::updateAppointment()` | ✅ | ✅ (يستثني الموعد نفسه؛ `force_booking` يتجاوز) |
+
+### ⚠️ العقد الذي يجب احترامه
+
+أي كود جديد يكتب `provider_id` / `appointment_date` / `start_time` / `end_time`:
+
+1. داخل `DB::transaction()`
+2. `lockUsers()` **أولاً**
+3. `assertNoConflictingAppointment()` **بعد** القفل
+
+الفحص خارج المعاملة مسموح **كرفض سريع فقط**، وليس كضمان. الضمان تطبيقي وليس على
+مستوى قاعدة البيانات — مسار كتابة ينسى القفل يستطيع اختراقه.
 
 ---
 

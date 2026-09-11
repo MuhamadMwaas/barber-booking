@@ -2,13 +2,12 @@
 
 namespace App\Services;
 
+use App\Enum\AppointmentStatus;
 use App\Enum\InvoiceStatus;
-use App\Enum\PaymentStatus;
 use App\Models\Appointment;
 use App\Models\Invoice;
 use App\Models\InvoiceItem;
 use App\Models\Service;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -22,144 +21,6 @@ use Illuminate\Support\Facades\Log;
  */
 class InvoiceService
 {
-    /**
-     * إنشاء فاتورة من حجز مع جميع البنود والضرائب
-     *
-     * @param Appointment $appointment الحجز المراد إنشاء فاتورة له
-     * @param string $paymentType نوع الدفع (PAID_ONSTIE_CASH, PAID_ONSTIE_CARD, PAID_ONLINE)
-     * @param float $amountPaid المبلغ المدفوع (قد يكون أقل من الإجمالي في حالة الخصم)
-     * @param string|null $notes ملاحظات إضافية
-     * @param int|null $adjustedDuration المدة المعدلة بالدقائق (اختياري)
-     * @param bool $amountIncludesTax هل المبلغ يتضمن الضريبة (افتراضياً true)
-     * @return Invoice الفاتورة المنشأة
-     * @throws \Exception في حالة حدوث خطأ أثناء الإنشاء
-     */
-    public function createInvoiceFromAppointment(
-        Appointment $appointment,
-        string $paymentType,
-        float $amountPaid,
-        ?string $notes = null,
-        ?int $adjustedDuration = null,
-        bool $amountIncludesTax = true
-    ): Invoice {
-        try {
-            DB::beginTransaction();
-
-            // الحصول على معدل الضريبة من الإعدادات
-            $taxRate = SettingsService::get('tax_rate', 19);
-
-            // حساب الضريبة العكسية إذا كان المبلغ يتضمن الضريبة
-            if ($amountIncludesTax) {
-                $taxCalculation = $this->calculateReverseTax($amountPaid, $taxRate);
-                $subtotal = $taxCalculation['subtotal'];
-                $taxAmount = $taxCalculation['tax_amount'];
-                $total = $taxCalculation['total'];
-            } else {
-                // حساب عادي (المبلغ لا يتضمن الضريبة)
-                $subtotal = $amountPaid;
-                $taxAmount = $amountPaid * ($taxRate / 100);
-                $total = $amountPaid + $taxAmount;
-            }
-
-            // تحديث مدة الحجز إذا تم تعديلها
-            if ($adjustedDuration !== null && $adjustedDuration !== $appointment->duration_minutes) {
-                $this->updateAppointmentDuration($appointment, $adjustedDuration);
-            }
-
-            // إنشاء الفاتورة الرئيسية
-            $invoice = $this->createInvoice(
-                $appointment,
-                $taxRate,
-                $paymentType,
-                $total,
-                $notes,
-                $subtotal,
-                $taxAmount
-            );
-
-            // إنشاء بنود الفاتورة من الخدمات (بالأسعار الكاملة)
-            $this->createInvoiceItems($invoice, $appointment);
-
-            // Record the discount in the column + reconcile net/tax/total from
-            // the items total vs. the amount actually paid. Single source of truth.
-            $invoice = $this->applyFinalAmount($invoice, $amountPaid);
-
-            // تحديث حالة الدفع للحجز
-            $this->updateAppointmentPaymentStatus($appointment, $paymentType);
-
-            // TODO: في المستقبل - إضافة التوقيع الرقمي TSE هنا
-            // $this->signInvoiceWithTSE($invoice);
-
-            // TODO: في المستقبل - إرسال الفاتورة لنظام الضرائب الألماني
-            // $this->submitToGermanTaxAuthority($invoice);
-
-            DB::commit();
-
-            // تسجيل العملية الناجحة
-            Log::info('Invoice created successfully', [
-                'invoice_id' => $invoice->id,
-                'invoice_number' => $invoice->invoice_number,
-                'appointment_id' => $appointment->id,
-                'amount_paid' => $amountPaid,
-                'payment_type' => $paymentType,
-            ]);
-
-            return $invoice;
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-
-            // تسجيل الخطأ
-            Log::error('Failed to create invoice', [
-                'appointment_id' => $appointment->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
-            throw $e;
-        }
-    }
-
-    /**
-     * إنشاء الفاتورة الرئيسية
-     */
-    private function createInvoice(
-        Appointment $appointment,
-        float $taxRate,
-        string $paymentType,
-        float $totalAmount,
-        ?string $notes,
-        float $subtotal,
-        float $taxAmount
-    ): Invoice {
-        $invoiceData = [
-            'payment_method' => PaymentStatus::from($paymentType)->label(),
-            'amount_paid' => $totalAmount,
-            'paid_at' => now()->toDateTimeString(),
-            'paid_by' => Auth::user()?->full_name ?? 'System',
-            'payment_type' => $paymentType,
-        ];
-
-        // NOTE: The discount is NOT computed here anymore. It is derived and
-        // stored in the `discount_amount` COLUMN by applyFinalAmount(), called
-        // right after the items are built (see createInvoiceFromAppointment).
-        // The previous logic compared against $appointment->total_amount which
-        // callers overwrite to the paid amount first → discount always 0 (bug).
-
-        return Invoice::create([
-            'appointment_id' => $appointment->id,
-            'customer_id' => $appointment->customer_id,
-            'invoice_number' => Invoice::generateInvoiceNumber(),
-            'subtotal' => $subtotal,
-            'tax_amount' => $taxAmount,
-            'tax_rate' => $taxRate,
-            'total_amount' => $totalAmount,
-            'status' => InvoiceStatus::PAID,
-            'notes' => $notes,
-            'invoice_data' => $invoiceData,
-        ]);
-    }
-
     /**
      * إنشاء بنود الفاتورة من خدمات الحجز
      */
@@ -204,9 +65,7 @@ class InvoiceService
     /**
      * تحديث مدة الحجز
      *
-     * @param Appointment $appointment
-     * @param int $newDurationMinutes المدة الجديدة بالدقائق
-     * @return void
+     * @param  int  $newDurationMinutes  المدة الجديدة بالدقائق
      */
     private function updateAppointmentDuration(Appointment $appointment, int $newDurationMinutes): void
     {
@@ -227,33 +86,24 @@ class InvoiceService
     }
 
     /**
-     * تحديث حالة الدفع للحجز
-     */
-    private function updateAppointmentPaymentStatus(Appointment $appointment, string $paymentType): void
-    {
-        $appointment->update([
-            'payment_status' => PaymentStatus::from($paymentType),
-            'payment_method' => PaymentStatus::from($paymentType)->label(),
-        ]);
-    }
-
-    /**
      * حساب الضريبة العكسية (المبلغ يتضمن الضريبة)
      *
-     * @param float $totalWithTax المبلغ الإجمالي الذي يتضمن الضريبة
-     * @param float $taxRate معدل الضريبة (مثلاً 19 للضريبة 19%)
+     * @param  float  $totalWithTax  المبلغ الإجمالي الذي يتضمن الضريبة
+     * @param  float  $taxRate  معدل الضريبة (مثلاً 19 للضريبة 19%)
      * @return array ['subtotal' => المبلغ قبل الضريبة, 'tax_amount' => قيمة الضريبة, 'total' => المبلغ الإجمالي]
      */
     public function calculateReverseTax(float $totalWithTax, float $taxRate): array
     {
-        // الصيغة: المبلغ قبل الضريبة = المبلغ الإجمالي / (1 + معدل الضريبة/100)
-        $subtotal = $totalWithTax / (1 + ($taxRate / 100));
-        $taxAmount = $totalWithTax - $subtotal;
+        // يمرّ عبر TaxCalculatorService — المصدر الوحيد. كان هذا حساباً بـ
+        // float ونسخةً خامسةً من نفس المعادلة (MON-01)؛ صار غلافاً رقيقاً
+        // يحافظ على التوقيع لأن مسارات Filament تستدعيه.
+        $result = app(TaxCalculatorService::class)
+            ->extractTax((string) $totalWithTax, (string) $taxRate, 2);
 
         return [
-            'subtotal' => round($subtotal, 2),
-            'tax_amount' => round($taxAmount, 2),
-            'total' => round($totalWithTax, 2),
+            'subtotal' => $result['net'],
+            'tax_amount' => $result['tax'],
+            'total' => $result['gross'],
         ];
     }
 
@@ -261,9 +111,6 @@ class InvoiceService
      * التوقيع الرقمي للفاتورة باستخدام TSE
      *
      * سيتم تنفيذ هذه الوظيفة مستقبلاً للامتثال للمعايير الألمانية
-     *
-     * @param Invoice $invoice
-     * @return void
      */
     private function signInvoiceWithTSE(Invoice $invoice): void
     {
@@ -281,9 +128,6 @@ class InvoiceService
      * إرسال الفاتورة إلى نظام الضرائب الألماني
      *
      * سيتم تنفيذ هذه الوظيفة مستقبلاً للامتثال الضريبي
-     *
-     * @param Invoice $invoice
-     * @return void
      */
     private function submitToGermanTaxAuthority(Invoice $invoice): void
     {
@@ -298,15 +142,18 @@ class InvoiceService
     /**
      * التحقق من صحة الفاتورة قبل الإنشاء
      *
-     * @param Appointment $appointment
-     * @return bool
      * @throws \Exception
      */
     public function validateInvoiceCreation(Appointment $appointment): bool
     {
-        // التحقق من عدم وجود فاتورة سابقة
-        if ($appointment->invoice()->where('status', InvoiceStatus::PAID)->exists()) {
-            throw new \Exception('هذا الحجز لديه فاتورة مدفوعة مسبقاً');
+        // التحقق من عدم وجود فاتورة مُنهاة سابقة.
+        //
+        // يُفحَص كل ما ليس مسودة، لا `PAID` وحدها: فاتورة `PENDING` أو
+        // `PARTIALLY_PAID` أو `REFUNDED` كلها مستندات صدرت وتحمل رقماً.
+        // المسودة وحدها هي التي يجوز البناء عليها — وهي في الواقع موجودة
+        // **دائماً**، لأن كل حجز يُنشئ واحدة، ولهذا لا يجوز رفضها.
+        if ($appointment->invoice()->where('status', '!=', InvoiceStatus::DRAFT)->exists()) {
+            throw new \Exception('هذا الحجز لديه فاتورة مُنهاة مسبقاً');
         }
 
         // التحقق من وجود خدمات
@@ -314,8 +161,18 @@ class InvoiceService
             throw new \Exception('لا يمكن إنشاء فاتورة لحجز بدون خدمات');
         }
 
-        // التحقق من حالة الحجز
-        if ($appointment->status->value === 'admin_cancelled' || $appointment->status->value === 'user_cancelled') {
+        // التحقق من حالة الحجز.
+        //
+        // كان الشرط: `$appointment->status->value === 'admin_cancelled'`.
+        // و`AppointmentStatus` مدعوم بـ **int** (`ADMIN_CANCELLED = -2`)، فـ
+        // `->value` يساوي `-2` ولا يساوي النص أبداً — **الحرس كان كوداً ميتاً
+        // ويمكن إصدار فاتورة لموعد ملغى.** المقارنة الآن على حالات الـ enum
+        // نفسها، فلا يمكن أن تُخفق بسبب نوع القيمة.
+        if (in_array($appointment->status, [
+            AppointmentStatus::ADMIN_CANCELLED,
+            AppointmentStatus::USER_CANCELLED,
+            AppointmentStatus::NO_SHOW,
+        ], true)) {
             throw new \Exception('لا يمكن إنشاء فاتورة لحجز ملغي');
         }
 
@@ -324,9 +181,6 @@ class InvoiceService
 
     /**
      * الحصول على معلومات الفاتورة بتنسيق مناسب للعرض
-     *
-     * @param Invoice $invoice
-     * @return array
      */
     public function getInvoiceDetails(Invoice $invoice): array
     {
@@ -339,7 +193,7 @@ class InvoiceService
             'tax_amount' => $invoice->tax_amount,
             'total_amount' => $invoice->total_amount,
             'status' => $invoice->status->label(),
-            'items' => $invoice->items->map(fn($item) => [
+            'items' => $invoice->items->map(fn ($item) => [
                 'description' => $item->description,
                 'quantity' => $item->quantity,
                 'unit_price' => $item->unit_price,
@@ -402,7 +256,6 @@ class InvoiceService
             // إنشاء بنود الفاتورة من الخدمات
             $this->createInvoiceItems($invoice, $appointment);
 
-
             DB::commit();
 
             // تسجيل العملية الناجحة
@@ -463,7 +316,7 @@ class InvoiceService
             }
             if ($invoice->status !== InvoiceStatus::DRAFT) {
                 throw new \InvalidArgumentException(
-                    'Cannot rebuild a non-draft invoice (status=' . $invoice->status->getLabel() . ').'
+                    'Cannot rebuild a non-draft invoice (status='.$invoice->status->getLabel().').'
                 );
             }
 
@@ -482,8 +335,8 @@ class InvoiceService
             $tax = app(TaxCalculatorService::class);
 
             $subtotalSum = '0';
-            $taxSum      = '0';
-            $totalSum    = '0';
+            $taxSum = '0';
+            $totalSum = '0';
 
             // 4) Build items (without events to avoid recursive observer updates)
             InvoiceItem::withoutEvents(function () use (
@@ -510,8 +363,8 @@ class InvoiceService
                         ]);
 
                         $subtotalSum = bcadd($subtotalSum, (string) $result['net'], 2);
-                        $taxSum      = bcadd($taxSum, (string) $result['tax'], 2);
-                        $totalSum    = bcadd($totalSum, (string) $result['gross'], 2);
+                        $taxSum = bcadd($taxSum, (string) $result['tax'], 2);
+                        $totalSum = bcadd($totalSum, (string) $result['gross'], 2);
                     }
                 }
             });
@@ -562,7 +415,7 @@ class InvoiceService
      *   discount   = itemsGross - final               (never negative => overpay is NOT a discount)
      *   {net,tax}  = reverse-extract tax from `final`  (net + tax == final, reconciled)
      *
-     * @param  float|null $finalGross  The gross amount to charge. Null = charge the full items total.
+     * @param  float|null  $finalGross  The gross amount to charge. Null = charge the full items total.
      */
     public function applyFinalAmount(Invoice $invoice, ?float $finalGross = null): Invoice
     {
@@ -595,75 +448,12 @@ class InvoiceService
 
         $invoice->update([
             'discount_amount' => $discount,
-            'subtotal'        => $tax['net'],
-            'tax_amount'      => $tax['tax'],
-            'total_amount'    => $tax['gross'], // == $final
-            'tax_rate'        => $taxRate,
+            'subtotal' => $tax['net'],
+            'tax_amount' => $tax['tax'],
+            'total_amount' => $tax['gross'], // == $final
+            'tax_rate' => $taxRate,
         ]);
 
         return $invoice->refresh();
-    }
-
-    /**
-     * تحويل فاتورة Draft إلى Paid مع TSE
-     */
-    public function finalizeDraftInvoice(
-        Invoice $draftInvoice,
-        string $paymentType,
-        float $amountPaid,
-        ?string $notes = null
-    ): Invoice {
-
-        if ($draftInvoice->status !== InvoiceStatus::DRAFT) {
-            throw new \Exception('يمكن فقط تحويل الفواتير Draft');
-        }
-
-        DB::beginTransaction();
-
-        try {
-            // 1. تطبيق TSE Signature
-            // $tseData = $this->applyTSESignature($draftInvoice);
-
-            // 2. توليد رقم الفاتورة
-            $invoiceNumber = Invoice::generateInvoiceNumber();
-
-            // 3. تحديث الفاتورة
-            $draftInvoice->update([
-                'invoice_number' => $invoiceNumber,
-                'status' => InvoiceStatus::PAID,
-                'invoice_data' => array_merge(
-                    [
-                        // 'tse_data' => $tseData,
-                        'finalized_at' => now()->toISOString(),
-                        'payment_type' => $paymentType,
-                        'amount_paid' => $amountPaid,
-                        'finalized_by' => Auth::user()?->full_name,
-                    ]
-                ),
-                'notes' => $notes,
-            ]);
-
-            // 4. تحديث Appointment
-            $draftInvoice->appointment->update([
-                'payment_status' => PaymentStatus::from($paymentType),
-                'payment_method' => PaymentStatus::from($paymentType)->label(),
-            ]);
-
-            // 5. إنشاء سجل Payment
-            // $this->createPaymentRecord($draftInvoice, $paymentType, $amountPaid);
-
-            DB::commit();
-
-            Log::info('Draft invoice finalized', [
-                'invoice_id' => $draftInvoice->id,
-                'invoice_number' => $invoiceNumber,
-            ]);
-
-            return $draftInvoice->fresh();
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            throw $e;
-        }
     }
 }

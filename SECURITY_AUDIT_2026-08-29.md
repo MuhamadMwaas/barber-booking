@@ -51,7 +51,7 @@
 
 | الخطورة | العدد | المعرّفات |
 |---|---|---|
-| 🔴 **Critical (مانع إطلاق)** | **20** | CFG-01/02/03 · AUTH-01/02 · AUTHZ-01/02/03/04 · BOOK-01/02 · MON-01/02/03/04/05 · SET-01/02 · TZ-01 · DB-01 |
+| 🔴 **Critical (مانع إطلاق)** | **20** (منها MON-01 · MON-03 · DB-01 ✅ مُصلحة) | CFG-01/02/03 · AUTH-01/02 · AUTHZ-01/02/03/04 · BOOK-01/02 · ~~MON-01~~/02/~~03~~/04/05 · SET-01/02 · TZ-01 · ~~DB-01~~ |
 | 🟠 **High** | **19** | CFG-04/05 · AUTH-03/04 · AUTHZ-05 · BOOK-03/04/05 · MON-06/07/08/09 · DB-02/03/04 · PERF-01/02/03 · QUAL-01 |
 | 🟡 **Medium** | **21** | CFG-06/07 · AUTH-05/06/07 · BOOK-06/07/08/09/10 · MON-10 · SET-03/04 · DB-05/06 · PERF-04/05/06 · QUAL-02/03/04 |
 | 🔵 **Low** | **3** | CFG-08 · BOOK-11 · QUAL-05 |
@@ -71,7 +71,7 @@
 | 2 | **`CFG-02`** | `trustProxies(at: '*')` مع nginx مباشر بلا بروكسي | **أي مهاجم يتجاوز كل حدود المعدّل** بترويسة `X-Forwarded-For` مزوّرة |
 | 3 | **`AUTH-01`** | لا throttle على `login` / `register` / `verify-otp` مطلقاً | **Credential stuffing + تخمين OTP متوازٍ** = استيلاء على الحسابات |
 | 4 | **`AUTHZ-01`** | `EnsureStaffDashboardAccess` لا يفحص `is_active` | **موظف مفصول يحتفظ بالوصول الكامل** للوحة: بيانات العملاء، تحصيل الأموال، حذف الحجوزات |
-| 5 | **`MON-01`** | حساب الضريبة يختلف بين طبقتين — **مُثبت رقمياً** | **فرق سنت في ضريبة القيمة المضافة في 5 من كل 6 أسعار شائعة** → إقرار ضريبي ألماني خاطئ |
+| 5 | ~~**`MON-01`**~~ ✅ | ~~حساب الضريبة يختلف بين طبقتين~~ — **مُصلحة 2026-09-10** | كان: فرق سنت في 8 من كل 11 سعراً شائعاً → إقرار ضريبي خاطئ. صار: تنفيذ واحد، وتطابق محروس باختبار عبر 4 طبقات — [التوثيق](docs/fixes/MON-01_vat_calculation_unified.md) |
 | 6 | **`MON-02`** | `paymentAmount` خاصية Livewire عامة بلا تحقق ولا صلاحية خصم | **أي موظف يُنهي فاتورة بـ 200 يورو مقابل 0.01 يورو** |
 | 7 | **`SET-01`+`SET-02`** | العملة `USD` وبيانات الشركة الضريبية **فارغة تماماً** في قاعدة البيانات | **كل فاتورة مطبوعة مخالفة لـ §14 UStG الألماني** — باطلة قانونياً |
 | 8 | **`BOOK-01`** | التوفّر والحجز يستخدمان قاعدتَي تعارض **مختلفتين** | مواعيد تظهر متاحة ثم تُرفض، ومواعيد مهجورة **تحجب الأوقات للأبد** |
@@ -93,8 +93,8 @@ CFG-01 (لا throttle:api في المجموعة)
 ```
 AUTHZ-01 (موظف مفصول يبقى داخل اللوحة)
    + MON-02 (لا صلاحية خصم + المبلغ يأتي من المتصفح)
-   + MON-03 (لا قفل على الإنهاء)
-   + DB-01 (لا UNIQUE على رقم الفاتورة)
+   + ~~MON-03 (لا قفل على الإنهاء)~~ ✅ مُصلحة 2026-09-10
+   + ~~DB-01 (لا UNIQUE على رقم الفاتورة)~~ ✅ مُصلحة 2026-09-10
    ⇒ فواتير مكرّرة بأرقام متطابقة، بمبالغ يحددها المهاجم
 ```
 
@@ -103,8 +103,8 @@ AUTHZ-01 (موظف مفصول يبقى داخل اللوحة)
 SET-02 (بيانات الشركة الضريبية فارغة)
    + SET-01 (العملة USD)
    + TZ-01 (المنطقة الزمنية بغداد)
-   + MON-01 (ضريبة خاطئة بسنت)
-   + DB-01 (أرقام فواتير غير فريدة)
+   + ~~MON-01 (ضريبة خاطئة بسنت)~~ ✅ مُصلحة 2026-09-10
+   + ~~DB-01 (أرقام فواتير غير فريدة)~~ ✅ مُصلحة 2026-09-10
    ⇒ لا فاتورة واحدة تصمد أمام تدقيق GoBD / KassenSichV
 ```
 
@@ -112,7 +112,10 @@ SET-02 (بيانات الشركة الضريبية فارغة)
 
 # 2. طبقة الإعداد والبنية التحتية
 
-## 🔴 CFG-01 — مجموعة `api` middleware مُستبدَلة بالكامل
+## ✅ CFG-01 — مجموعة `api` middleware مُستبدَلة بالكامل
+
+> **🟢 مُصلحة.** `bootstrap/app.php` يستخدم الآن `appendToGroup('api', ...)` + `throttleApi()`.
+
 
 **الموقع:** [`bootstrap/app.php:25-28`](bootstrap/app.php#L25-L28)
 **الحالة:** ✅ **مُثبت عملياً** (استخرجتُ مجموعات الـ middleware من التطبيق المُقلَع فعلياً)
@@ -238,7 +241,10 @@ it('resolves route model binding on api routes', function () {
 
 ---
 
-## 🔴 CFG-02 — `trustProxies(at: '*')` على سيرفر مكشوف مباشرة
+## ✅ CFG-02 — `trustProxies(at: '*')` على سيرفر مكشوف مباشرة
+
+> **🟢 مُصلحة.** `trustProxies` مثبّت الآن على `['127.0.0.1', '::1']`.
+
 
 **الموقع:** [`bootstrap/app.php:29`](bootstrap/app.php#L29)
 **الحالة:** ✅ **مؤكد بالكود + مؤكد بإعداد nginx الخاص بك**
@@ -406,7 +412,10 @@ Route::get('/internal/clear-cache', function (Request $request) {
 
 ---
 
-## 🟠 CFG-04 — بوابة SMS مفتوحة للعامة تستنزف رصيدك
+## ✅ CFG-04 — بوابة SMS مفتوحة للعامة تستنزف رصيدك
+
+> **🟢 مُصلحة.** المسار مُعلَّق بالكامل في `routes/api.php`.
+
 
 **الموقع:** [`routes/api.php:73-105`](routes/api.php#L73-L105)
 **الحالة:** ✅ مؤكد بالكود
@@ -607,7 +616,14 @@ SANCTUM_TOKEN_PREFIX=lookup_
 
 # 3. طبقة المصادقة والجلسات
 
-## 🔴 AUTH-01 — لا يوجد أي rate limit على تسجيل الدخول والتسجيل وتحقق الـ OTP
+## ✅ AUTH-01 — لا يوجد أي rate limit على تسجيل الدخول والتسجيل وتحقق الـ OTP
+
+> **🟢 مُصلحة بتاريخ 2026-08-29.** كل مسارات المصادقة تحمل الآن محدِّدات مُسمّاة ثنائية البُعد
+> (IP + الحساب المستهدَف)، معرَّفة في `AppServiceProvider::registerAuthRateLimiters()` ومضبوطة
+> من `config/rate_limits.php`. يحرسها 8 اختبارات في `tests/Feature/AuthRateLimitTest.php`.
+> **تقرير الإصلاح المفصّل:** [`docs/fixes/AUTH-01_rate_limiting.md`](docs/fixes/AUTH-01_rate_limiting.md)
+>
+> ما يلي هو الوصف الأصلي للثغرة، محفوظاً كسجل.
 
 **الموقع:** [`routes/api.php:40-42, 57-58, 69-70`](routes/api.php#L40-L42)
 **الحالة:** ✅ مؤكد بالكود + مُثبت بفحص مجموعة الـ middleware
@@ -735,7 +751,24 @@ Route::post('login', [AuthController::class, 'login'])->middleware('throttle:log
 
 ---
 
-## 🔴 AUTH-02 — تجاوز حدّ محاولات الـ OTP عبر التوازي
+## ✅ AUTH-02 — تجاوز حدّ محاولات الـ OTP عبر التوازي
+
+> **🟢 مُصلحة بتاريخ 2026-08-29.** `validate()` صار يطالب بفتحة محاولة عبر عبارة UPDATE
+> شرطية ذرّية (`claimAttempt()`) قبل تقييم أي تخمين. قِيس السباق قبل الإصلاح (8 تخمينات
+> مقابل حدّ 5) وبعده (5 بالضبط). يحرسها 5 اختبارات في `tests/Feature/OtpAttemptCapTest.php`.
+>
+> **تصحيحان على الوصف أدناه:**
+> 1. اسم الدالة `validate()` لا `verify()`، وتوقيعها يتضمّن `OtpType`.
+> 2. عبارة «العدّاد يتخلّف» **خاطئة** — `increment()` ذرّي والعدّاد دقيق دائماً.
+>    الخلل كان في **الفحص** الذي يقرأ قيمة قديمة، لا في الزيادة.
+>
+> **واكتُشفت أثناء الإصلاح علة أخطر يومياً:** `otps.expires_at` كان يحمل
+> `ON UPDATE CURRENT_TIMESTAMP` (سلوك MySQL تلقائي)، فأول محاولة خاطئة كانت تُصيّر
+> رمز العميل منتهياً فوراً. أُصلحت بميجريشن — وهي شرط مسبق لأي إصلاح لـ AUTH-02.
+>
+> **تقرير الإصلاح المفصّل:** [`docs/fixes/AUTH-02_otp_attempt_cap.md`](docs/fixes/AUTH-02_otp_attempt_cap.md)
+>
+> ما يلي هو الوصف الأصلي، محفوظاً كسجل.
 
 **الموقع:** [`app/Services/OtpService.php:73-84`](app/Services/OtpService.php#L73-L84)
 **الحالة:** ✅ مؤكد بالكود
@@ -873,7 +906,25 @@ if (! hash_equals($record->otp, hash('sha256', $code))) {   // ✅ مقارنة 
 
 ---
 
-## 🟠 AUTH-04 — لا تدوير لتوكن التحديث ولا كشف لإعادة الاستخدام
+## ✅ AUTH-04 — لا تدوير لتوكن التحديث ولا كشف لإعادة الاستخدام
+
+> **🟢 مُصلحة بتاريخ 2026-08-29.** توكن التحديث صار **صالحاً لاستعمال واحد**: كل نداء لـ
+> `/api/auth/refresh` يقتل التوكن الواصل ويُعيد واحداً جديداً (كتابة شرطية ذرّية ضد السباق)،
+> وظهور توكن مُنفَق مرّة ثانية يُبطل كل جلسات الحساب فوراً. أُخرج `APP_KEY` من التجزئة
+> (مع قبول الصيغة القديمة لتجنّب خروج جماعي). يحرسها 11 اختباراً في
+> `tests/Feature/RefreshTokenRotationTest.php`.
+>
+> **⚠️ تغيُّر في عقد الـ API:** استجابة `refresh` تحمل الآن `refresh_token` جديداً يجب على
+> العميل حفظه. مفتاح الإطفاء أثناء الانتقال: `AUTH_ROTATE_REFRESH_TOKENS=false`.
+>
+> **❌ تصحيح على هذا التقرير:** «المشكلة الثالثة» أدناه (تغيير كلمة المرور لا يُبطل
+> الجلسات) **غير صحيحة**. `ProfileController::changePassword` كان يستدعي `tokens()->delete()`
+> و`refreshTokens()->update(['revoked' => true])` قبل أي تعديل — الاقتباس في التقرير لا يطابق الملف.
+> كما أن الحل المقترح أدناه فيه ثغرتان (سباق عند التدوير · إنذار كاذب على كل تسجيل خروج).
+>
+> **تقرير الإصلاح المفصّل:** [`docs/fixes/AUTH-04_refresh_token_rotation.md`](docs/fixes/AUTH-04_refresh_token_rotation.md)
+>
+> ما يلي هو الوصف الأصلي للثغرة، محفوظاً كسجل.
 
 **الموقع:** [`app/Services/AuthTokenService.php:24-69`](app/Services/AuthTokenService.php#L24-L69)
 **الحالة:** ✅ مؤكد بالكود
@@ -979,7 +1030,17 @@ $request->user()->currentAccessToken()->delete();
 
 ---
 
-## 🟡 AUTH-06 — رفع صورة الملف الشخصي بلا قيود كافية
+## ✅ AUTH-06 — رفع صورة الملف الشخصي بلا قيود كافية
+
+> **🟢 مصلحة بتاريخ 2026-08-29.** قيود الصورة الرمزية (الصيغ · الحجم · الأبعاد) صارت في
+> `config/uploads.php` وتُطبَّق عبر `App\Support\ImageUploadRules` على المداخل الثلاثة جميعاً — لا
+> على الـ API وحده: `UserForm` و`ProviderForm` في Filament كانتا بلا `dimensions` أيضاً. وأُصلحت معها
+> ثغرة جانبية: `User::updateProfileImage()` كان يشتقّ الامتداد المخزَّن من `getClientOriginalExtension()`.
+> يحرسها 9 اختبارات في `tests/Feature/ProfileImageValidationTest.php`.
+> **تقرير الإصلاح المفصّل:** [`docs/fixes/AUTH-06_profile_image_upload.md`](docs/fixes/AUTH-06_profile_image_upload.md)
+>
+> ما يلي هو الوصف الأصلي للثغرة، محفوظاً كسجل — مع تصحيحين: `image` لا تسمح بـ SVG أصلاً على
+> Laravel 12 (الاتساع الفعلي هو `gif` و`bmp`)، والقاعدة المقترحة تجمع `image` و`mimes` تكراراً.
 
 **الموقع:** [`app/Http/Controllers/Api/ProfileController.php:34`](app/Http/Controllers/Api/ProfileController.php#L34)
 
@@ -1002,7 +1063,23 @@ $request->user()->currentAccessToken()->delete();
 
 ---
 
-## 🟡 AUTH-07 — تغيير رقم الهاتف بلا تحقق من الصيغة
+## ✅ AUTH-07 — تغيير رقم الهاتف بلا تحقق من الصيغة
+
+> **🟢 مصلحة بتاريخ 2026-08-29 — مع تعديل جوهري على الحل المقترح أدناه.**
+> التعبير النمطي كما اقتُرح يُطبَّق على النصّ الخام، وقاعدة البيانات تخزّن الأرقام بصيغة بشرية
+> عمداً (`+971-50-101-0101` — انظر `config/sms.php`): **صفر من 25 رقماً مخزَّناً يطابقه**، فكان
+> سيُرجع 422 لكل مستخدم قائم يحفظ ملفه الشخصي. القاعدة الآن في `App\Rules\PhoneNumber` تُطبّع
+> أولاً عبر `Services\Sms\PhoneNumberNormalizer` ثم تتحقق من E.164 — فما يجتاز التحقق هو بحكم
+> البناء رقمٌ تستطيع بوّابة الرسائل الوصول إليه. طُبِّقت على مسارات الكتابة الثلاثة لا على
+> `ProfileController` وحده: `PhoneVerificationController::sendOtp()` و`RegisterRequest` كانا
+> بلا تحقق أيضاً. يحرسها 17 اختباراً في `tests/Feature/PhoneNumberValidationTest.php`.
+>
+> **يبقى مفتوحاً (يستحق بنداً مستقلاً):** `users.phone` بلا صيغة معياريّة في التخزين، فـ
+> `+971501010101` و`+971-50-101-0101` صفّان مختلفان لنفس الرقم — **تجاوز لقيد التفرّد** على
+> حقلٍ هو هويّة دخول وهدف OTP. إصلاحه يستلزم تطبيع مواضع البحث وميجريشن تعييرٍ للصفوف القائمة.
+> **تقرير الإصلاح المفصّل:** [`docs/fixes/AUTH-07_phone_number_format.md`](docs/fixes/AUTH-07_phone_number_format.md)
+>
+> ما يلي هو الوصف الأصلي للثغرة، محفوظاً كسجل.
 
 **الموقع:** [`app/Http/Controllers/Api/ProfileController.php:31`](app/Http/Controllers/Api/ProfileController.php#L31)
 
@@ -1026,7 +1103,19 @@ $request->user()->currentAccessToken()->delete();
 
 # 4. طبقة التخويل (Authorization) و IDOR
 
-## 🔴 AUTHZ-01 — موظف مفصول يحتفظ بالوصول الكامل للوحة
+## ✅ AUTHZ-01 — موظف مفصول يحتفظ بالوصول الكامل للوحة
+
+> **🟢 مُصلحة بتاريخ 2026-08-29.** `User::isActiveStaff()` صار المصدر الوحيد للحقيقة،
+> و`EnsureStaffDashboardAccess` يطرد الحساب المعطّل (تسجيل خروج + تدمير جلسة) بدل السماح،
+> و`UserObserver` يُبطل كل جلسة وتوكن لحظة التعطيل. **إضافةً لما لم يرصده التقرير:**
+> الـ middleware صار مُسجَّلاً كـ Livewire persistent middleware، لأن كل أفعال اللوحة
+> (`processPayment`، `deleteAppointment`، بحث العملاء) كانت تمر عبر `POST /livewire/update`
+> الذي لا يحمل هذا الـ middleware إطلاقاً.
+> التفاصيل الكاملة في [`docs/fixes/AUTHZ-01_staff_dashboard_access.md`](docs/fixes/AUTHZ-01_staff_dashboard_access.md).
+>
+> **تصحيح لادّعاء في هذا التقرير:** «تسجيل دخول جديد يمر أيضاً» **غير صحيح** —
+> `App\Filament\Pages\Auth\Login::authenticate()` كان يفحص `is_active` أصلاً ويرفض.
+> الثغرة الحقيقية كانت **الجلسة القائمة**، وهي أخطر مما وُصِف لا أقل (انظر الملف أعلاه).
 
 **الموقع:** [`app/Http/Middleware/EnsureStaffDashboardAccess.php:11-24`](app/Http/Middleware/EnsureStaffDashboardAccess.php#L11-L24)
 **الحالة:** ✅ مؤكد بالكود — **هذه أخطر ثغرة تخويل في المشروع**
@@ -1594,7 +1683,21 @@ public function broadcast(Request $request)
 
 ---
 
-## 🟠 AUTHZ-05 — تعداد أسماء المستخدمين عبر رسالة خطأ الحجز
+## ✅ AUTHZ-05 — تعداد أسماء المستخدمين عبر رسالة خطأ الحجز
+
+> **🟢 مُصلحة بتاريخ 2026-08-29.** `BookingCreateRequest` لا يقبل الآن إلا مستخدماً
+> نشطاً يحمل دور `provider`، مع تقييد `model_type` في pivot متعدد الأشكال. وتعيد
+> `BookingValidationService` فرض هذا invariant للمداخل الداخلية وتستخدم رسائل عامة
+> بلا أسماء، بينما تُسجّل السبب والمعرّفات في السجل الخاص. أزيلت أسماء المزوّدين أيضاً
+> من أخطاء الجدول والإجازة وتعارض الموعد. يحرس الإصلاح اختبار تعداد مباشر وملف إنشاء
+> الحجز الكامل: **43 اختباراً، 94 assertion، بلا فشل**.
+>
+> **تصحيح:** عبارة «بلا سقف معدّل» أدناه أصبحت قديمة بعد إصلاح `CFG-01`؛ مجموعة API
+> تحمل الآن `throttleApi()`. الحد يبطئ الهجوم لكنه لم يكن بديلاً عن إغلاق التسريب.
+>
+> **تقرير الإصلاح المفصل:** [`docs/fixes/AUTHZ-05_booking_user_enumeration.md`](docs/fixes/AUTHZ-05_booking_user_enumeration.md)
+>
+> ما يلي هو الوصف الأصلي للثغرة، محفوظاً كسجل.
 
 **الموقع:** [`app/Services/BookingValidationService.php:59-63`](app/Services/BookingValidationService.php#L59-L63) + [`app/Http/Requests/Api/BookingCreateRequest.php:27`](app/Http/Requests/Api/BookingCreateRequest.php#L27)
 **الحالة:** ✅ مؤكد بالكود
@@ -2442,7 +2545,34 @@ $validated = $request->validate([
 
 > هذه أخطر أقسام التقرير بالنسبة لعمل ألماني خاضع لـ **GoBD** و**KassenSichV** و**§14 UStG**.
 
-## 🔴 MON-01 — حساب ضريبة القيمة المضافة يختلف بين طبقتين — **مُثبت رقمياً**
+## ✅ MON-01 — حساب ضريبة القيمة المضافة يختلف بين طبقتين — **مُصلحة 2026-09-10**
+
+> **الحالة:** ✅ **مُصلحة** — التوثيق الكامل لكل تعديل في
+> [`docs/fixes/MON-01_vat_calculation_unified.md`](docs/fixes/MON-01_vat_calculation_unified.md).
+>
+> **ما نُفِّذ:** `TaxCalculatorService` صار المصدر الوحيد بدقة داخلية
+> `precision + 8`؛ وسُحبت إليه **سبع** نسخ من المعادلة (لا اثنتان)؛ وحُذف
+> `BookingService2` (428 سطراً ميتاً)؛ و30 اختباراً جديداً تحرس التطابق بين
+> `appointments` و`invoices` و`invoice_items` و`payments` — تفشل 21 منها على
+> الكود القديم.
+>
+> **ثلاثة أعطال إضافية لم يذكرها هذا التقرير وظهرت أثناء التنفيذ:**
+> 1. `normalizeAmount()` كانت تقتطع **المدخل** نفسه إلى منزلتين قبل أي حساب.
+> 2. `InvoiceItem::calculateTotal()` كان يعيد بناء الـ gross من الـ net بـ
+>    `addTax`، فيفقد سنتاً في كل سعر عند **كل حفظ** — لغم خامد بفضل
+>    `withoutEvents()`، وقد نُزع.
+> 3. `AppointmentsRelationManager` كان يزرع `19` ويُهمل `subtotal`.
+>
+> **وتصحيحان لهذا التقرير:**
+> - النسبة المخفّضة 7% **لا** «تعمل صدفةً»: المعامل `1.07` صحيح بالصدفة، لكن
+>   اقتطاع ناتج القسمة يبقى، فـ 7% تُخطئ أيضاً (`19.00 @ 7%` → 1.25 بدل 1.24).
+> - `INTERNAL_SCALE = 10` **ثابتة** غير كافية: الخدمة تقبل `precision` حتى 12،
+>   فدقة ثابتة عند 10 تحسب ناتجاً بدقة 12 بدقةٍ أقل من دقته — أي العطل نفسه
+>   بشكل آخر. صارت `max(10, precision + 8)`.
+> - الإصلاح المقترح **لا يُصلح** الرحلة الدائرية `net → gross`، لأنها غير
+>   قابلة للإصلاح: الاستخراج العكسي دالة غير عكوسة.
+
+### ما كانت المشكلة (للسجل)
 
 **الموقع:** [`app/Services/TaxCalculatorService.php:15, 48-54`](app/Services/TaxCalculatorService.php#L15) مقابل [`app/Services/BookingService.php:254, 289-292`](app/Services/BookingService.php#L254)
 **الحالة:** ✅ **مُثبت بتنفيذ فعلي** — شغّلت المنطقين على نفس المدخلات
@@ -2765,7 +2895,52 @@ SalonSetting::updateOrCreate(['key' => 'max_discount_percent'], ['value' => 20])
 
 ---
 
-## 🔴 MON-03 — فواتير مكرّرة بأرقام غير فريدة (خرق GoBD)
+## ✅ MON-03 — فواتير مكرّرة بأرقام غير فريدة — **مُصلحة 2026-09-10**
+
+> **الحالة:** ✅ **مُصلحة** — التوثيق الكامل في
+> [`docs/fixes/MON-03_document_numbering.md`](docs/fixes/MON-03_document_numbering.md).
+> يشمل الإصلاح `DB-01` كاملاً (خمسة قيود فريدة).
+>
+> ### 🔴 تصحيح جوهري لهذا القسم
+>
+> وصفتُ MON-03 هنا كـ **TOCTOU يحتاج ضغطة مزدوجة**. الواقع أخطر بمرتبة كاملة:
+> **كل فاتورة في النظام كانت تحصل على `INV-2026-000001`** — حتمياً، تسلسلياً،
+> بلا أي تزامن. السبب: `orderByDesc('id')` يجلب أحدث **صف** لا أعلى **رقم**،
+> وكل حجز يُنشئ مسودة بـ `invoice_number = NULL`، فـ `preg_match` على NULL
+> يُنتج 0 والرقم التالي 1 — دائماً. وثبت رقمياً أن `INV-2026-000007` كان
+> موجوداً في الجدول والمولّد أصدر `000001` رغم ذلك.
+>
+> والمفارقة أن السيناريو الموصوف أعلاه هو **الأصعب** تحقيقاً: زر الدفع محميّ
+> فعلاً بـ `wire:loading.attr="disabled"`.
+>
+> ### تصحيحات أخرى
+>
+> - **الإصلاح المقترح أدناه يحمل نفس العطل:** `DB::transaction()` داخل
+>   `next()` تُثبِّت وتُحرِّر القفل **قبل** أن يستهلك المستدعي الرقم، ولو
+>   ارتدّت معاملته بقي العدّاد مرتفعاً ⟶ فجوة. المُنفَّذ يعمل داخل معاملة
+>   المستدعي و**يرفض** النداء خارج معاملة بـ `RuntimeException`.
+> - **`unique(['provider_id','start_time'])`** المقترح في DB-01 **سيكسر ميزة
+>   قائمة**: صلاحية `force_booking` تسمح بالتداخل المتعمد. لم يُضَف.
+> - **دقة قانونية:** §14 UStG يشترط رقماً يُمنح **مرة واحدة**
+>   (`einmalig vergeben`) — الفرادة إلزامية، والفجوات يجب أن تكون قابلة
+>   للتفسير لا أنها قاتلة تلقائياً. نُفِّذ بلا فجوات لأنه الأكثر أماناً.
+>
+> ### أربعة أعطال إضافية لم يذكرها هذا التقرير
+>
+> 1. `validateInvoiceCreation()` تفحص `PAID` وحدها، فمسار Filament يُدرج
+>    فاتورة **ثانية** لموعد يحمل مسودة — و`invoice()` علاقة `HasOne` ترجع
+>    واحدة اعتباطياً.
+> 2. حرس «الموعد ملغى» **كود ميت**: يقارن `->value` (int `-2`) بنصّ
+>    `'admin_cancelled'` — يمكن إصدار فاتورة لموعد ملغى.
+> 3. `payment_number` بـ `uniqid()` **بلا حلقة إعادة** (بخلاف
+>    `appointments.number`) وبلا قيد.
+> 4. `applyTSESignature()` نداء شبكي داخل `DB::transaction()`.
+>
+> وعطلان في الـ seeders كشفتهما القيود: `ProviderServiceSeeder` يُنتج زوجاً
+> مكرراً على تشغيل **نظيف** (اختيار عشوائي بلا فحص الزوج)، و`AppointmentSeeder`
+> يستخدم `uniqid()` لرقم الموعد.
+
+### ما كانت المشكلة (للسجل)
 
 **الموقع:** [`app/Services/InvoiceFinalizationService.php:26-45`](app/Services/InvoiceFinalizationService.php#L26-L45) + **قاعدة البيانات**
 **الحالة:** ✅ مؤكد بالكود + **مؤكد بفحص فهارس قاعدة البيانات الحيّة**
@@ -3036,10 +3211,15 @@ $paymentStatus = match ($invoiceStatus) {
 
 ---
 
-## 🔴 MON-05 — ثلاثة مسارات دفع مختلفة تُنتج سجلات مختلفة
+## ✅ MON-05 — توحيد مسارات الدفع التي كانت تُنتج سجلات مختلفة
 
-**الموقع:** `InvoiceFinalizationService::finalizeDraftInvoice` · `InvoiceService::finalizeDraftInvoice:610` · `AppointmentsTable.php:395-460`
-**الحالة:** ✅ مؤكد بمقارنة المسارات الثلاثة
+**الموقع التاريخي:** `InvoiceFinalizationService::finalizeDraftInvoice` · `InvoiceService::finalizeDraftInvoice` · `AppointmentsTable.php` · `AppointmentsRelationManager.php`
+
+**الحالة الحالية:** ✅ مُصلَحة في 2026-09-10 — التفاصيل التنفيذية والاختبارات في [`docs/fixes/MON-05_unified_payment_flow.md`](docs/fixes/MON-05_unified_payment_flow.md)
+
+> الجدول والتحليل التاليان يوثقان الحالة **قبل الإصلاح**. كشف التنفيذ أن هناك
+> ثلاثة مسارات UI نشطة، إضافة إلى دالة عامة مكررة، ولذلك كان نطاق الخلل أوسع من
+> عنوان نتيجة التدقيق الأصلية.
 
 ### الشرح — ماذا يفعل كل مسار
 
@@ -3115,6 +3295,24 @@ $appointmentUpdates = [
 **«تحصيل دفعة» عملية تجارية واحدة، ويجب أن يكون لها تنفيذ واحد.** ثلاثة تنفيذات تعني ثلاث حالات نهائية مختلفة لنفس الحدث التجاري — وهذا يجعل التسوية المحاسبية مستحيلة بنيوياً، لا صعبة فقط.
 
 النمط الصحيح: **خدمة تطبيق واحدة** تملك العملية بالكامل، وكل واجهة (Livewire، Filament، API) مجرد مُدخل رفيع إليها. الواجهة تجمع البيانات وتعرض النتيجة؛ **المنطق التجاري لا يعيش في الواجهة أبداً.**
+
+### ما نُفّذ فعلياً في 2026-09-10
+
+- أصبحت `InvoiceFinalizationService::finalizeAppointmentPayment()` الكاتب الوحيد
+  لعملية الدفع داخل الصالون، و`StaffDashboard` هو التدفق المرجعي.
+- `StaffDashboard` و`AppointmentsTable` و`AppointmentsRelationManager` تستدعي
+  العملية نفسها ولا تكتب Invoice/Payment/appointment statuses بنفسها.
+- حُذفت `InvoiceService::finalizeDraftInvoice()` و
+  `InvoiceService::createInvoiceFromAppointment()` وخدمة
+  `Payments\InvoicePaymentService` المتنافسة.
+- المبلغ الأقل يُسجل كسعر خاص/`discount_amount` ثم يعتبر `Payment::TYPE_FULL`؛
+  الدفعات الجزئية ليست مدعومة حالياً.
+- `cash` و`card` فقط، مع `payment_method_id` فعلي وغير فارغ لكل Payment جديد.
+- فاتورة الأب تشمل خدمات كل children، وينشأ Payment واحد، وتُستكمل المجموعة كلها.
+- قفل صفوف المجموعة والفاتورة يمنع الضغط المزدوج من إنشاء دفعتين.
+- TSE متوقف بقرار تشغيلي صريح: لا اتصال Fiskaly، وتُحفظ
+  `tse_enabled=false` في metadata.
+- التحقق الآلي: `53 passed` و`402 assertions` في اختبارات Money المركّزة.
 
 ---
 
@@ -3206,6 +3404,12 @@ return $this->calculateTotals($services);          // ✅ نداء مباشر
 ## 🟠 MON-08 — تكامل Fiskaly TSE مكتوب بالكامل لكنه غير موصول
 
 **الموقع:** [`app/Services/InvoiceFinalizationService.php:116-173`](app/Services/InvoiceFinalizationService.php#L116-L173) مقابل [`app/Services/Fiskaly/`](app/Services/Fiskaly/)
+
+**تحديث 2026-09-10:** اتُّخذ القرار التشغيلي المطلوب: TSE متوقف عمداً خلال
+مرحلة non-production الحالية. أزيلت محاولة التوقيع المتفرقة من مسار Filament،
+والمسار الموحد لا يستدعي Fiskaly ويحفظ `tse_enabled=false` بوضوح. هذا يحل غموض
+الحالة والتوثيق، لكنه **لا يعني** أن ربط TSE التقني أو متطلبات production قد
+اكتملت. بقية هذا القسم تحفظ تحليل حالة ما قبل القرار وخطة التفعيل المستقبلية.
 
 ### الشرح
 
@@ -3629,7 +3833,26 @@ WHERE appointment_date >= '2026-08-29';
 
 ---
 
-## 🔴 DB-01 — فهارس فريدة مفقودة على كل أرقام المستندات
+## ✅ DB-01 — فهارس فريدة مفقودة على كل أرقام المستندات — **مُصلحة 2026-09-10**
+
+> **الحالة:** ✅ **مُصلحة** ضمن إصلاح `MON-03` —
+> [`docs/fixes/MON-03_document_numbering.md`](docs/fixes/MON-03_document_numbering.md).
+>
+> خمسة قيود مُضافة: `invoices(invoice_number)`، `invoices(appointment_id)`،
+> `payments(payment_number)`، `appointments(number)`،
+> `provider_service(provider_id, service_id)` — بعد إصلاح موثَّق للتكرارات
+> القائمة في نفس المايقريشن (لا يمكن إضافة `UNIQUE` على عمود فيه تكرارات).
+>
+> ⚠️ **`unique(['provider_id','start_time'])` المقترح أدناه لم يُضَف عن قصد:**
+> صلاحية `force_booking` تسمح بالتداخل المتعمد وهو قرار تصميمي موثَّق، فالقيد
+> سيرفضه ويكسر الميزة. منع الحجز المزدوج غير المقصود يقع في
+> `BookingLockService` + `assertNoConflictingAppointment()`، لا في فهرس.
+>
+> وأُصلح معه تعارض السعر: `getProviderServicePricing()` كانت بلا
+> `->where('is_active', true)` بخلاف `getEffectivePrice()`، فصفٌّ pivot معطَّل
+> يحدّد السعر **المعروض** بينما الحجز يتجاهله و**يُحصّل** السعر الأساسي.
+
+### ما كانت المشكلة (للسجل)
 
 **الحالة:** ✅ **مؤكد بفحص `information_schema` على قاعدتك**
 
@@ -4247,7 +4470,7 @@ git rm app/Services/Appointments/AppointmentCreationService.php
 | `ServiceAvailabilityService.php:593-598` | نفس الشيء | مكرر |
 | `InvoiceFinalizationService.php:190-204` | `determineInvoiceStatus()` | **صحيحة لكن غير مستدعاة** — راجع `MON-04` |
 | `ServiceAvailabilityService.php:543-553` | `calculateBreakStart()` | ميتة (المستدعي مُعلَّق في السطور 375-376) — `break_minutes` لا يُطبَّق إطلاقاً |
-| `InvoiceService.php:610-668` | `finalizeDraftInvoice()` | نسخة مكررة أقل اكتمالاً — راجع `MON-05` |
+| ~~`InvoiceService::finalizeDraftInvoice()`~~ | حُذفت في 2026-09-10 | أزيل الكاتب المالي المكرر — راجع `MON-05` |
 | `PrintController.php:102` | `if (empty($invoiceIds))` | فرع ميت — `explode(',', '')` تُرجع `['']` وهي غير فارغة |
 
 **ملاحظة على `break_minutes`:** العمود موجود في `provider_scheduled_works` وواجهة الإدارة تسمح بضبطه، لكن توليد الفتحات **يتجاهله تماماً** (السطران 375-376 مُعلَّقان). أي أن استراحة الغداء لا تُحجب من التوفّر — عميل يستطيع حجز موعد في وقت استراحة المزوّد. **هذا سلوك خاطئ نشط، لا مجرد كود ميت.**
@@ -4439,7 +4662,7 @@ SANCTUM_TOKEN_PREFIX=lookup_
 | 17 | `AUTH-03` | تجزئة الـ OTP + `$hidden` |
 | 18 | `BOOK-01` | أمر `bookings:purge-abandoned` + جدولته |
 | 19 | `BOOK-04` | توحيد استعلام الإجازات بـ `COALESCE` |
-| 20 | `MON-05` | حذف `InvoiceService::finalizeDraftInvoice` وتوحيد المسارات |
+| 20 | `MON-05` | ✅ نُفّذ: حذف كتّاب الدفع المتنافسين وتوحيد كل واجهات الدفع على `finalizeAppointmentPayment()` |
 | 21 | `MON-06` | حذف كل `bcscale()` |
 | 22 | `MON-07` | `addServiceDifferentProvider` عبر `TaxCalculatorService` |
 | 23 | `BOOK-05` | تفعيل `custom_duration` (**بعد مراجعة البيانات**) |
@@ -4457,7 +4680,7 @@ SANCTUM_TOKEN_PREFIX=lookup_
 | 28 | `DB-02` | فهارس الأداء + استبدال `whereDate` بـ `whereBetween` |
 | 29 | `PERF-03` | ترقيم صفحات + سقف `per_page` |
 | 30 | `DB-06` | `softDeletes` على الجداول المالية |
-| 31 | `MON-08` | قرار موثَّق بشأن TSE — وصله أو أوقفه بوضوح |
+| 31 | `MON-08` | ✅ القرار التشغيلي موثّق: TSE متوقف في non-production؛ الربط الفعلي مطلوب قبل أي تشغيل يلزمه قانونياً |
 | 32 | `QUAL-03` | migration إعادة التسمية (`segnture`، `branchs`، `adress`، `noticifation`) |
 | 33 | `QUAL-05` | الاختبارات السبعة التي تحرس ثغرات هذا التقرير |
 | 34 | `QUAL-04` | تحديث `Agent.md` و`docs/*` |

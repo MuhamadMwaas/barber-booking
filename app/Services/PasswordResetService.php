@@ -6,6 +6,7 @@ use App\Enum\OtpPurpose;
 use App\Enum\OtpType;
 use App\Enum\RegistrationMethod;
 use App\Models\PasswordResetGrant;
+use App\Models\RefreshToken;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -142,7 +143,7 @@ class PasswordResetService
             $this->verificationService->markVerified($user, $channel);
 
             $user->tokens()->delete();
-            $user->refreshTokens()->update(['revoked' => true]);
+            RefreshToken::revokeAllFor($user->id, RefreshToken::REASON_PASSWORD_RESET);
 
             if ($grant) {
                 $grant->forceFill(['used_at' => now()])->save();

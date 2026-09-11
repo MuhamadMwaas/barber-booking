@@ -379,6 +379,90 @@ class AppointmentInfolist
                     ->collapsible()
                     ->collapsed(false)
                     ->visible(fn ($record) => $record->colors()->exists()),
+
+                /*
+                 * Reminder history for this booking.
+                 *
+                 * Staff field the "I never got a reminder" call, and until now
+                 * they had no way to answer it: whether the customer set one,
+                 * when it was due, and — since the three channels became
+                 * independently switchable — which channels it actually went out
+                 * on. `delivered_channels: []` is the informative case, meaning
+                 * the reminder fired while every channel was switched off.
+                 *
+                 * Read-only on purpose. Staff can see the reminder; only the
+                 * customer sets it, from their own app.
+                 */
+                Section::make(__('resources.appointment.reminders'))
+                    ->icon('heroicon-o-bell-alert')
+                    ->schema([
+                        TextEntry::make('reminders_summary')
+                            ->label('')
+                            ->state(function ($record) {
+                                $reminders = $record->reminders()
+                                    ->orderByDesc('id')
+                                    ->get();
+
+                                if ($reminders->isEmpty()) {
+                                    return new HtmlString(
+                                        '<p style="color:#94a3b8;font-style:italic;">'
+                                        . e(__('resources.appointment.no_reminders'))
+                                        . '</p>'
+                                    );
+                                }
+
+                                $html = $reminders->map(function ($reminder) {
+                                    [$badgeBg, $badgeText] = match ($reminder->status) {
+                                        'sent' => ['#dcfce7', '#166534'],
+                                        'cancelled' => ['#fee2e2', '#991b1b'],
+                                        default => ['#fef9c3', '#854d0e'],
+                                    };
+
+                                    $status = e(__('resources.appointment.reminder_status.' . $reminder->status));
+                                    $due = e(optional($reminder->remind_at)->format('Y-m-d H:i') ?? '—');
+
+                                    $lead = $reminder->offsetHours();
+                                    $leadText = $lead === null
+                                        ? ''
+                                        : ' <span style="color:#64748b;font-size:0.8em;">('
+                                            . e(__('resources.appointment.reminder_lead', ['hours' => $lead]))
+                                            . ')</span>';
+
+                                    // Null = never fired. Empty array = fired
+                                    // with every channel switched off, which is
+                                    // the case worth flagging in red.
+                                    $channels = $reminder->delivered_channels;
+                                    if ($channels === null) {
+                                        $channelText = '<span style="color:#94a3b8;">—</span>';
+                                    } elseif ($channels === []) {
+                                        $channelText = '<span style="color:#b91c1c;font-weight:600;">'
+                                            . e(__('resources.appointment.reminder_no_channel'))
+                                            . '</span>';
+                                    } else {
+                                        $channelText = '<span style="color:#1e293b;">'
+                                            . e(implode(', ', $channels))
+                                            . '</span>';
+                                    }
+
+                                    return "
+                                        <div style='display:flex;align-items:center;gap:10px;padding:0.5rem 0.75rem;
+                                                    background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:6px;'>
+                                            <span style='background:{$badgeBg};color:{$badgeText};font-size:0.75rem;font-weight:600;
+                                                         padding:2px 8px;border-radius:999px;flex-shrink:0;'>{$status}</span>
+                                            <span style='flex:1;color:#1e293b;'>{$due}{$leadText}</span>
+                                            <span style='font-size:0.85rem;'>{$channelText}</span>
+                                        </div>
+                                    ";
+                                })->join('');
+
+                                return new HtmlString($html);
+                            })
+                            ->columnSpanFull(),
+                    ])
+                    ->compact()
+                    ->collapsible()
+                    ->collapsed(true)
+                    ->visible(fn ($record) => $record->reminders()->exists()),
             ]);
     }
 }

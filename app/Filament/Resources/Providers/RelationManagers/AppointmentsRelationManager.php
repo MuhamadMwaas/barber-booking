@@ -4,23 +4,26 @@ namespace App\Filament\Resources\Providers\RelationManagers;
 
 use App\Enum\AppointmentStatus;
 use App\Enum\PaymentStatus;
-use App\Services\InvoiceService;
-use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Tables\Table;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\TernaryFilter;
-use Filament\Tables\Filters\Filter;
+use App\Services\InvoiceFinalizationService;
+use App\Services\TaxCalculatorService;
+use Carbon\Carbon;
 use Filament\Actions\Action;
-use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
-use Filament\Forms\Components\Hidden;
-use Filament\Support\Enums\FontWeight;
 use Filament\Notifications\Notification;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Enums\FontWeight;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\HtmlString;
 
 class AppointmentsRelationManager extends RelationManager
@@ -29,7 +32,7 @@ class AppointmentsRelationManager extends RelationManager
 
     protected static ?string $recordTitleAttribute = 'number';
 
-    public static function getTitle(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): string
+    public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
         return __('resources.provider_resource.appointments_management');
     }
@@ -60,13 +63,13 @@ class AppointmentsRelationManager extends RelationManager
                     ->searchable(query: function (Builder $query, string $search) {
                         $query->where(function ($q) use ($search) {
                             $q->where('customer_name', 'like', "%{$search}%")
-                              ->orWhere('customer_email', 'like', "%{$search}%")
-                              ->orWhere('customer_phone', 'like', "%{$search}%")
-                              ->orWhereHas('customer', function ($qq) use ($search) {
-                                  $qq->where('first_name', 'like', "%{$search}%")
-                                     ->orWhere('last_name', 'like', "%{$search}%")
-                                     ->orWhereRaw("CONCAT(first_name,' ',last_name) like ?", ["%{$search}%"]);
-                              });
+                                ->orWhere('customer_email', 'like', "%{$search}%")
+                                ->orWhere('customer_phone', 'like', "%{$search}%")
+                                ->orWhereHas('customer', function ($qq) use ($search) {
+                                    $qq->where('first_name', 'like', "%{$search}%")
+                                        ->orWhere('last_name', 'like', "%{$search}%")
+                                        ->orWhereRaw("CONCAT(first_name,' ',last_name) like ?", ["%{$search}%"]);
+                                });
                         });
                     })
                     ->weight(FontWeight::SemiBold),
@@ -77,7 +80,7 @@ class AppointmentsRelationManager extends RelationManager
                     ->date('M d, Y')
                     ->sortable()
                     ->icon('heroicon-o-calendar')
-                    ->description(fn($record) => $record->start_time->format('h:i A') . ' - ' . $record->end_time->format('h:i A')),
+                    ->description(fn ($record) => $record->start_time->format('h:i A').' - '.$record->end_time->format('h:i A')),
 
                 // المدة
                 TextColumn::make('duration_minutes')
@@ -85,6 +88,7 @@ class AppointmentsRelationManager extends RelationManager
                     ->formatStateUsing(function ($state) {
                         $hours = floor($state / 60);
                         $minutes = $state % 60;
+
                         return $hours > 0
                             ? "{$hours}h {$minutes}m"
                             : "{$minutes}m";
@@ -104,8 +108,8 @@ class AppointmentsRelationManager extends RelationManager
                         return new HtmlString(
                             $record->services->map(function ($service) {
                                 return '<span style="display: inline-block; padding: 2px 8px; margin: 2px; background: #f3f4f6; border-radius: 4px; font-size: 0.75rem;">'
-                                    . htmlspecialchars($service->pivot->service_name)
-                                    . '</span>';
+                                    .htmlspecialchars($service->pivot->service_name)
+                                    .'</span>';
                             })->join('')
                         );
                     })
@@ -121,8 +125,9 @@ class AppointmentsRelationManager extends RelationManager
                     ->color('success')
                     ->description(function ($record) {
                         if ($record->tax_amount > 0) {
-                            return __('resources.provider_resource.includes_tax') . ': EUR ' . number_format($record->tax_amount, 2);
+                            return __('resources.provider_resource.includes_tax').': EUR '.number_format($record->tax_amount, 2);
                         }
+
                         return null;
                     }),
 
@@ -130,19 +135,19 @@ class AppointmentsRelationManager extends RelationManager
                 TextColumn::make('status')
                     ->label(__('resources.provider_resource.appointment_status'))
                     ->badge()
-                    ->formatStateUsing(fn(AppointmentStatus $state) => match ($state) {
+                    ->formatStateUsing(fn (AppointmentStatus $state) => match ($state) {
                         AppointmentStatus::PENDING => __('resources.provider_resource.status_pending'),
                         AppointmentStatus::COMPLETED => __('resources.provider_resource.status_completed'),
                         AppointmentStatus::USER_CANCELLED => __('resources.provider_resource.status_user_cancelled'),
                         AppointmentStatus::ADMIN_CANCELLED => __('resources.provider_resource.status_admin_cancelled'),
                     })
-                    ->color(fn(AppointmentStatus $state) => match ($state) {
+                    ->color(fn (AppointmentStatus $state) => match ($state) {
                         AppointmentStatus::PENDING => 'warning',
                         AppointmentStatus::COMPLETED => 'success',
                         AppointmentStatus::USER_CANCELLED => 'danger',
                         AppointmentStatus::ADMIN_CANCELLED => 'gray',
                     })
-                    ->icon(fn(AppointmentStatus $state) => match ($state) {
+                    ->icon(fn (AppointmentStatus $state) => match ($state) {
                         AppointmentStatus::PENDING => 'heroicon-o-clock',
                         AppointmentStatus::COMPLETED => 'heroicon-o-check-circle',
                         AppointmentStatus::USER_CANCELLED => 'heroicon-o-x-circle',
@@ -154,7 +159,7 @@ class AppointmentsRelationManager extends RelationManager
                 TextColumn::make('payment_status')
                     ->label(__('resources.provider_resource.payment_status'))
                     ->badge()
-                    ->formatStateUsing(fn(PaymentStatus $state) => match ($state) {
+                    ->formatStateUsing(fn (PaymentStatus $state) => match ($state) {
                         PaymentStatus::PENDING => __('resources.provider_resource.payment_pending'),
                         PaymentStatus::PAID_ONLINE => __('resources.provider_resource.paid_online'),
                         PaymentStatus::PAID_ONSTIE_CASH => __('resources.provider_resource.paid_cash'),
@@ -163,13 +168,13 @@ class AppointmentsRelationManager extends RelationManager
                         PaymentStatus::REFUNDED => __('resources.provider_resource.refunded'),
                         PaymentStatus::PARTIALLY_REFUNDED => __('resources.provider_resource.partially_refunded'),
                     })
-                    ->color(fn(PaymentStatus $state) => match ($state) {
+                    ->color(fn (PaymentStatus $state) => match ($state) {
                         PaymentStatus::PENDING => 'warning',
                         PaymentStatus::PAID_ONLINE, PaymentStatus::PAID_ONSTIE_CASH, PaymentStatus::PAID_ONSTIE_CARD => 'success',
                         PaymentStatus::FAILED => 'danger',
                         PaymentStatus::REFUNDED, PaymentStatus::PARTIALLY_REFUNDED => 'gray',
                     })
-                    ->icon(fn(PaymentStatus $state) => match ($state) {
+                    ->icon(fn (PaymentStatus $state) => match ($state) {
                         PaymentStatus::PENDING => 'heroicon-o-clock',
                         PaymentStatus::PAID_ONLINE, PaymentStatus::PAID_ONSTIE_CASH, PaymentStatus::PAID_ONSTIE_CARD => 'heroicon-o-check-badge',
                         PaymentStatus::FAILED => 'heroicon-o-x-circle',
@@ -209,8 +214,8 @@ class AppointmentsRelationManager extends RelationManager
                     ->trueLabel(__('resources.provider_resource.upcoming_appointments'))
                     ->falseLabel(__('resources.provider_resource.past_appointments'))
                     ->queries(
-                        true: fn($query) => $query->where('start_time', '>', now()),
-                        false: fn($query) => $query->where('start_time', '<', now()),
+                        true: fn ($query) => $query->where('start_time', '>', now()),
+                        false: fn ($query) => $query->where('start_time', '<', now()),
                     ),
 
                 // فلتر حجوزات اليوم
@@ -220,37 +225,38 @@ class AppointmentsRelationManager extends RelationManager
                     ->trueLabel(__('resources.provider_resource.today_only'))
                     ->falseLabel(__('resources.provider_resource.not_today'))
                     ->queries(
-                        true: fn($query) => $query->whereDate('appointment_date', today()),
-                        false: fn($query) => $query->whereDate('appointment_date', '!=', today()),
+                        true: fn ($query) => $query->whereDate('appointment_date', today()),
+                        false: fn ($query) => $query->whereDate('appointment_date', '!=', today()),
                     ),
 
                 // فلتر حسب نطاق التاريخ
                 Filter::make('date_range')
                     ->form([
-                        \Filament\Forms\Components\DatePicker::make('from_date')
+                        DatePicker::make('from_date')
                             ->label(__('resources.provider_resource.from_date')),
-                        \Filament\Forms\Components\DatePicker::make('to_date')
+                        DatePicker::make('to_date')
                             ->label(__('resources.provider_resource.to_date')),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
                             ->when(
                                 $data['from_date'],
-                                fn(Builder $query, $date): Builder => $query->whereDate('start_time', '>=', $date),
+                                fn (Builder $query, $date): Builder => $query->whereDate('start_time', '>=', $date),
                             )
                             ->when(
                                 $data['to_date'],
-                                fn(Builder $query, $date): Builder => $query->whereDate('end_time', '<=', $date),
+                                fn (Builder $query, $date): Builder => $query->whereDate('end_time', '<=', $date),
                             );
                     })
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
                         if ($data['from_date'] ?? null) {
-                            $indicators[] = __('resources.provider_resource.from_date') . ': ' . \Carbon\Carbon::parse($data['from_date'])->format('M d, Y');
+                            $indicators[] = __('resources.provider_resource.from_date').': '.Carbon::parse($data['from_date'])->format('M d, Y');
                         }
                         if ($data['to_date'] ?? null) {
-                            $indicators[] = __('resources.provider_resource.to_date') . ': ' . \Carbon\Carbon::parse($data['to_date'])->format('M d, Y');
+                            $indicators[] = __('resources.provider_resource.to_date').': '.Carbon::parse($data['to_date'])->format('M d, Y');
                         }
+
                         return $indicators;
                     }),
             ])
@@ -259,34 +265,45 @@ class AppointmentsRelationManager extends RelationManager
                 Action::make('view')
                     ->label(__('resources.view'))
                     ->icon('heroicon-o-eye')
-                    ->url(fn($record) => route('filament.admin.resources.appointments.view', ['record' => $record])),
+                    ->url(fn ($record) => route('filament.admin.resources.appointments.view', ['record' => $record])),
 
                 // زر الدفع
                 Action::make('pay')
                     ->label(__('resources.provider_resource.mark_as_paid'))
                     ->icon('heroicon-o-currency-dollar')
                     ->color('success')
-                    ->visible(fn($record) => $record->payment_status === PaymentStatus::PENDING
+                    ->visible(fn ($record) => $record->payment_status === PaymentStatus::PENDING
                         && $record->status !== AppointmentStatus::ADMIN_CANCELLED
-                        && $record->status !== AppointmentStatus::USER_CANCELLED)
-                    ->fillForm(fn($record) => [
-                        'payment_type' => PaymentStatus::PAID_ONSTIE_CASH->value,
-                        'adjusted_duration' => $record->duration_minutes,
-                        'amount_paid' => $record->total_amount,
-                        'start_time_display' => $record->start_time->format('h:i A'),
-                        'start_time_value' => $record->start_time->format('Y-m-d H:i:s'),
-                        'adjusted_end_time' => $record->end_time->format('H:i'),
-                        'duration_display' => $record->duration_minutes,
-                    ])
+                        && $record->status !== AppointmentStatus::USER_CANCELLED
+                        && $record->status !== AppointmentStatus::NO_SHOW)
+                    ->fillForm(function ($record): array {
+                        $amount = (string) $record->linkedGroup()->sum('total_amount');
+                        $breakdown = app(TaxCalculatorService::class)->extractTax(
+                            $amount,
+                            (string) get_setting('tax_rate', 19),
+                            2
+                        );
+
+                        return [
+                            'payment_type' => 'cash',
+                            'adjusted_duration' => $record->duration_minutes,
+                            'amount_paid' => $amount,
+                            'calculated_subtotal' => $breakdown['net'],
+                            'calculated_tax' => $breakdown['tax'],
+                            'start_time_display' => $record->start_time->format('h:i A'),
+                            'start_time_value' => $record->start_time->format('Y-m-d H:i:s'),
+                            'adjusted_end_time' => $record->end_time->format('H:i'),
+                            'duration_display' => $record->duration_minutes,
+                        ];
+                    })
                     ->schema([
                         Select::make('payment_type')
                             ->label(__('resources.provider_resource.payment_method'))
                             ->options([
-                                PaymentStatus::PAID_ONSTIE_CASH->value => __('resources.provider_resource.paid_cash'),
-                                PaymentStatus::PAID_ONSTIE_CARD->value => __('resources.provider_resource.paid_card'),
-                                PaymentStatus::PAID_ONLINE->value => __('resources.provider_resource.paid_online'),
+                                'cash' => __('resources.provider_resource.paid_cash'),
+                                'card' => __('resources.provider_resource.paid_card'),
                             ])
-                            ->default(PaymentStatus::PAID_ONSTIE_CASH->value)
+                            ->default('cash')
                             ->required()
                             ->columnSpanFull(),
 
@@ -306,7 +323,7 @@ class AppointmentsRelationManager extends RelationManager
                             ->live(debounce: 500)
                             ->afterStateUpdated(function ($state, $set, $get) {
                                 if ($state && $get('start_time_value')) {
-                                    $startTime = \Carbon\Carbon::parse($get('start_time_value'));
+                                    $startTime = Carbon::parse($get('start_time_value'));
                                     $endTimeParts = explode(':', $state);
 
                                     $newEndTime = $startTime->copy()
@@ -334,25 +351,25 @@ class AppointmentsRelationManager extends RelationManager
                             ->numeric()
                             ->prefix('EUR')
                             ->suffix(__('resources.provider_resource.includes_tax_suffix'))
-                            ->default(fn($record) => $record->total_amount)
+                            ->default(fn ($record) => $record->linkedGroup()->sum('total_amount'))
                             ->required()
                             ->afterStateUpdated(function ($state, $set) {
-                                if ($state) {
-                                    // حساب الضريبة العكسية (19%)
-                                    $taxRate = 19;
-                                    $subtotal = $state / (1 + ($taxRate / 100));
-                                    $taxAmount = $state - $subtotal;
+                                if ($state !== null && $state !== '') {
+                                    $breakdown = app(TaxCalculatorService::class)->extractTax(
+                                        (string) $state,
+                                        (string) get_setting('tax_rate', 19),
+                                        2
+                                    );
 
-                                    $set('calculated_subtotal', round($subtotal, 2));
-                                    $set('calculated_tax', round($taxAmount, 2));
+                                    $set('calculated_subtotal', $breakdown['net']);
+                                    $set('calculated_tax', $breakdown['tax']);
                                 }
                             })
                             ->helperText(
-                                fn($get) =>
-                                $get('calculated_subtotal')
-                                ? __('resources.provider_resource.breakdown') . ': ' .
-                                __('resources.provider_resource.subtotal') . ' EUR ' . number_format($get('calculated_subtotal'), 2) . ' + ' .
-                                __('resources.provider_resource.tax') . ' (19%) EUR ' . number_format($get('calculated_tax'), 2)
+                                fn ($get) => $get('calculated_subtotal')
+                                ? __('resources.provider_resource.breakdown').': '.
+                                __('resources.provider_resource.subtotal').' EUR '.number_format($get('calculated_subtotal'), 2).' + '.
+                                __('resources.provider_resource.tax').' ('.get_setting('tax_rate', 19).'%) EUR '.number_format($get('calculated_tax'), 2)
                                 : __('resources.provider_resource.amount_paid_helper')
                             ),
 
@@ -364,42 +381,29 @@ class AppointmentsRelationManager extends RelationManager
                     ])
                     ->action(function ($record, array $data) {
                         try {
-                            $invoiceService = app(InvoiceService::class);
-                            $invoiceService->validateInvoiceCreation($record);
-
-                            if(!is_null($data['adjusted_duration']) && $data['adjusted_duration'] > 0) {
+                            if (! is_null($data['adjusted_duration']) && $data['adjusted_duration'] > 0) {
                                 $adjustedDuration = $data['adjusted_duration'];
                             } else {
                                 $adjustedDuration = $record->duration_minutes;
                             }
 
-                            $amountPaid = $data['amount_paid'];
-                            $taxCalculation = $invoiceService->calculateReverseTax($amountPaid, 19);
-
-                            $record->update([
-                                'total_amount' => $amountPaid,
-                                'tax_amount' => $taxCalculation['tax_amount'],
-                                'duration_minutes' => $adjustedDuration,
-                                'end_time' => $record->end_time->setTimeFromTimeString($data['adjusted_end_time']),
-                                'status' => AppointmentStatus::COMPLETED->value,
-                            ]);
-
-                            $invoice = $invoiceService->createInvoiceFromAppointment(
-                                appointment: $record->fresh(),
-                                paymentType: $data['payment_type'],
-                                amountPaid: $amountPaid,
-                                notes: $data['notes'] ?? null,
-                                adjustedDuration: $adjustedDuration,
-                                amountIncludesTax: true
-                            );
+                            $invoice = app(InvoiceFinalizationService::class)
+                                ->finalizeAppointmentPayment(
+                                    appointment: $record->fresh(),
+                                    paymentMethod: (string) $data['payment_type'],
+                                    finalAmount: (float) $data['amount_paid'],
+                                    notes: $data['notes'] ?? null,
+                                    adjustedDuration: $adjustedDuration,
+                                    source: 'provider_appointments',
+                                );
 
                             Notification::make()
                                 ->title(__('resources.provider_resource.payment_success'))
-                                ->body(__('resources.provider_resource.invoice_created') . ': ' . $invoice->invoice_number)
+                                ->body(__('resources.provider_resource.invoice_created').': '.$invoice->invoice_number)
                                 ->success()
                                 ->send();
 
-                        } catch (\Exception $e) {
+                        } catch (\Throwable $e) {
                             Notification::make()
                                 ->title(__('resources.provider_resource.payment_error'))
                                 ->body($e->getMessage())

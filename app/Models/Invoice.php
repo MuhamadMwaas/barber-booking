@@ -221,10 +221,17 @@ class Invoice extends Model
     }
 
     // Generate unique invoice number
+    /**
+     * الرقم المتسلسل التالي للفاتورة، محجوزاً ذرّياً.
+     *
+     * ⚠️ يجب أن يُنادى **داخل نفس المعاملة** التي تكتب الرقم على الصف. القفل
+     * على صف العدّاد يُحرَّر عند تثبيت المعاملة، فإن أخذتَ الرقم في معاملة
+     * وكتبتَه في أخرى فقد حُجز لا شيء (`MON-03`). المولِّد يرفض النداء خارج
+     * معاملة بـ RuntimeException بدل أن يُصدر رقماً غير محمي.
+     */
     public static function generateInvoiceNumber(): string
     {
-        $prefix = 'INV';
-        return DocumentNumberGenerator::generate('invoices', 'invoice_number', $prefix);
+        return DocumentNumberGenerator::next('invoice', 'INV');
     }
 
     public function getCustomerName(): string

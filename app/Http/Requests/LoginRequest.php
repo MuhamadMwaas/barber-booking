@@ -41,9 +41,16 @@ class LoginRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if ($this->has('registration_method')) {
+        // `registration_method[]=email` makes input() return an array, and casting
+        // an array to string raises "Array to string conversion" — which Laravel's
+        // error handler promotes to an ErrorException, i.e. a 500 on an
+        // unauthenticated endpoint. Normalise only what is actually a string and
+        // let the `Rule::enum` in rules() reject everything else as a 422.
+        $method = $this->input('registration_method');
+
+        if (is_string($method)) {
             $this->merge([
-                'registration_method' => strtolower((string) $this->input('registration_method')),
+                'registration_method' => strtolower($method),
             ]);
         }
     }

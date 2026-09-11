@@ -481,9 +481,10 @@ public array $pushPreviewPlan = [];
 **Methods المعدَّلة:**
 
 - `processPayment()` — الآن:
-  1. يستخرج `invoiceOwner = $appointment->parent ?? $appointment`.
-  2. يستدعي `rebuildAggregatedInvoice()` **قبل** `finalizeDraftInvoice()` — هذا حرج لـ TSE، حيث يضمن أن التوقيع يطبَّق على totals الصحيحة.
-  3. `finalizeDraftInvoice` يُحدّث كل الحجوزات في الـ group.
+  1. يحدد هل غُيّر السعر المقترح إلى سعر خاص.
+  2. يستدعي `InvoiceFinalizationService::finalizeAppointmentPayment()` فقط.
+  3. الخدمة المركزية تحل invoice owner، وتقفل المجموعة، وتعيد بناء الفاتورة،
+     وتُصدر Payment واحداً وتحدّث كل الحجوزات ذرياً. TSE متوقف حالياً.
 
 - `cancelAppointment()` / `deleteAppointment()` — يستدعون `canBeCancelledOrDeleted()`. بعد cancel/delete child، يعيدون بناء فاتورة الأب.
 
@@ -698,25 +699,26 @@ B's customer receives push notification: "Your booking #APT-XXXX has been moved 
 ```
 Staff clicks "Pay" in appointment modal (on parent OR child — doesn't matter)
   ↓
-Payment Modal opens (amount = invoice.total_amount)
+Payment Modal opens (amount = SUM of parent + children totals)
   ↓
 Staff confirms payment type (cash/card) + amount
   ↓
 Click "Confirm & Print Invoice"
   ↓
 StaffDashboard::processPayment():
-  • Resolve invoiceOwner = appointment.parent ?? appointment
-  • InvoiceService::rebuildAggregatedInvoice(invoiceOwner)   ← CRITICAL for TSE
-  • If staff adjusted total → override invoice.total_amount
-  • InvoiceFinalizationService::finalizeDraftInvoice(invoice, ...):
-    - Apply TSE signature (placeholder — wires to FiskalyService when integrated)
+  • Detect full price or staff-entered special price
+  • InvoiceFinalizationService::finalizeAppointmentPayment(appointment, ...):
+    - Lock owner + linked group + invoice
+    - Rebuild all group items
+    - Apply final amount as a full-price discount, never partial debt
+    - Resolve active cash/card PaymentMethod
     - Generate invoice_number
-    - Update invoice: status=PAID, invoice_number, invoice_data.tse_data, finalized_at
+    - Update invoice: status=PAID + audit metadata + tse_enabled=false
     - For each appointment in invoice.appointment.linkedGroup():
       - status = COMPLETED
       - payment_status = PAID_ONSTIE_CASH (or _CARD)
-      - payment_method = label
-    - Create Payment record
+      - payment_method = cash/card
+    - Create exactly one full Payment record with payment_method_id
   ↓
 Dispatch event printInvoice (handled by layouts/dashboard.blade.php → opens /invoice/{id}/print)
 ```
@@ -740,14 +742,14 @@ Parent cancel:
 
 | # | Invariant | يحرسها |
 |---|-----------|--------|
-| 1 | TSE-signed invoices are immutable | `rebuildAggregatedInvoice()` يرفض non-DRAFT |
+| 1 | Finalized invoices are immutable | `rebuildAggregatedInvoice()` يرفض non-DRAFT |
 | 2 | A child appointment never owns an invoice | `InvoiceService::createDtaftInvoiceFromAppointment()` يرفض child |
 | 3 | Single-level hierarchy (no grandchildren) | `AppointmentLinkingService::validateChildCandidate()` يرفض parent that is itself a child |
 | 4 | Cancel/delete parent blocked if children exist | `Appointment::canBeCancelledOrDeleted()` + `StaffDashboard::cancelAppointment()` |
 | 5 | Push of paid bookings forbidden | `PushBookingsService::planPushFrom()` — fails entire chain |
 | 6 | Pushed booking saves original_* only on first push | `executePushPlan()` checks `!$appt->was_pushed` before backing up |
-| 7 | Linked group finalized atomically (all or none) | `InvoiceFinalizationService::updateAppointmentStatus()` loops `linkedGroup()->get()` inside DB transaction |
-| 8 | rebuildAggregatedInvoice MUST run before finalize | `StaffDashboard::processPayment()` calls it explicitly before `finalizeDraftInvoice()` |
+| 7 | Linked group finalized atomically (all or none) | `finalizeAppointmentPayment()` يقفل ويحدث `linkedGroup()` داخل DB transaction |
+| 8 | Rebuild always precedes issue | `finalizeAppointmentPayment()` يستدعي `rebuildAggregatedInvoice()` داخلياً؛ الواجهة لا ترتب الخطوات |
 | 9 | Notifications never break the DB transaction | `executePushPlan()` wraps notify in try/catch with Log::warning |
 
 ---
@@ -896,21 +898,23 @@ if ($appointment->canAcceptNewService()) {
 | **Linked Group** | المجموعة = الأب + كل أبنائه (مع الأب نفسه إذا كان standalone) |
 | **Invoice Owner** | الحجز الذي يحمل الفاتورة (دائماً = الأب أو standalone) |
 | **Cascading Conditional Push** | الدفش لا يطبَّق على كل الحجوزات بنفس المقدار، فقط بالقدر اللازم لكل حجز |
-| **DRAFT Invoice** | فاتورة بدون `invoice_number`، قابلة للتعديل (لم تُوقَّع TSE بعد) |
-| **TSE / Fiskaly** | نظام التوقيع الرقمي الألماني (KassenSichV) — بعد التوقيع، الفاتورة immutable |
+| **DRAFT Invoice** | فاتورة بدون `invoice_number`، قابلة للتعديل ولم تُصدر بعد |
+| **TSE / Fiskaly** | دعم غير نشط حالياً؛ الدفع يسجل `tse_enabled=false` ولا يستدعي الشبكة |
 | **created_status** | flag على `appointments` (`1=confirmed`, `0=abandoned`) — يحجز الوقت في الـ timeline |
 
 ---
 
 ## 12. كلمة أخيرة لأي AI/مطور يقرأ هذا
 
-اقرأ القسم **5 — Invariants** قبل أي تعديل. كسر أي واحد منها قد يخالف القانون الألماني (KassenSichV) أو يفسد الفواتير. كل التعديلات على الفاتورة يجب أن تحدث **قبل** `finalizeDraftInvoice()` — بعدها التوقيع TSE يصبح ملزماً. الـ flow الـ correct هو:
+اقرأ القسم **5 — Invariants** قبل أي تعديل. كل تغييرات الخدمات يجب أن تسبق
+التحصيل؛ وبعد إصدار الفاتورة لا rebuild ولا تعديل. الواجهة لا تستدعي خطوات
+متفرقة، بل تسلم الموعد والسعر والطريقة إلى الكاتب الموحد:
 
 ```
 addServiceToBooking → rebuildAggregatedInvoice (still DRAFT)
                   → ... more addServiceToBooking ... → rebuildAggregatedInvoice
-                  → processPayment → rebuildAggregatedInvoice → finalize (SIGNED)
+                  → processPayment → finalizeAppointmentPayment (PAID + Payment)
 ```
 
-بعد `finalize`: لا rebuild، لا تعديل، لا حذف. الفاتورة ميتة من ناحية البيانات وحيّة قانونياً.
-
+بعد finalization: لا rebuild، لا تعديل، لا حذف. TSE متوقف في المرحلة الحالية؛
+تفعيله مستقبلاً يجب أن يتم داخل الكاتب الموحد فقط.
