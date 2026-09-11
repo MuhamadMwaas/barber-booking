@@ -28,10 +28,42 @@ return new class extends Migration
         });
     }
 
+    /**
+     * Dropping this index is not a plain `dropIndex`.
+     *
+     * It leads with `provider_id`, which carries a foreign key. MySQL requires an
+     * index on a foreign key's leading column, and when this composite index was
+     * created it saw it as sufficient and silently dropped the FK's own
+     * `appointments_provider_id_foreign` index. So this index is now the only one
+     * backing that FK, and dropping it fails:
+     *
+     *     SQLSTATE[HY000] 1553: Cannot drop index
+     *     'appointments_conflict_lookup_idx': needed in a foreign key constraint
+     *
+     * which broke `migrate:refresh`. Recreate a plain provider_id index first, in
+     * the same ALTER, then drop this one.
+     */
     public function down(): void
     {
         Schema::table('appointments', function (Blueprint $table) {
-            $table->dropIndex('appointments_conflict_lookup_idx');
+            if (! $this->hasIndex('appointments', 'appointments_provider_id_index')) {
+                $table->index('provider_id', 'appointments_provider_id_index');
+            }
+
+            if ($this->hasIndex('appointments', 'appointments_conflict_lookup_idx')) {
+                $table->dropIndex('appointments_conflict_lookup_idx');
+            }
         });
+    }
+
+    private function hasIndex(string $table, string $index): bool
+    {
+        try {
+            return collect(
+                Schema::getConnection()->getSchemaBuilder()->getIndexes($table)
+            )->contains(fn ($i) => ($i['name'] ?? null) === $index);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 };

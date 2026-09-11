@@ -97,9 +97,32 @@ return new class extends Migration
     {
         // القيود فقط تُرفَع. الأرقام المُصحَّحة **لا تُعاد** إلى تكرارها:
         // إرجاعها يعني إعادة كسر السجل، ولا معنى محاسبياً لذلك.
+        //
+        // ═══════════════════════════════════════════════════════════════════
+        // لماذا يسبق كلَّ حذفٍ فهرسٌ بديل؟
+        // ═══════════════════════════════════════════════════════════════════
+        //
+        // MySQL يشترط وجود فهرس على العمود الذي يبدأ به مفتاحٌ أجنبي. وحين
+        // أضفنا `UNIQUE` على عمودٍ عليه FK، رأى MySQL أن الفهرس الجديد يكفي
+        // فحذف الفهرس الذي أنشأه للـ FK تلقائياً (`*_foreign`). فصار القيد
+        // الذي أضفناه هو **الفهرس الوحيد** الذي يستند إليه الـ FK، وحذفه
+        // مباشرةً يفشل:
+        //
+        //     SQLSTATE[HY000] 1553: Cannot drop index '…': needed in a
+        //     foreign key constraint
+        //
+        // وهو ما كان يُفشل `migrate:refresh` عند التراجع. فالحل: أنشئ الفهرس
+        // العادي البديل أولاً، ثم احذف القيد — في نفس الـ `ALTER`، بهذا
+        // الترتيب. يخصّ ذلك عمودين فقط: `invoices.appointment_id` و
+        // `provider_service.provider_id` (العمود الأول في القيد المركّب).
+        // أما `payments.payment_number` و`appointments.number` فلا FK عليهما.
         Schema::table('invoices', function (Blueprint $table) {
             $this->dropIndexIfExists($table, 'invoices', 'invoices_number_unique');
-            $this->dropIndexIfExists($table, 'invoices', 'invoices_appointment_unique');
+
+            if ($this->hasIndex('invoices', 'invoices_appointment_unique')) {
+                $this->ensureFallbackIndex($table, 'invoices', 'appointment_id', 'invoices_appointment_id_index');
+                $table->dropUnique('invoices_appointment_unique');
+            }
         });
 
         Schema::table('payments', function (Blueprint $table) {
@@ -110,9 +133,32 @@ return new class extends Migration
             $this->dropIndexIfExists($table, 'appointments', 'appointments_number_unique');
         });
 
-        Schema::table('provider_service', function (Blueprint $table) {
-            $this->dropIndexIfExists($table, 'provider_service', 'provider_service_unique');
-        });
+        if (Schema::hasTable('provider_service')) {
+            Schema::table('provider_service', function (Blueprint $table) {
+                if ($this->hasIndex('provider_service', 'provider_service_unique')) {
+                    $this->ensureFallbackIndex(
+                        $table,
+                        'provider_service',
+                        'provider_id',
+                        'provider_service_provider_id_index'
+                    );
+                    $table->dropUnique('provider_service_unique');
+                }
+            });
+        }
+    }
+
+    /**
+     * فهرسٌ عاديّ يحلّ محلّ القيد الفريد قبل حذفه، كي لا يبقى الـ FK بلا فهرس.
+     *
+     * لا ضرر منه على SQLite/PostgreSQL (حيث لا يوجد هذا الاشتراط أصلاً) —
+     * فهرسٌ زائد فحسب، وهذه دالة `down()` لا مسارٌ ساخن.
+     */
+    private function ensureFallbackIndex(Blueprint $table, string $tableName, string $column, string $index): void
+    {
+        if (! $this->hasIndex($tableName, $index)) {
+            $table->index($column, $index);
+        }
     }
 
     // ── 1. أرقام الفواتير ────────────────────────────────────────────────

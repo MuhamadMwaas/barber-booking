@@ -105,8 +105,21 @@ return new class extends Migration
             return;
         }
 
+        // `refresh_tokens_user_id_revoked_index` leads with `user_id`, which carries
+        // a foreign key. MySQL dropped the FK's own `refresh_tokens_user_id_foreign`
+        // index when this composite one was added — it covers the same leading
+        // column — so this index is now the FK's only backing index, and dropping it
+        // bare fails with error 1553 ("needed in a foreign key constraint"), which
+        // breaks `migrate:refresh`. Restore the plain index first, same ALTER.
         Schema::table('refresh_tokens', function (Blueprint $table) {
-            $table->dropIndex('refresh_tokens_user_id_revoked_index');
+            if (! $this->hasIndex('refresh_tokens', 'refresh_tokens_user_id_index')) {
+                $table->index('user_id', 'refresh_tokens_user_id_index');
+            }
+
+            if ($this->hasIndex('refresh_tokens', 'refresh_tokens_user_id_revoked_index')) {
+                $table->dropIndex('refresh_tokens_user_id_revoked_index');
+            }
+
             $table->dropColumn(['revoked_at', 'revoked_reason', 'last_used_at', 'replaced_by_id']);
         });
 
@@ -114,6 +127,17 @@ return new class extends Migration
             DB::statement(
                 'ALTER TABLE `refresh_tokens` MODIFY `expires_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
             );
+        }
+    }
+
+    private function hasIndex(string $table, string $index): bool
+    {
+        try {
+            return collect(
+                Schema::getConnection()->getSchemaBuilder()->getIndexes($table)
+            )->contains(fn ($i) => ($i['name'] ?? null) === $index);
+        } catch (\Throwable) {
+            return false;
         }
     }
 };
