@@ -14,9 +14,11 @@ use Illuminate\Support\Facades\Schema;
  * لماذا الإصلاح والقيد في مايقريشن واحدة؟
  * ════════════════════════════════════════════════════════════════════════
  *
- * لا يمكن إضافة `UNIQUE` على عمود فيه تكرارات — ستفشل الـ migration. وبين
- * تنظيف التكرارات وإضافة القيد توجد نافذة يمكن أن تُنتج فيها تكراراتٌ جديدة.
- * فالخطوتان معاً، بهذا الترتيب، في معاملة واحدة.
+ * لا يمكن إضافة `UNIQUE` على عمود فيه تكرارات — ستفشل الـ migration. فالتنظيف
+ * أولاً ثم القيد، في مايقريشن واحدة، بهذا الترتيب.
+ *
+ * التنظيف وحده في معاملة واحدة؛ إضافة القيود **خارجها** لأن MySQL يُنفّذ
+ * COMMIT ضمنياً عند كل DDL (التفصيل في `up()`).
  *
  * ════════════════════════════════════════════════════════════════════════
  * الترقيم الجديد و GoBD
@@ -53,6 +55,25 @@ return new class extends Migration
 
     public function up(): void
     {
+        // ═══════════════════════════════════════════════════════════════════
+        // الإصلاح داخل معاملة، والقيود خارجها — ولا خيار في ذلك
+        // ═══════════════════════════════════════════════════════════════════
+        //
+        // MySQL/MariaDB ينفّذ **COMMIT ضمنياً** قبل وبعد كل جملة DDL
+        // (`ALTER TABLE … ADD UNIQUE`). فلو وُضِع `addConstraints()` داخل
+        // `DB::transaction()`، أنهى أول `ALTER` المعاملةَ من تحت أقدام Laravel،
+        // ثم رمى `commit()` في نهاية الـ closure:
+        //
+        //     PDOException: There is no active transaction
+        //
+        // وهو ما كان يُفشل هذه المايقريشن على كل `migrate` و`migrate:refresh`.
+        // إصلاح البيانات وحده هو الذي يحتاج الذرّية، فهو وحده داخل المعاملة.
+        //
+        // ثمن الفصل: نافذة بين التنظيف وإضافة القيد. لا خطر عملي فيها —
+        // المايقريشن تُشغَّل في نافذة نشر، ولو أُنشئ تكرارٌ فيها فعلاً فإن
+        // `ALTER` يفشل **بصوت عالٍ** ولا يمر القيد ناقصاً. وإعادة التشغيل
+        // آمنة: كل خطوة هنا idempotent (`hasIndex()` يحرس القيود،
+        // والإصلاح لا يجد تكرارات في المرة الثانية).
         DB::transaction(function () {
             $this->repairInvoiceNumbers();
             $this->repairDuplicateInvoicesPerAppointment();
@@ -60,8 +81,9 @@ return new class extends Migration
             $this->repairSimpleNumberColumn('appointments', 'number', 'APT');
             $this->deduplicateProviderService();
             $this->reseedCounters();
-            $this->addConstraints();
         });
+
+        $this->addConstraints();
 
         foreach ($this->report as $line) {
             Log::info('[MON-03 migration] ' . $line);

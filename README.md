@@ -1,61 +1,91 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# BarberBooking — Beauty Salon Management System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+> **نظام إدارة صالون تجميل** — Laravel 12 + Filament 4 + PostgreSQL  
+> العملاء يحجزون مواعيد مع مزودين، يدفعون نقدًا في المحل، تُطبع فواتير مطابقة للضريبة الألمانية.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 📚 ابدأ من هنا — التوثيق الشامل
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+> **المدخل الموحد لكل التوثيق:** [`docs/README.md`](docs/README.md)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+التوثيق موزّع على **10 أقسام**، كل قسم مجلد فيه `README.md` + ملفات تفصيلية. أي مهندس يقرأه يفهم الفكرة والآلية والبنية والكود بعمق.
 
-## Learning Laravel
+| # | القسم | ماذا فيه | الرابط |
+|---|-------|----------|--------|
+| 01 | **نظرة عامة** | فكرة النظام، نموذج العمل، الأدوار | [`docs/01-overview/README.md`](docs/01-overview/README.md) |
+| 02 | **البنية والمعمارية** | التقنيات، هيكل المجلدات، دورة الطلب، القرارات التصميمية | [`docs/02-architecture/README.md`](docs/02-architecture/README.md) |
+| 03 | **النماذج والبيانات** | 46 Model + 74 Migration + 8 Enums + ERD | [`docs/03-data-models/README.md`](docs/03-data-models/README.md) |
+| 04 | **طبقة الخدمات** | 71 Service — القلب الحقيقي للنظام | [`docs/04-services/README.md`](docs/04-services/README.md) |
+| 05 | **واجهات الـ API** | كل الـ Endpoints + Auth + Availability + Booking | [`docs/05-api/README.md`](docs/05-api/README.md) |
+| 06 | **تدفق الحجز بعمق** | التزامن، الإجازات، العميل الحر، إضافة خدمة | [`docs/06-booking-flow/README.md`](docs/06-booking-flow/README.md) |
+| 07 | **لوحة الإدارة Filament** | 18 Resource + Staff Dashboard + Livewire | [`docs/07-filament-admin/README.md`](docs/07-filament-admin/README.md) |
+| 08 | **الفوترة والطباعة** | DRAFT→PAID + القوالب + الطباعة | [`docs/08-invoicing-printing/README.md`](docs/08-invoicing-printing/README.md) |
+| 09 | **الأمان والامتثال** | OTP + Rate Limiting + Roles + TSE | [`docs/09-security/README.md`](docs/09-security/README.md) |
+| 10 | **التشغيل والإعداد** | Config + Seeders + Deployment | [`docs/10-operations/README.md`](docs/10-operations/README.md) |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### مراجع سريعة
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+| الملف | لمن |
+|-------|-----|
+| [`Agent.md`](Agent.md) | مرجع AI شامل (1000+ سطر) — للـ AI Agents |
+| [`API.md`](API.md) | مرجع API عربي مفصل (1700+ سطر) — للموبايل/الفرونت |
+| [`docs/BOOKING_FLOW.md`](docs/BOOKING_FLOW.md) | تدفق الحجز المفصل (1191 سطر) — المرجع الأدق للحجز |
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+---
 
-## Laravel Sponsors
+## ⚡ التشغيل السريع
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```bash
+composer install
+cp .env.example .env && php artisan key:generate
+php artisan migrate --seed
+php artisan storage:link
+npm install && npm run build
+php artisan serve
+```
 
-### Premium Partners
+اقرأ [`docs/10-operations/deployment.md`](docs/10-operations/deployment.md) للتفصيل.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### بيانات دخول افتراضية
 
-## Contributing
+| الدور | Email | Password |
+|-------|-------|----------|
+| Admin | `admin@elitebeauty.ae` | `password` |
+| Customer | `hala.alhashimi@gmail.com` | `password` |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+## 🏗️ التقنيات
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+| الطبقة | التقنية |
+|--------|---------|
+| Framework | Laravel 12 (PHP 8.2) |
+| Admin | Filament 4.0 |
+| DB | PostgreSQL (Neon) |
+| Auth | Sanctum + Spatie Permissions |
+| Frontend | Vite + TailwindCSS 4 |
+| Notifications | OneSignal + Mail + SMS (Seven.io/Vonage) |
 
-## Security Vulnerabilities
+التفصيل في [`docs/02-architecture/tech-stack.md`](docs/02-architecture/tech-stack.md).
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+---
 
-## License
+## 📐 القرارات التصميمية الكبرى
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- **GROSS pricing** — الأسعار شاملة الضريبة، تُستخرج عكسيًا — `docs/02-architecture/design-decisions.md`
+- **bcmath** — كل حسابات المال بـ bcmath لا float
+- **Two-stage invoicing** — مسودة عند الحجز → مدفوعة عند الدفع
+- **BookingLockService** — `SELECT FOR UPDATE` على `users` لمنع الحجز المزدوج
+
+---
+
+## 🤝 المساهمة في التوثيق
+
+التوثيق يعيش مع الكود — أي تغيير في `BookingService` أو `InvoiceService` يجب أن يُحدَّث في `docs/04-services/` و `docs/06-booking-flow/` و `docs/08-invoicing-printing/`.
+
+---
+
+## 📄 الرخصة
+
+MIT — Laravel Framework
