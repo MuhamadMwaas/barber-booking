@@ -32,9 +32,9 @@ return [
     | backstop that turns "5 guesses a minute, forever" into 480 guesses a day.
     */
     'login' => [
-        'per_ip' => (int) env('RL_LOGIN_PER_IP', 10),
-        'per_account' => (int) env('RL_LOGIN_PER_ACCOUNT', 5),
-        'per_account_hour' => (int) env('RL_LOGIN_PER_ACCOUNT_HOUR', 20),
+        'per_ip' => (int) env('RL_LOGIN_PER_IP', 100),
+        'per_account' => (int) env('RL_LOGIN_PER_ACCOUNT', 50),
+        'per_account_hour' => (int) env('RL_LOGIN_PER_ACCOUNT_HOUR', 200),
     ],
 
     /*
@@ -43,7 +43,7 @@ return [
     | up is a once-per-lifetime action; anything faster is automation.
     */
     'register' => [
-        'per_ip_hour' => (int) env('RL_REGISTER_PER_IP_HOUR', 5),
+        'per_ip_hour' => (int) env('RL_REGISTER_PER_IP_HOUR', 50),
     ],
 
     /*

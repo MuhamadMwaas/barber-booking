@@ -1,0 +1,5006 @@
+{
+  "info": {
+    "name": "BarberBooking API — Elite Beauty Salon",
+    "description": "# 💈 BarberBooking API — Elite Beauty Salon\n\n> **Base URL:** `{{base_url}}` → افتراضي `http://localhost:8000`\n> **Auth:** Laravel Sanctum — Bearer Token\n> **Lang:** `?lang=ar|en|de` أو `Accept-Language` Header\n> **Docs:** `API.md` + `Agent.md`\n\n## 🚀 البدء السريع (30 ثانية)\n1. افتح Collection Variables وتأكد أن `base_url` = `http://localhost:8000`\n2. شغّل **01 Authentication → Login (Email)** — السكربت سيحفظ `access_token` و `refresh_token` تلقائياً\n3. كل الطلبات المحمية بعدها ستعمل مباشرة (Header = `Bearer {{access_token}}`)\n4. جرّب `GET /api/profile` للتأكد أن التوكن يعمل\n\n## 🔐 كيف يعمل Auto Token؟\nكل طلب يرجع `access_token` يحتوي **Tests Script**:\n```js\nconst json = pm.response.json();\nif (json.access_token) pm.collectionVariables.set(\"access_token\", json.access_token);\nif (json.refresh_token) pm.collectionVariables.set(\"refresh_token\", json.refresh_token);\nif (json.otp) pm.collectionVariables.set(\"last_otp\", json.otp);\n```\nلا حاجة لنسخ يدوي — الـ token يُحقن في كل طلب محمي عبر `Authorization: Bearer {{access_token}}`.\n\n## 📂 التقسيم\n| مجلد | المحتوى |\n|------|---------|\n| 00 Auth | تسجيل، دخول، OTP، Google، نسيت كلمة المرور |\n| 01 Profile | الملف الشخصي، تغيير كلمة المرور، توثيق الهاتف |\n| 02 Providers | قائمة المزودين وتفاصيلهم |\n| 03 Services | الخدمات والفئات |\n| 04 Availability | التوفر، الأوقات، التقويم + Rate Limiting |\n| 05 Appointments | حجوزاتي، الإحصائيات، البحث، الإلغاء |\n| 06 Bookings | إنشاء حجز جديد (القلب النابض) |\n| 07 Reminders | تذكيرات المواعيد |\n| 08 Settings & Devices | إعدادات المستخدم وأجهزة Push |\n| 09 Notifications | إشعارات Filament Database |\n| 10 CMS & Content | صفحات CMS و About Us و Sliders |\n| 11 Print & Invoices | طباعة الفواتير والسجلات |\n\n## ⚠️ ملاحظات مهمة\n- الأسعار **GROSS** (شاملة الضريبة 19%) — تُستخرج بـ reverse calculation\n- الحجز ينشئ فاتورة **DRAFT** بلا رقم، تُرقّم عند الدفع فقط\n- التوفر يحترم `book_buffer` و `max_booking_days` — لا يعرض وقت سيرفضه الحجز\n- الـ Rate Limit للـ Availability: 40/min للـ service/provider و 30/min للتقويم\n- بيانات الدخول الافتراضية من Seeder:\n  - Customer: `hala.alhashimi@gmail.com` / `password`\n  - Admin: `admin@elitebeauty.ae` / `password`\n  - Provider: `sarah.johnson@elitebeauty.ae` / `password`\n\n> كل طلب مجهز بـ Body جاهز + Query Params + Headers + وصف عربي + مثال Response متوقع\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointment_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "invoice_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "provider_id",
+      "value": "3",
+      "type": "string"
+    },
+    {
+      "key": "service_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "branch_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "printer_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "last_otp",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reset_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notification_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 🔐 Authentication — المصادقة",
+      "description": "جميع عمليات التسجيل والدخول و OTP و Google و استرجاع كلمة المرور.\n\nكل طلب يُرجع `access_token` يحتوي سكربت يحفظه تلقائياً في `{{access_token}}` و `{{refresh_token}}` — لا حاجة للنسخ اليدوي.\n\n**Throttle:** كل مسار محمي بـ Rate Limiter مخصص (IP + account) لمنع Credential Stuffing و OTP Brute-Force.",
+      "item": [
+        {
+          "name": "01 Login — Email (يُحفظ التوكن تلقائياً)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ],
+              "query": []
+            },
+            "description": "**الوصف:** تسجيل دخول بالبريد. إذا كان الحساب مفعّل يُرجع `access_token` + `refresh_token` مباشرة، وإذا كان غير مفعّل يُرجع `403` مع `requires_otp_verification=true` ويُرسل OTP جديد.\n\n**Auth:** ❌ لا يتطلب\n\n**الحقول:**\n- `registration_method`: `email` أو `phone`\n- `email` / `phone` حسب الطريقة\n- `password`: كلمة المرور\n\n**السكربت:** يحفظ `access_token` و `refresh_token` في Collection Variables تلقائياً — لا حاجة للنسخ اليدوي.\n\n**Response المتوقع:**\n- `200` مع tokens\n- `401` بيانات خاطئة\n- `403` حساب غير مفعّل (يُرسل OTP)\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"hala.alhashimi@gmail.com\",\n  \"password\": \"password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Success 200 - Verified",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"user\": {\n    \"id\": 5,\n    \"first_name\": \"Hala\",\n    \"last_name\": \"Al Hashimi\",\n    \"email\": \"hala.alhashimi@gmail.com\",\n    \"phone\": \"+971-50-111-1111\"\n  },\n  \"access_token\": \"1|abc123xyz...\",\n  \"access_expires_at\": \"2026-09-13T10:00:00.000000Z\",\n  \"refresh_token\": \"def456...\",\n  \"refresh_expires_at\": \"2026-10-13T10:00:00.000000Z\",\n  \"token_type\": \"bearer\",\n  \"registration_method\": \"email\",\n  \"verification_channel\": \"email\",\n  \"email_verified\": true,\n  \"phone_verified\": false,\n  \"is_account_verified\": true,\n  \"requires_otp_verification\": false\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 Login — Phone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ],
+              "query": []
+            },
+            "description": "**تسجيل دخول برقم الهاتف.** نفس سلوك الإيميل لكن يبحث بـ `phone`.\n\n**Body:**\n- `registration_method`: `phone`\n- `phone`: رقم الهاتف المسجل\n- `password`\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"phone\",\n  \"phone\": \"+971-50-111-1111\",\n  \"password\": \"password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Success 200",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"user\": {\n    \"id\": 15,\n    \"first_name\": \"Hala\",\n    \"last_name\": \"Al Hashimi\",\n    \"phone\": \"+971-50-111-1111\"\n  },\n  \"access_token\": \"2|xyz...\",\n  \"refresh_token\": \"refresh...\",\n  \"token_type\": \"bearer\",\n  \"is_account_verified\": true\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 Register — Email (يُرسل OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ],
+              "query": []
+            },
+            "description": "**الوصف:** تسجيل مستخدم جديد بالبريد. **لا يسجل دخول تلقائياً** — ينشئ الحساب ويرسل OTP ويُرجع `requires_otp_verification=true`. أكمل بـ Verify OTP للحصول على التوكن.\n\n**Validation:**\n- `password` min 8 + أحرف كبيرة/صغيرة + أرقام + رموز\n- `password_confirmation` مطلوب\n- `email` فريد — إذا مكرر يرجع `409 EMAIL_ALREADY_EXISTS`\n\n**Response في dev:** يحتوي `otp` للاختبار (لا يظهر في production)\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"registration_method\": \"email\",\n  \"email\": \"testuser_{{$timestamp}}@example.com\",\n  \"password\": \"Password1@\",\n  \"password_confirmation\": \"Password1@\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Created 201",
+              "originalRequest": {},
+              "status": "201 Created",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"user\": {\n    \"id\": 30,\n    \"first_name\": \"Test\",\n    \"last_name\": \"User\",\n    \"email\": \"testuser@example.com\"\n  },\n  \"message\": \"Registration successful. Please verify your email using the OTP sent to your email.\",\n  \"registration_method\": \"email\",\n  \"verification_channel\": \"email\",\n  \"masked_destination\": \"te******@example.com\",\n  \"email_verified\": false,\n  \"requires_otp_verification\": true,\n  \"otp\": \"123456\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "if (json.otp) pm.collectionVariables.set('last_otp', json.otp);",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 Register — Phone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ],
+              "query": []
+            },
+            "description": "**تسجيل برقم الهاتف.** نفس السلوك لكن OTP يُرسل SMS (أو يُرجع في dev إذا SMS غير مفعّل).\n\n**Phone Validation:** عبر `App\\Rules\\PhoneNumber` — يتحقق من الأرقام لا الزخرفة.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Test\",\n  \"last_name\": \"Phone\",\n  \"registration_method\": \"phone\",\n  \"phone\": \"+971501234567\",\n  \"password\": \"Password1@\",\n  \"password_confirmation\": \"Password1@\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "Created 201",
+              "originalRequest": {},
+              "status": "201 Created",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"user\": {\n    \"id\": 31,\n    \"first_name\": \"Test\",\n    \"last_name\": \"Phone\"\n  },\n  \"message\": \"Registration successful. Please verify your phone number using the OTP sent to your phone.\",\n  \"registration_method\": \"phone\",\n  \"verification_channel\": \"phone\",\n  \"masked_destination\": \"+971******4567\",\n  \"requires_otp_verification\": true,\n  \"otp\": \"123456\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 Refresh Token (يُجدّد access_token + يُدوّر refresh_token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ],
+              "query": []
+            },
+            "description": "**الوصف:** تجديد الـ access_token باستخدام `refresh_token`. مع `rotate_refresh_tokens=true` كل refresh يستهلك القديم ويُرجع جديد — إعادة استخدام القديم يُبطل كل جلسات الحساب (حماية من التسريب).\n\n**Body:** `{ \"refresh_token\": \"...\" }`\n\n**السكربت:** يحفظ التوكنات الجديدة تلقائياً.\n\n**Errors:**\n- `401` Invalid or expired\n- `403` حساب غير مفعّل (يُرسل OTP)\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Refreshed",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"access_token\": \"3|newtoken...\",\n  \"access_expires_at\": \"2026-09-13T12:00:00.000000Z\",\n  \"refresh_token\": \"new_refresh...\",\n  \"refresh_expires_at\": \"2026-10-13T12:00:00.000000Z\",\n  \"requires_otp_verification\": false\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 Logout (يُبطل كل التوكنات)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ],
+              "query": []
+            },
+            "description": "**الوصف:** تسجيل خروج — يحذف كل `personal_access_tokens` و `refresh_tokens` للحساب.\n\n**Auth:** ✅ Bearer Token\n\n**Body:** لا يوجد\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Logged out",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Logged out\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "07 Request OTP — Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/request-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "request-otp"
+              ],
+              "query": []
+            },
+            "description": "**طلب إرسال OTP** عبر القناة المحددة.\n\n**الحقول:**\n- `registration_method`: `email` أو `phone` (canonical)\n- `type`: `1` للبريد و `2` للهاتف (للتوافق الخلفي فقط)\n- `email` / `phone` حسب القناة\n\n**Response في dev:** يحتوي `otp`\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"hala.alhashimi@gmail.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OTP Sent",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"OTP sent successfully.\",\n  \"registration_method\": \"email\",\n  \"verification_channel\": \"email\",\n  \"masked_destination\": \"ha**************@gmail.com\",\n  \"otp\": \"123456\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 Request OTP — Phone (SMS)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/request-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "request-otp"
+              ],
+              "query": []
+            },
+            "description": "**طلب OTP عبر SMS.** يُرسل إلى `phone`. إذا كان SMS غير مفعّل في dev يُرجع الكود في الـ response.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"phone\",\n  \"phone\": \"+971501111111\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 OTP Sent SMS",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"OTP sent successfully.\",\n  \"registration_method\": \"phone\",\n  \"verification_channel\": \"phone\",\n  \"masked_destination\": \"+971******1111\",\n  \"otp\": \"654321\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "09 Verify OTP — Email (يُفعّل الحساب ويُرجع التوكن)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/verify-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-otp"
+              ],
+              "query": []
+            },
+            "description": "**الوصف:** التحقق من OTP وتفعيل الحساب ثم إرجاع `access_token` و `refresh_token` مباشرة.\n\n**Body:**\n- `registration_method` / `type`\n- `email` / `phone`\n- `otp`: 6 أرقام\n\n**السكربت:** يحفظ التوكنات تلقائياً.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"testuser@example.com\",\n  \"otp\": \"{{last_otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Verified",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Email verified successfully.\",\n  \"user\": {\n    \"id\": 20,\n    \"first_name\": \"Test\",\n    \"last_name\": \"User\",\n    \"email\": \"testuser@example.com\"\n  },\n  \"access_token\": \"1|abc123xyz...\",\n  \"access_expires_at\": \"2026-09-13T10:00:00.000000Z\",\n  \"refresh_token\": \"def456...\",\n  \"refresh_expires_at\": \"2026-10-13T10:00:00.000000Z\",\n  \"token_type\": \"bearer\",\n  \"email_verified\": true,\n  \"requires_otp_verification\": false\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10 Verify OTP — Phone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/verify-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-otp"
+              ],
+              "query": []
+            },
+            "description": "**تحقق OTP هاتف.** نفس السلوك، يضع `phone_verified_at`.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"phone\",\n  \"phone\": \"+971501111111\",\n  \"otp\": \"{{last_otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Phone Verified",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Phone number verified successfully.\",\n  \"user\": {\n    \"id\": 20,\n    \"phone\": \"+971501111111\"\n  },\n  \"access_token\": \"1|...\",\n  \"refresh_token\": \"...\",\n  \"phone_verified\": true\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11 Verify Email via OTP (Legacy wrapper)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/verify-email-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-email-otp"
+              ],
+              "query": []
+            },
+            "description": "**Wrapper متوافق** مع النسخة القديمة. داخلياً ينفّذ `verify-otp` لقناة `email`.\n\n**Body:** `email` + `otp` (6 أرقام بالضبط)\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"testuser@example.com\",\n  \"otp\": \"{{last_otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Verified Legacy",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Email verified successfully.\",\n  \"access_token\": \"1|...\",\n  \"refresh_token\": \"def456...\",\n  \"email_verified\": true,\n  \"requires_otp_verification\": false\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12 Resend Verification OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/resend-verification-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "resend-verification-otp"
+              ],
+              "query": []
+            },
+            "description": "**إعادة إرسال OTP** للحساب غير المفعّل. يدعم البريد أو الهاتف حسب `registration_method`.\n\n**Errors:** `400` إذا الحساب مفعّل مسبقاً.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"testuser@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Resent",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"OTP sent to your email.\",\n  \"registration_method\": \"email\",\n  \"verification_channel\": \"email\",\n  \"masked_destination\": \"te******@example.com\",\n  \"requires_otp_verification\": true,\n  \"otp\": \"654321\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13 Forgot Password — Send OTP (Email)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ],
+              "query": []
+            },
+            "description": "**الخطوة 1 من استرجاع كلمة المرور:** إرسال كود إعادة التعيين.\n\n**Body:** `registration_method` + `email`/`phone`\n\n**Response:** يحتوي `masked_destination` و `expires_in` و `resend_after`. في dev يحتوي `otp` أيضاً.\n\n**Cooldown:** ثانٍ لكل وجهة + Throttle per IP — يُرجع `429` مع `retry_after` عند المحاولة المبكرة.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"hala.alhashimi@gmail.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Sent",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"OTP sent to email\",\n  \"registration_method\": \"email\",\n  \"verification_channel\": \"email\",\n  \"masked_destination\": \"ha**************@gmail.com\",\n  \"expires_in\": 600,\n  \"resend_after\": 60,\n  \"otp\": \"123456\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "14 Forgot Password — Send OTP (Phone)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ],
+              "query": []
+            },
+            "description": "**إرسال كود عبر SMS.** نفس السلوك، يضيف cooldown ثانٍ per phone لمنع استنزاف رصيد SMS.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"phone\",\n  \"phone\": \"+971501111111\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Sent SMS",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"OTP sent to phone\",\n  \"registration_method\": \"phone\",\n  \"verification_channel\": \"phone\",\n  \"masked_destination\": \"+971******1111\",\n  \"expires_in\": 600,\n  \"resend_after\": 60\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "15 Verify Password Reset OTP → reset_token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/password/verify-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "password",
+                "verify-otp"
+              ],
+              "query": []
+            },
+            "description": "**الخطوة 2:** استبدال الكود الصحيح بـ `reset_token` صالح لمرة واحدة (short-lived).\n\n**Body:** نفس حقول الخطوة 1 + `otp`\n\n**Response:** `{ \"reset_token\": \"...\", \"expires_at\": \"2026-09-13T...\" }`\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"hala.alhashimi@gmail.com\",\n  \"otp\": \"{{last_otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Grant",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"OTP verified\",\n  \"reset_token\": \"grant_abc123...\",\n  \"expires_at\": \"2026-09-13T11:00:00.000Z\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "16 Reset Password — via reset_token (مُفضّل)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "reset-password"
+              ],
+              "query": []
+            },
+            "description": "**الخطوة 3 — الطريقة المفضّلة:** تعيين كلمة مرور جديدة باستخدام `reset_token` من الخطوة 2.\n\n**Body:**\n- `reset_token`\n- `password` + `password_confirmation` (نفس قوة التسجيل: 8+ mixed case + أرقام + رموز)\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reset_token\": \"{{reset_token}}\",\n  \"password\": \"NewPassword1@\",\n  \"password_confirmation\": \"NewPassword1@\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Reset",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Password reset successful\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "17 Reset Password — Legacy (otp مباشرة)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "reset-password"
+              ],
+              "query": []
+            },
+            "description": "**الطريقة القديمة (Legacy):** إرسال `otp` + الوجهة + كلمة المرور في طلب واحد. ما زالت مدعومة للتوافق مع نسخ التطبيق القديمة.\n\n**Body:** `registration_method` + `email/phone` + `otp` + `password` + `password_confirmation`\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registration_method\": \"email\",\n  \"email\": \"hala.alhashimi@gmail.com\",\n  \"otp\": \"{{last_otp}}\",\n  \"password\": \"NewPassword1@\",\n  \"password_confirmation\": \"NewPassword1@\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Reset Legacy",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Password reset successful\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "18 Google OAuth — Mobile (id_token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/google",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "google"
+              ],
+              "query": []
+            },
+            "description": "**تسجيل دخول Google للموبايل:** يرسل `id_token` من Google SDK، يتحقق عبر Socialite، يجد أو ينشئ المستخدم، ويُرجع `access_token` + `refresh_token`.\n\n**Body:** `{ \"token\": \"google_id_token\" }`\n\n> ملاحظة: المسار `/auth/google/mobile` يستخدم نفس الـ Controller (Alias).\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"google_id_token_example\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Google",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"user\": {\n    \"id\": 25,\n    \"name\": \"GoogleUser\",\n    \"email\": \"googleuser@gmail.com\",\n    \"avatar_url\": \"https://...\"\n  },\n  \"access_token\": \"4|googletoken...\",\n  \"refresh_token\": \"refresh...\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "19 Google OAuth — Mobile Alias",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/google/mobile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "google",
+                "mobile"
+              ],
+              "query": []
+            },
+            "description": "**Alias للمسار السابق:** `POST /auth/google/mobile` — نفس الـ payload ونفس الـ response.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"google_id_token_example\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Google Mobile",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"user\": {\n    \"id\": 25,\n    \"email\": \"googleuser@gmail.com\"\n  },\n  \"access_token\": \"4|googletoken...\",\n  \"refresh_token\": \"refresh...\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "20 Google Redirect (Web - افتح في المتصفح)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/google/redirect",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "google",
+                "redirect"
+              ],
+              "query": []
+            },
+            "description": "**للويب فقط:** يعيد redirect إلى Google OAuth.\n\n> افتح هذا الرابط في المتصفح مباشرة، ليس عبر Postman.\n"
+          }
+        },
+        {
+          "name": "21 Google Callback (Web)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/google/callback",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "google",
+                "callback"
+              ],
+              "query": []
+            },
+            "description": "**Callback للويب:** تستقبله Google بعد الموافقة. يعالج إنشاء المستخدم وإصدار التوكن.\n"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 👤 Profile — الملف الشخصي",
+      "description": "الملف الشخصي، تغيير كلمة المرور، حذف الحساب، وتوثيق الهاتف بعد التسجيل.\n\nجميعها تتطلب `Authorization: Bearer {{access_token}}`.",
+      "item": [
+        {
+          "name": "01 Get Profile — بياناتي",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ],
+              "query": []
+            },
+            "description": "**جلب بيانات المستخدم الحالي.**\n\n**Auth:** ✅ Bearer\n\n**Headers:** `Accept: application/json` + `Authorization`\n"
+          },
+          "response": [
+            {
+              "name": "200 Profile",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Profile retrieved successfully\",\n  \"data\": {\n    \"id\": 5,\n    \"first_name\": \"Hala\",\n    \"last_name\": \"Al Hashimi\",\n    \"email\": \"hala.alhashimi@gmail.com\",\n    \"phone\": \"+971-50-111-1111\",\n    \"city\": \"Dubai\",\n    \"address\": \"Dubai, UAE\",\n    \"avatar_url\": \"http://localhost:8000/storage/users/profile_images/5/Hala_5.png\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 Update Profile — JSON (بدون صورة)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ],
+              "query": []
+            },
+            "description": "**تحديث الملف الشخصي — JSON.** كل الحقول اختيارية.\n\n**Body (JSON):**\n- `first_name`, `last_name` (max 255)\n- `phone` (max 20 + PhoneNumber rule + unique)\n- `address` (max 500)\n- `city` (max 255)\n\n> لرفع الصورة استخدم الطلب التالي `multipart/form-data`.\n\n**سلوك الهاتف:** تغيير الرقم يُصفر `phone_verified_at` ويتطلب توثيق جديد.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Hala\",\n  \"last_name\": \"Updated\",\n  \"phone\": \"+971501111111\",\n  \"city\": \"Dubai\",\n  \"address\": \"Marina Walk, Dubai\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Updated",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Profile updated successfully\",\n  \"data\": {\n    \"id\": 5,\n    \"first_name\": \"Hala\",\n    \"last_name\": \"Updated\",\n    \"phone\": \"+971501111111\",\n    \"city\": \"Dubai\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Update Profile — مع صورة (multipart/form-data)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ],
+              "query": []
+            },
+            "description": "**تحديث مع صورة.** يجب إرسال الطلب كـ `multipart/form-data` وليس JSON.\n\n**Form-Data Keys:**\n- `first_name` (text)\n- `last_name` (text)\n- `phone` (text)\n- `city` (text)\n- `address` (text)\n- `image` (file) — max 2MB، صور فقط، محمي بـ `ImageUploadRules` (يتحقق من الأبعاد لا الحجم فقط)\n\n**في Postman:** غيّر Body إلى `form-data` وأضف `image` كنوع `File`.\n\n**Body Example (form-data):**\n```\nfirst_name: Hala\nlast_name: Updated\nphone: +971501111111\ncity: Dubai\nimage: @/path/to/photo.jpg (File)\n```\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"_note\": \"Switch Body to form-data in Postman. This example shows JSON for reference\",\n  \"first_name\": \"Hala\",\n  \"last_name\": \"Updated\",\n  \"phone\": \"+971501111111\",\n  \"city\": \"Dubai\",\n  \"_image\": \"Select Body -> form-data -> key=image type=File\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Updated with image",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Profile updated successfully\",\n  \"data\": {\n    \"id\": 5,\n    \"first_name\": \"Hala\",\n    \"avatar_url\": \"http://localhost:8000/storage/users/profile_images/5/Hala_5.png\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "04 Change Password (يُبطل كل الجلسات)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile/change-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "profile",
+                "change-password"
+              ],
+              "query": []
+            },
+            "description": "**تغيير كلمة المرور.** يُلغي كل الـ tokens (access + refresh) على كل الأجهزة — يجب تسجيل الدخول مجدداً بعدها.\n\n**Body:**\n- `current_password` (required)\n- `password` (required, confirmed, PasswordRequirements: 8+ + mixed case + number + symbol)\n- `password_confirmation`\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"password\",\n  \"password\": \"NewPassword1@\",\n  \"password_confirmation\": \"NewPassword1@\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Changed",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Password updated\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "05 Delete Account (Customer فقط)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "profile"
+              ],
+              "query": []
+            },
+            "description": "**حذف الحساب نهائياً.** متاح لحسابات `customer` فقط — يرفض `admin`/`provider` بـ `403`.\n\n**Body:**\n- `current_password` (مطلوب إذا للحساب كلمة مرور — حسابات OTP-only بلا كلمة مرور لا تحتاجه)\n\n**Auth:** ✅ Bearer\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Deleted",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Account deleted successfully\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "06 Send Phone Verification OTP (للمسجلين)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile/phone/send-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "profile",
+                "phone",
+                "send-otp"
+              ],
+              "query": []
+            },
+            "description": "**إرسال OTP لتأكيد رقم الهاتف بعد تسجيل الدخول.** هذا مسار **منفصل** عن OTP تفعيل الحساب — هنا المستخدم مسجل دخول مسبقاً ومُوثق بالبريد، نحن فقط نؤكد هاتفه.\n\n**Body (اختياري):**\n- `phone`: إذا أرسلته سيُحدث الرقم أولاً (ويُصفر التحقق السابق) ثم يرسل OTP للرقم الجديد\n\n**Rate Limit:** 6/min\n\n**Response في dev:** يحتوي `otp` للاختبار\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+971501111111\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Sent",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"A verification code has been sent to your phone number.\",\n  \"masked_destination\": \"+971******1111\",\n  \"phone_verified\": false,\n  \"otp\": \"123456\"\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 Verify Phone OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile/phone/verify-otp",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "profile",
+                "phone",
+                "verify-otp"
+              ],
+              "query": []
+            },
+            "description": "**تأكيد OTP الهاتف.** يضع `phone_verified_at` — **لا يُصدر tokens** لأن المستخدم مسجل دخول أصلاً.\n\n**Body:** `{ \"otp\": \"123456\" }`\n\n**Rate Limit:** 10/min\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"otp\": \"{{last_otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Verified",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Your phone number has been verified successfully.\",\n  \"data\": {\n    \"id\": 5,\n    \"phone\": \"+971501111111\",\n    \"phone_verified_at\": \"2026-09-12T10:00:00Z\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 💇 Providers — المزودون",
+      "description": "قائمة المزودين وتفاصيل كل مزود مع خدماته. **Public** — لا تتطلب Auth.",
+      "item": [
+        {
+          "name": "01 List Providers — مع فلاتر وترتيب",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/providers?per_page=15&sort_by=first_name&sort_direction=asc&search=&branch_id=1&service_id=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "providers"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "description": {
+                    "content": "عدد النتائج",
+                    "type": "text/plain"
+                  },
+                  "disabled": false
+                },
+                {
+                  "key": "sort_by",
+                  "value": "first_name",
+                  "disabled": false
+                },
+                {
+                  "key": "sort_direction",
+                  "value": "asc",
+                  "disabled": false
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "branch_id",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "service_id",
+                  "value": "1",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**قائمة مقدمي الخدمات النشطين مع Pagination.**\n\n**Query Params:**\n- `per_page` (default 15)\n- `sort_by` (default `first_name`)\n- `sort_direction` `asc`/`desc`\n- `search` (بحث بالاسم)\n- `branch_id` (فلترة بالفرع)\n- `service_id` (من يقدم خدمة معينة)\n"
+          },
+          "response": [
+            {
+              "name": "200 List",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Providers retrieved successfully\",\n  \"data\": [\n    {\n      \"id\": 3,\n      \"first_name\": \"Sarah\",\n      \"last_name\": \"Johnson\",\n      \"full_name\": \"Sarah Johnson\",\n      \"email\": \"sarah.johnson@elitebeauty.ae\",\n      \"phone\": \"+971-55-111-2222\",\n      \"avatar_url\": \"http://localhost:8000/storage/...\",\n      \"services\": [\n        {\n          \"id\": 1,\n          \"name\": \"Men's Haircut\"\n        }\n      ]\n    }\n  ],\n  \"pagination\": {\n    \"current_page\": 1,\n    \"last_page\": 1,\n    \"per_page\": 15,\n    \"total\": 8\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 Show Provider — تفاصيل مزود",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/providers/{{provider_id}}?locale=en",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "providers",
+                "{{provider_id}}"
+              ],
+              "query": [
+                {
+                  "key": "locale",
+                  "value": "en",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**تفاصيل مزود محدد** مع خدماته وعدد حجوزاته.\n\n**Path:** `id` (integer)\n\n**Query:** `locale` اختياري `en|ar|de`\n"
+          },
+          "response": [
+            {
+              "name": "200 Provider",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Provider retrieved successfully\",\n  \"data\": {\n    \"id\": 3,\n    \"full_name\": \"Sarah Johnson\",\n    \"email\": \"sarah.johnson@elitebeauty.ae\",\n    \"avatar_url\": \"http://localhost:8000/storage/...\",\n    \"total_booking_count\": 42,\n    \"services\": [\n      {\n        \"id\": 1,\n        \"name\": \"Hair Cut\",\n        \"price\": \"50.00\",\n        \"duration_minutes\": 30\n      }\n    ]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 ✨ Services — الخدمات",
+      "description": "الخدمات والفئات والترجمات. **Public**.",
+      "item": [
+        {
+          "name": "01 List Services — paginated",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/services?per_page=15&sort_by=sort_order&sort_direction=asc&category_id=&featured=&search=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "disabled": false
+                },
+                {
+                  "key": "sort_by",
+                  "value": "sort_order",
+                  "disabled": false
+                },
+                {
+                  "key": "sort_direction",
+                  "value": "asc",
+                  "disabled": false
+                },
+                {
+                  "key": "category_id",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "featured",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**قائمة الخدمات النشطة.**\n\n**Query:**\n- `per_page` default 15\n- `sort_by` default `sort_order`\n- `sort_direction` `asc`/`desc`\n- `category_id` فلترة بالفئة\n- `featured` عرض المميزة فقط\n- `search` بحث في الاسم والوصف\n"
+          },
+          "response": [
+            {
+              "name": "200 Services",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Services retrieved successfully\",\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"Men's Haircut\",\n      \"description\": \"Classic barber haircut\",\n      \"price\": \"28.00\",\n      \"discount_price\": null,\n      \"duration_minutes\": 35,\n      \"color_code\": \"#FF6B9D\",\n      \"is_featured\": true,\n      \"category\": {\n        \"id\": 1,\n        \"name\": \"Haircut\"\n      },\n      \"providers\": [\n        {\n          \"id\": 3,\n          \"first_name\": \"Sarah\",\n          \"last_name\": \"Johnson\"\n        }\n      ]\n    }\n  ],\n  \"pagination\": {\n    \"current_page\": 1,\n    \"last_page\": 3,\n    \"per_page\": 15,\n    \"total\": 35\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 Show Service — تفاصيل خدمة",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/services/{{service_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "services",
+                "{{service_id}}"
+              ],
+              "query": []
+            },
+            "description": "**تفاصيل خدمة محددة** مع المزودين والتقييمات والفئة والترجمات.\n\n**Path:** `id` (أرقام فقط)\n"
+          },
+          "response": [
+            {
+              "name": "200 Service",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Service retrieved successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"name\": \"Men's Haircut\",\n    \"description\": \"Classic barber haircut\",\n    \"price\": \"28.00\",\n    \"discount_price\": null,\n    \"duration_minutes\": 35,\n    \"color_code\": \"#FF6B9D\",\n    \"category\": {\n      \"id\": 1,\n      \"name\": \"Haircut\",\n      \"description\": \"...\"\n    },\n    \"providers\": [],\n    \"reviews\": []\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 📅 Availability — التوفر والمواعيد",
+      "description": "حساب الأوقات المتاحة. **Public** لكن Throttled (40/min للخدمة/المزود، 30/min للتقويم).\n\n> هذه الواجهات تطبق نفس `book_buffer` و `max_booking_days` التي يطبقها الحجز — لا يُعرض وقت سيرفضه الحجز لاحقاً.\n\n**نصيحة التطبيق:** debounce منتقي التاريخ 300ms، وخبّئ نتيجة اليوم لدقيقة.",
+      "item": [
+        {
+          "name": "01 Service Availability — كل المزودين المتاحين ليوم (الأهم)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/availability/service?service_id={{service_id}}&date={{next_week}}&branch_id=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "availability",
+                "service"
+              ],
+              "query": [
+                {
+                  "key": "service_id",
+                  "value": "{{service_id}}",
+                  "disabled": false
+                },
+                {
+                  "key": "date",
+                  "value": "{{next_week}}",
+                  "disabled": false
+                },
+                {
+                  "key": "branch_id",
+                  "value": "1",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**الواجهة الأساسية لشاشة الحجز.** تعطيه `service_id + date` فيُرجع **كل المزودين المتاحين** لذلك اليوم، كل واحد مع أوقاته الشاغرة وسعره وفرعه — **طلب واحد بدل N+1 طلب.**\n\n**Query (Required):**\n- `service_id` (int)\n- `date` `Y-m-d` — اليوم أو مستقبلاً (يوم واحد)\n\n**Query (Optional):**\n- `branch_id` فلترة بالفرع\n\n**Rate Limit:** 40/min per IP\n\n**سلوك مهم:**\n- المتاحون فقط يظهرون في `providers` — من في إجازة أو غير عامل أو محجوز بالكامل **لا يظهر إطلاقاً**\n- `total_providers` قد يكون `0` (يوم مغلق) والـ response يبقى `200`\n- `last_bookable_date` = آخر تاريخ مسموح (`today + max_booking_days`) — عطّل ما بعده في DatePicker\n- الأوقات مرتبة تصاعدياً وتحترم `book_buffer` و `max_booking_days`\n"
+          },
+          "response": [
+            {
+              "name": "200 Availability",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Service availability retrieved successfully\",\n  \"data\": {\n    \"service\": {\n      \"id\": 3,\n      \"name\": \"Skin Fade Haircut\",\n      \"duration_minutes\": 50,\n      \"formatted_duration\": \"50m\"\n    },\n    \"date\": \"2026-09-20\",\n    \"day_name\": \"Saturday\",\n    \"formatted_date\": \"Saturday, September 20, 2026\",\n    \"is_today\": false,\n    \"last_bookable_date\": \"2026-09-22\",\n    \"total_providers\": 2,\n    \"providers\": [\n      {\n        \"provider_id\": 3,\n        \"provider_name\": \"Sarah Johnson\",\n        \"provider_avatar\": \"http://localhost:8000/storage/...\",\n        \"branch\": {\n          \"id\": 1,\n          \"name\": \"Main Branch\"\n        },\n        \"service_pricing\": {\n          \"original_price\": 35,\n          \"effective_price\": 35,\n          \"has_discount\": false,\n          \"discount_amount\": 0,\n          \"currency\": \"EUR\",\n          \"formatted_price\": \"35.00 EUR\"\n        },\n        \"is_available\": true,\n        \"reason_code\": \"available\",\n        \"available_slots\": [\n          {\n            \"start_time\": \"10:00\",\n            \"end_time\": \"10:50\",\n            \"start_time_formatted\": \"10:00 AM\",\n            \"end_time_formatted\": \"10:50 AM\",\n            \"display_time\": \"10:00 AM\",\n            \"duration_minutes\": 50\n          }\n        ]\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 Provider Availability — مزود محدد في يوم",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/availability/provider?service_id={{service_id}}&provider_id={{provider_id}}&date={{next_week}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "availability",
+                "provider"
+              ],
+              "query": [
+                {
+                  "key": "service_id",
+                  "value": "{{service_id}}",
+                  "disabled": false
+                },
+                {
+                  "key": "provider_id",
+                  "value": "{{provider_id}}",
+                  "disabled": false
+                },
+                {
+                  "key": "date",
+                  "value": "{{next_week}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**الأوقات المتاحة لمزود محدد في تاريخ معين.**\n\n**Query:**\n- `service_id` ✅\n- `provider_id` ✅\n- `date` ✅ `Y-m-d`\n- `branch_id` ❌\n\n**Rate Limit:** 40/min\n\n**مهم:** الـ Response دائماً `200` حتى لو المزود غير متاح — اعتمد على `is_available` لا `status code`.\n\n**reason_code:**\n- `available` متاح\n- `on_leave` إجازة يوم كامل\n- `not_working_day` لا يعمل هذا اليوم\n- `fully_booked` كل الأوقات محجوزة\n- `outside_booking_window` خارج نافذة الحجز\n"
+          },
+          "response": [
+            {
+              "name": "200 Provider Slots",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Provider availability retrieved successfully\",\n  \"data\": {\n    \"is_available\": true,\n    \"reason_code\": \"available\",\n    \"unavailable_reason\": null,\n    \"provider\": {\n      \"id\": 3,\n      \"name\": \"Sarah Johnson\"\n    },\n    \"service\": {\n      \"id\": 1,\n      \"name\": \"Men's Haircut\",\n      \"duration_minutes\": 30\n    },\n    \"date\": \"2026-09-20\",\n    \"day_name\": \"Monday\",\n    \"total_slots\": 6,\n    \"available_slots\": [\n      {\n        \"start_time\": \"09:00\",\n        \"end_time\": \"09:30\",\n        \"display_time\": \"09:00 AM\",\n        \"duration_minutes\": 30\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Provider Availability — مثال الإجازة",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/availability/provider?service_id=1&provider_id=3&date=2026-09-25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "availability",
+                "provider"
+              ],
+              "query": [
+                {
+                  "key": "service_id",
+                  "value": "1",
+                  "disabled": false
+                },
+                {
+                  "key": "provider_id",
+                  "value": "3",
+                  "disabled": false
+                },
+                {
+                  "key": "date",
+                  "value": "2026-09-25",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**مثال عندما المزود في إجازة — نفس المسار السابق لكن لاحظ `is_available=false`.** استخدمه لاختبار UI حالة الإجازة.\n"
+          },
+          "response": [
+            {
+              "name": "200 On Leave",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Provider availability retrieved successfully\",\n  \"data\": {\n    \"is_available\": false,\n    \"reason_code\": \"on_leave\",\n    \"unavailable_reason\": \"Provider 'Sarah Johnson' is on leave on 2026-09-25\",\n    \"leave_start_date\": \"2026-09-24\",\n    \"leave_end_date\": \"2026-09-28\",\n    \"date\": \"2026-09-25\",\n    \"total_slots\": 0,\n    \"available_slots\": []\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "04 Availability Calendar — تقويم 31 يوم",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/availability/calendar?service_id={{service_id}}&provider_id={{provider_id}}&start_date={{today}}&end_date={{next_week}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "availability",
+                "calendar"
+              ],
+              "query": [
+                {
+                  "key": "service_id",
+                  "value": "{{service_id}}",
+                  "disabled": false
+                },
+                {
+                  "key": "provider_id",
+                  "value": "{{provider_id}}",
+                  "disabled": false
+                },
+                {
+                  "key": "start_date",
+                  "value": "{{today}}",
+                  "disabled": false
+                },
+                {
+                  "key": "end_date",
+                  "value": "{{next_week}}",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**تقويم التوفر لنطاق تاريخي (max 31 يوم).**\n\n**Query:**\n- `service_id` ✅\n- `provider_id` ❌ (بدونه يحسب التوفر لأي مزود)\n- `start_date` ✅ `Y-m-d`\n- `end_date` ✅ يجب أن يكون بعد `start_date`\n- `branch_id` ❌\n\n**Rate Limit:** 30/min (الأثقل — يضرب تكلفة اليوم × عدد الأيام)\n\n**Headers RateLimit:** `X-RateLimit-Limit` و `X-RateLimit-Remaining` و `Retry-After` عند `429`\n"
+          },
+          "response": [
+            {
+              "name": "200 Calendar",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Availability calendar retrieved successfully\",\n  \"data\": {\n    \"service_id\": 1,\n    \"provider_id\": 3,\n    \"period\": {\n      \"start_date\": \"2026-09-12\",\n      \"end_date\": \"2026-09-20\",\n      \"month_name\": \"September 2026\"\n    },\n    \"calendar\": [\n      {\n        \"date\": \"2026-09-12\",\n        \"day_name\": \"Mon\",\n        \"day_number\": 12,\n        \"is_today\": true,\n        \"is_available\": true,\n        \"reason_code\": \"available\",\n        \"available_slots_count\": 8\n      },\n      {\n        \"date\": \"2026-09-13\",\n        \"day_name\": \"Tue\",\n        \"day_number\": 13,\n        \"is_available\": false,\n        \"reason_code\": \"on_leave\",\n        \"available_slots_count\": 0\n      }\n    ]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 📋 Appointments — حجوزاتي",
+      "description": "إدارة حجوزات المستخدم: قائمة، تفاصيل، قادمة، سابقة، إحصائيات، بحث، إلغاء.\n\nكلها تتطلب Auth وتتحقق من الملكية.",
+      "item": [
+        {
+          "name": "01 List Appointments — مع فلاتر",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments?per_page=15&status=ALL&payment_status=&date_from=&date_to=&type=&sort_by=appointment_date&sort_direction=asc",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "disabled": false
+                },
+                {
+                  "key": "status",
+                  "value": "ALL",
+                  "disabled": false
+                },
+                {
+                  "key": "payment_status",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "date_from",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "date_to",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "sort_by",
+                  "value": "appointment_date",
+                  "disabled": true
+                },
+                {
+                  "key": "sort_direction",
+                  "value": "asc",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**قائمة حجوزات المستخدم الحالي (paginated).**\n\n**Query (كلها اختيارية):**\n- `per_page` 1-100 default 15\n- `status` `PENDING|COMPLETED|USER_CANCELLED|ADMIN_CANCELLED|ALL`\n- `payment_status` `PENDING|PAID_ONLINE|PAID_ONSTIE_CASH|PAID_ONSTIE_CARD|FAILED|REFUNDED|PARTIALLY_REFUNDED`\n- `date_from` `Y-m-d`\n- `date_to` `Y-m-d`\n- `type` `upcoming|past`\n- `sort_by` `appointment_date|created_at|total_amount`\n- `sort_direction` `asc|desc`\n"
+          },
+          "response": [
+            {
+              "name": "200 List",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"تم جلب قائمة الحجوزات بنجاح\",\n  \"data\": {\n    \"data\": [\n      {\n        \"id\": 10,\n        \"number\": \"APT-20260912-A1B2C3\",\n        \"appointment_date\": \"2026-09-15\",\n        \"start_time\": \"10:00\",\n        \"end_time\": \"10:30\",\n        \"duration_minutes\": 30,\n        \"status\": \"PENDING\",\n        \"status_value\": 0,\n        \"payment_status\": \"PENDING\",\n        \"total_amount\": 50,\n        \"can_cancel\": true\n      }\n    ]\n  },\n  \"meta\": {\n    \"current_page\": 1,\n    \"per_page\": 15,\n    \"total\": 5,\n    \"last_page\": 1\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j=pm.response.json(); if(j.data && j.data.data && j.data.data[0]) pm.collectionVariables.set('appointment_id', j.data.data[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 Show Appointment — تفاصيل حجز",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "{{appointment_id}}"
+              ],
+              "query": []
+            },
+            "description": "**تفاصيل حجز محدد.** يعيد `403` إذا الحجز ليس ملك المستخدم.\n\n**Path:** `id` (أرقام فقط)\n"
+          },
+          "response": [
+            {
+              "name": "200 Details",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"تم جلب بيانات الحجز بنجاح\",\n  \"data\": {\n    \"id\": 10,\n    \"number\": \"APT-20260912-A1B2C3\",\n    \"appointment_date\": \"2026-09-15\",\n    \"formatted_date\": \"Sep 15, 2026\",\n    \"start_time\": \"10:00\",\n    \"end_time\": \"10:30\",\n    \"time_range\": \"10:00 AM - 10:30 AM\",\n    \"duration_minutes\": 30,\n    \"subtotal\": 42.02,\n    \"tax_amount\": 7.98,\n    \"total_amount\": 50,\n    \"status\": \"PENDING\",\n    \"status_value\": 0,\n    \"payment_status\": \"PENDING\",\n    \"provider\": {\n      \"id\": 3,\n      \"full_name\": \"Sarah Johnson\"\n    },\n    \"services_details\": [\n      {\n        \"id\": 1,\n        \"service_name\": \"Men's Haircut\",\n        \"duration_minutes\": 30,\n        \"price\": 50,\n        \"sequence_order\": 1\n      }\n    ],\n    \"is_upcoming\": true,\n    \"can_cancel\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Upcoming Appointments — القادمة",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/upcoming?days=7",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "upcoming"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "7",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**الحجوزات القادمة خلال N أيام.**\n\n**Query:** `days` 1-90 default 7\n"
+          },
+          "response": [
+            {
+              "name": "200 Upcoming",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"تم جلب الحجوزات المقبلة خلال 7 أيام\",\n  \"data\": [],\n  \"count\": 3\n}"
+            }
+          ]
+        },
+        {
+          "name": "04 Past Appointments — السابقة",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/past?limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "past"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**آخر N حجوز سابقة.**\n\n**Query:** `limit` 1-50 default 10\n"
+          },
+          "response": [
+            {
+              "name": "200 Past",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"تم جلب الحجوزات السابقة\",\n  \"data\": [],\n  \"count\": 10\n}"
+            }
+          ]
+        },
+        {
+          "name": "05 Statistics — إحصائياتي",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/statistics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "statistics"
+              ],
+              "query": []
+            },
+            "description": "**إحصائيات الحجوزات للمستخدم الحالي:** total, pending, completed, cancelled, total_spent, upcoming_count\n"
+          },
+          "response": [
+            {
+              "name": "200 Stats",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"تم جلب إحصائيات الحجوزات\",\n  \"data\": {\n    \"total\": 15,\n    \"pending\": 2,\n    \"completed\": 10,\n    \"cancelled\": 3,\n    \"total_spent\": 750,\n    \"upcoming_count\": 2\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "06 Search Appointments — بحث",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/search?query=APT",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "APT",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**البحث في حجوزاتي** برقم الحجز أو اسم المزود.\n\n**Query:** `query` (min حرفان) ✅\n"
+          },
+          "response": [
+            {
+              "name": "200 Search",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"تم البحث بنجاح\",\n  \"data\": [],\n  \"count\": 2\n}"
+            }
+          ]
+        },
+        {
+          "name": "07 Cancel Appointment — إلغاء حجز",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "{{appointment_id}}",
+                "cancel"
+              ],
+              "query": []
+            },
+            "description": "**إلغاء حجز بحالة PENDING.** يُقبل حتى بعد وقت البداية (الردع بالمراقبة لا بالمنع).\n\n**Path:** `id`\n\n**Body (optional):**\n- `reason` (max 500) — سبب الإلغاء\n\n**Errors:**\n- `404` غير موجود\n- `422` غير قابل للإلغاء (مكتمل/ملغى)\n- `403` ليس حجزي\n\n**Monitoring:** ثاني إلغاء USER_CANCELLED خلال 7 أيام يرفع تنبيه للإدارة.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"ظرف طارئ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Cancelled",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"تم إلغاء الحجز بنجاح\",\n  \"data\": {\n    \"id\": 10,\n    \"status\": \"USER_CANCELLED\",\n    \"status_value\": -1\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 🗓️ Bookings — إنشاء الحجز",
+      "description": "إنشاء الحجز — أهم مسارات النظام. تتطلب Auth.\n\n**التدفق الصحيح:** 1) اختر خدمة 2) استدعِ `/availability/service` 3) انسخ `start_time` المتاح 4) استدعِ `POST /bookings`\n\n**حماية التزامن:** الحجز يستخدم `SELECT FOR UPDATE` على صفوف المستخدمين — لا يمكن لحجزين متزامنين حجز نفس الوقت، والخاسر يُرجع `409 slot_conflict`.",
+      "item": [
+        {
+          "name": "01 Create Booking — خدمة واحدة (أبسط حجز)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/bookings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ],
+              "query": []
+            },
+            "description": "**إنشاء حجز جديد — خدمة واحدة.** القلب النابض للنظام.\n\n**Body:**\n- `services` (array, min1 max10):\n  - `service_id` (int, exists + active + غير محذوف)\n  - `provider_id` (int, active provider + يقدم الخدمة)\n  - `start_time` `H:i` (مثال `10:00`)\n- `date` `Y-m-d` — اليوم أو مستقبلاً ضمن `max_booking_days`\n- `payment_method` `cash|online` (نية فقط — كل الحجوزات `created_status=1` و `payment_status=PENDING` حتى الدفع في المحل)\n- `notes` (optional, max 1000)\n- `reminder_offset_hours` (optional, int — من `[1,2,3,4,5,6,24]`)\n\n**Validation الهامة:**\n- لا تكرار نفس الخدمة\n- كل الخدمات متسلسلة: `start_time[i] >= end_time[i-1]`\n- وقت ضمن دوام المزود + لا يتعارض مع إجازة أو حجز آخر\n- يحترم `book_buffer` (default 60 دقيقة)\n- العميل لا يمكن أن يكون في مكانين في وقت واحد (فحص عبر phone key)\n\n**Success:** `201` مع `AppointmentResource` + فاتورة DRAFT\n\n**Errors:**\n- `409 slot_conflict` — سبقك أحد للحجز (أعد تحميل التوفر)\n- `422 validation_error` — بيانات غير صحيحة\n\n**Tips:** استدعِ `/availability/service` أولاً لاختيار `start_time` متاح.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{next_week}}\",\n  \"payment_method\": \"cash\",\n  \"notes\": \"First time visit - window seat please\",\n  \"services\": [\n    {\n      \"service_id\": 1,\n      \"provider_id\": 3,\n      \"start_time\": \"10:00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "originalRequest": {},
+              "status": "201 Created",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Booking created successfully\",\n  \"data\": {\n    \"id\": 25,\n    \"number\": \"APT-20260920-ABC123\",\n    \"appointment_date\": \"2026-09-20\",\n    \"start_time\": \"10:00\",\n    \"end_time\": \"10:35\",\n    \"duration_minutes\": 35,\n    \"status\": \"PENDING\",\n    \"payment_status\": \"PENDING\",\n    \"total_amount\": 28,\n    \"services_details\": [\n      {\n        \"service_id\": 1,\n        \"service_name\": \"Men's Haircut\",\n        \"price\": 28,\n        \"sequence_order\": 1\n      }\n    ],\n    \"provider\": {\n      \"id\": 3,\n      \"full_name\": \"Sarah Johnson\"\n    }\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "// ——— Auto capture tokens ———",
+                  "if (json.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.access_token);",
+                  "  console.log('✅ access_token saved');",
+                  "}",
+                  "if (json.refresh_token) {",
+                  "  pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ refresh_token saved');",
+                  "}",
+                  "if (json.user && json.user.id) pm.collectionVariables.set('user_id', json.user.id);",
+                  "if (json.data && json.data.id) pm.collectionVariables.set('last_id', json.data.id);",
+                  "if (json.otp) { pm.collectionVariables.set('last_otp', json.otp); console.log('🔑 OTP (dev): ' + json.otp); }",
+                  "if (json.reset_token) { pm.collectionVariables.set('reset_token', json.reset_token); console.log('🔑 reset_token saved'); }",
+                  "if (json.data && json.data.id) { pm.collectionVariables.set('appointment_id', json.data.id); console.log('📌 appointment_id saved: '+json.data.id); }",
+                  "if (pm.response.code >= 200 && pm.response.code < 300) pm.test('✅ Success', () => pm.expect(pm.response.code).to.be.below(300));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 Create Booking — متعدد الخدمات متسلسل",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/bookings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ],
+              "query": []
+            },
+            "description": "**حجز متعدد الخدمات (متسلسل).** مثال: قصة شعر + لحية مع نفس المزود أو مزودين مختلفين.\n\n**القاعدة:** الخدمات مرتبة بـ `start_time` ويجب ألا تتداخل — `start_time` لكل خدمة = `end_time` الخدمة السابقة أو بعده.\n\n**السعر:** يجمع أسعار الخدمات (custom_price للمزود إن وجد وإلا سعر الخدمة، ثم يطبق discount_price إن أقل) ويحسب الضريبة مرة واحدة بـ `TaxCalculatorService`.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{next_week}}\",\n  \"payment_method\": \"cash\",\n  \"notes\": \"Haircut + Beard combo\",\n  \"services\": [\n    {\n      \"service_id\": 1,\n      \"provider_id\": 3,\n      \"start_time\": \"10:00\"\n    },\n    {\n      \"service_id\": 2,\n      \"provider_id\": 3,\n      \"start_time\": \"10:35\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Multi",
+              "originalRequest": {},
+              "status": "201 Created",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Booking created successfully\",\n  \"data\": {\n    \"id\": 26,\n    \"number\": \"APT-20260920-XYZ789\",\n    \"appointment_date\": \"2026-09-20\",\n    \"start_time\": \"10:00\",\n    \"end_time\": \"10:55\",\n    \"duration_minutes\": 55,\n    \"services_details\": [\n      {\n        \"service_id\": 1,\n        \"service_name\": \"Men's Haircut\",\n        \"price\": 28,\n        \"sequence_order\": 1\n      },\n      {\n        \"service_id\": 2,\n        \"service_name\": \"Beard Trim & Shape\",\n        \"price\": 18,\n        \"sequence_order\": 2\n      }\n    ],\n    \"total_amount\": 46\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Create Booking — مع تذكير",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/bookings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ],
+              "query": []
+            },
+            "description": "**حجز مع تذكير.** نفس الحجز السابق لكن مع `reminder_offset_hours` لتجنب طلب ثانٍ.\n\n**reminder_offset_hours:** من `[1,2,3,4,5,6,24]` — الساعات قبل الموعد. إذا كان الوقت المحسوب في الماضي (مثلاً حجز بعد ساعتين مع تذكير 24h) يُحفظ الحجز بلا تذكير ولا يفشل.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"{{next_week}}\",\n  \"payment_method\": \"cash\",\n  \"reminder_offset_hours\": 2,\n  \"services\": [\n    {\n      \"service_id\": 1,\n      \"provider_id\": 3,\n      \"start_time\": \"10:00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 With Reminder",
+              "originalRequest": {},
+              "status": "201 Created",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Booking created successfully\",\n  \"data\": {\n    \"id\": 27,\n    \"number\": \"APT-20260920-REM\",\n    \"reminder\": null\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "04 List My Bookings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/bookings?status=PENDING",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**قائمة حجوزاتي (اختصار لـ appointments).**\n\n**Query:** `status` اختياري (PENDING/COMPLETED/.../ALL)\n"
+          },
+          "response": [
+            {
+              "name": "200 Bookings",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Bookings retrieved successfully\",\n  \"data\": [\n    {\n      \"id\": 25,\n      \"number\": \"APT-20260920-ABC123\",\n      \"status\": \"PENDING\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "05 Show Booking — تفاصيل حجز",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/bookings/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{appointment_id}}"
+              ],
+              "query": []
+            },
+            "description": "**تفاصيل حجز بالـ ID.** يتحقق من الملكية — `403` إذا ليس حجزي.\n"
+          },
+          "response": [
+            {
+              "name": "200 Booking",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Booking details retrieved successfully\",\n  \"data\": {\n    \"id\": 25,\n    \"number\": \"APT-20260920-ABC123\",\n    \"status\": \"PENDING\",\n    \"provider\": {\n      \"id\": 3,\n      \"full_name\": \"Sarah Johnson\"\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "06 Cancel Booking — إلغاء حجز (Bookings route)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/bookings/{{appointment_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{appointment_id}}",
+                "cancel"
+              ],
+              "query": []
+            },
+            "description": "**إلغاء حجز عبر مسار Bookings.** مساوٍ لـ `POST /appointments/{id}/cancel` — كلاهما يقبل `PENDING` حتى بعد وقت البداية.\n\n**Body (optional):**\n- `cancellation_reason` (max 500)\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancellation_reason\": \"ظرف طارئ - أعتذر\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Cancelled",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Booking cancelled successfully\",\n  \"data\": {\n    \"id\": 25,\n    \"status\": \"USER_CANCELLED\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 ⏰ Reminders — التذكيرات",
+      "description": "تذكيرات المواعيد: الخيارات، التعيين، العرض، الإيقاف.\n\nكل حجز يحمل تذكيراً واحداً حياً فقط — الإرسال الجديد ينقل القديم. القنوات (push/email/sms) تُحسم عند الإرسال عبر `ReminderChannelResolver` من إعدادات المستخدم.",
+      "item": [
+        {
+          "name": "01 Reminder Options — الخيارات والترجمات",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/reminders/options?lang=ar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "reminders",
+                "options"
+              ],
+              "query": [
+                {
+                  "key": "lang",
+                  "value": "ar",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**خيارات التذكير المتاحة.** تُستخدم لملء Dropdown في شاشة الحجز.\n\n**Response:**\n- `options`: `[{offset_hours, label}]` مترجمة حسب `lang`\n- `default_offset_hours`\n- `texts`: `title`, `subtitle`, `question` مترجمة\n- `channels`: القنوات المفعلة للمستخدم (push/email/sms) عبر `ReminderChannelResolver`\n\n**Rate Limit:** 60/min\n"
+          },
+          "response": [
+            {
+              "name": "200 Options",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"options\": [\n      {\n        \"offset_hours\": 1,\n        \"label\": \"قبل ساعة\"\n      },\n      {\n        \"offset_hours\": 2,\n        \"label\": \"قبل ساعتين\"\n      },\n      {\n        \"offset_hours\": 24,\n        \"label\": \"قبل يوم\"\n      }\n    ],\n    \"default_offset_hours\": 1,\n    \"texts\": {\n      \"title\": \"تذكير الموعد\",\n      \"subtitle\": \"اختر متى نُذكّرك\",\n      \"question\": \"هل تريد تذكيراً؟\"\n    },\n    \"channels\": {\n      \"push\": true,\n      \"email\": true,\n      \"sms\": false\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 Set Reminder — offset_hours (مُفضّل)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/reminders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "reminders"
+              ],
+              "query": []
+            },
+            "description": "**تعيين/تغيير تذكير — بالساعات قبل الموعد (مُفضّل).**\n\n**Body (مُفضّل):**\n- `appointment_id` (int, يجب أن يكون حجزي وغير ملغى ومستقبلي)\n- `offset_hours` (int, من `[1,2,3,4,5,6,24]`)\n\n**Idempotent:** نفس الموعد يحمل تذكيراً واحداً فقط — إرسال جديد ينقل القديم.\n\n**Validation إضافية:**\n- الموعد غير ملغى\n- `start_time` في المستقبل\n- `remindAt = start_time - offset_hours` يجب أن يكون في المستقبل (وإلا `422 too_late`)\n\n**Rate Limit:** 30/min\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointment_id\": 1,\n  \"offset_hours\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Reminder",
+              "originalRequest": {},
+              "status": "201 Created",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Reminder created\",\n  \"data\": {\n    \"id\": 5,\n    \"appointment_id\": 1,\n    \"remind_at\": \"2026-09-19T08:00:00Z\",\n    \"offset_hours\": 2,\n    \"channels\": {\n      \"push\": true,\n      \"email\": false,\n      \"sms\": false\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Set Reminder — remind_at (Legacy)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/reminders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "reminders"
+              ],
+              "query": []
+            },
+            "description": "**الطريقة القديمة — بزمن مطلق.** محفوظة للتوافق، لكن تحمل خطر timezone (APP_TIMEZONE=Asia/Baghdad vs صالون Berlin).\n\n**Body:**\n- `appointment_id`\n- `remind_at` (datetime, `after:now` وقبل `start_time`)\n\n> استخدم `offset_hours` في أي تكامل جديد.\n\n**خطأ شائع:** إرسال كليهما معاً → `422 conflict`\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointment_id\": 1,\n  \"remind_at\": \"2026-09-19T08:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Reminder Legacy",
+              "originalRequest": {},
+              "status": "201 Created",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": 5,\n    \"remind_at\": \"2026-09-19T08:00:00Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "04 Get Reminder — عرض تذكير الحجز",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}/reminders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "{{appointment_id}}",
+                "reminders"
+              ],
+              "query": []
+            },
+            "description": "**عرض التذكير الحي لحجز.**\n\n**Response:**\n- `200` مع `data: AppointmentReminderResource` إذا يوجد\n- `200` مع `data: null` إذا لا يوجد (حالة طبيعية — التبديل Off)\n- `404` إذا الحجز غير موجود/ليس ملكي\n\n**channels:** تُرجع دائماً الحالة الحالية للقنوات — لتحذير المستخدم أن التذكير بلا قناة.\n\n**Rate Limit:** 60/min\n"
+          },
+          "response": [
+            {
+              "name": "200 With Reminder",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"id\": 5,\n    \"appointment_id\": 1,\n    \"remind_at\": \"2026-09-19T08:00:00Z\",\n    \"offset_hours\": 2\n  },\n  \"channels\": {\n    \"push\": true,\n    \"email\": true,\n    \"sms\": false\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "05 Delete Reminder — إيقاف التذكير",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/appointments/{{appointment_id}}/reminders",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "{{appointment_id}}",
+                "reminders"
+              ],
+              "query": []
+            },
+            "description": "**إيقاف التذكير (Toggle Off).**\n\n**Response:**\n- `200` تم الإلغاء\n- `404` لا يوجد تذكير حي (الضغط المزدوج مميز)\n\n**السجل لا يُحذف بل يُتقاعد — للـ support.**\n\n**Rate Limit:** 30/min\n"
+          },
+          "response": [
+            {
+              "name": "200 Deleted",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Reminder deleted\",\n  \"data\": null\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 ⚙️ Settings & Devices — الإعدادات والأجهزة",
+      "description": "إعدادات المستخدم (كتالوج عام) وأجهزة Push.\n\n`GET /settings` يُرجع كل الخيارات، `PATCH /settings/{key}` يُحدث واحداً. `register-device` يربط جهاز OneSignal.",
+      "item": [
+        {
+          "name": "01 Get Settings — كتالوج الإعدادات",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/settings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "settings"
+              ],
+              "query": []
+            },
+            "description": "**كتالوج كل الخيارات مع قيم المستخدم الحالية.**\n\n**Response:** مصفوفة options كل واحد: `key`, `label`, `type`, `value`, `default`.\n\nتشمل قنوات التذكير الثلاث (push/email/sms) وكل إعداد مستقبلي — نفس المسار يخدم كل شيء.\n"
+          },
+          "response": [
+            {
+              "name": "200 Settings",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"key\": \"reminder_push_enabled\",\n      \"label\": \"Push Reminder\",\n      \"type\": \"boolean\",\n      \"value\": true\n    },\n    {\n      \"key\": \"reminder_email_enabled\",\n      \"value\": false\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 Update Setting — تفعيل/تعطيل قناة",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/settings/reminder_push_enabled",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                "reminder_push_enabled"
+              ],
+              "query": []
+            },
+            "description": "**تحديث قيمة إعداد واحد (Generic).**\n\n**Path:** `key` (مثل `reminder_push_enabled`, `reminder_email_enabled`, `reminder_sms_enabled`)\n\n**Body:**\n- `value`: القيمة الجديدة (نوعها حسب تعريف `app_settings`)\n\n**Validation:** من صف `app_settings` نفسه — نوع وقيم محددة.\n\n**Example:** تعطيل SMS\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Updated",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Setting updated\",\n  \"data\": {\n    \"key\": \"reminder_sms_enabled\",\n    \"value\": false\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Register Device — تسجيل جهاز Push",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/register-device",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "register-device"
+              ],
+              "query": []
+            },
+            "description": "**تسجيل جهاز للإشعارات (OneSignal).**\n\n**Body:**\n- `device_id` ✅ (string)\n- `device_token` (string)\n- `platform` `android|ios`\n- `os_version` (string)\n- `app_version` (string)\n- `meta` (array)\n\n**السلوك:** `updateOrCreate` على `(user_id, device_id)` — نفس الجهاز يُحدث لا يُكرر.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"device_abc123\",\n  \"device_token\": \"onesignal_player_id_xyz\",\n  \"platform\": \"android\",\n  \"os_version\": \"14\",\n  \"app_version\": \"1.0.0\",\n  \"meta\": {\n    \"model\": \"Pixel 7\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "201 Device",
+              "originalRequest": {},
+              "status": "201 Created",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Device registered successfully\",\n  \"data\": {\n    \"id\": 1,\n    \"user_id\": 5,\n    \"device_id\": \"device_abc123\",\n    \"platform\": \"android\",\n    \"is_active\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "04 Deregister Device — إلغاء تسجيل جهاز",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/deregister-device",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "deregister-device"
+              ],
+              "query": []
+            },
+            "description": "**إلغاء تسجيل جهاز.** يضع `is_active=false`.\n\n**Body:**\n- `device_id` ✅\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_id\": \"device_abc123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Deregistered",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Device unregistered successfully\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 🔔 Notifications — الإشعارات",
+      "description": "إشعارات Database (Filament) — تتطلب Auth. مسارات `notifications` تتطلب `role:SuperAdmin` حسب `routes/api.php`.\n\nمسارات `noticifation/test-*` تحتوي typo مقصودة كما في الكود — لا تصححها.",
+      "item": [
+        {
+          "name": "01 List Notifications — كل الإشعارات (Cursor Pagination)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications?per_page=15&status=all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "disabled": false
+                },
+                {
+                  "key": "status",
+                  "value": "all",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**كل الإشعارات (Database Notifications) مع Cursor Pagination.**\n\n**Query:**\n- `per_page` 1-200 default 15\n- `cursor` (string, من `next_cursor`)\n- `status` `all|read|unread`\n\n**Auth:** ✅ + `role:SuperAdmin` (حسب routes/api.php — الإشعارات العامة للإدارة فقط)\n\n**Response:**\n- `data`: مصفوفة `NotificationResource`\n- `pagination`: `per_page`, `next_cursor`, `prev_cursor`, `has_more_pages`\n- `unread_count`\n"
+          },
+          "response": [
+            {
+              "name": "200 Notifications",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Notifications retrieved successfully\",\n  \"data\": [],\n  \"pagination\": {\n    \"per_page\": 15,\n    \"next_cursor\": null,\n    \"has_more_pages\": false\n  },\n  \"unread_count\": 3\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 Unread Notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/unread?per_page=15",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "unread"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "15",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**الإشعارات غير المقروءة فقط.**\n\n**Query:** `per_page`, `cursor`\n"
+          },
+          "response": [
+            {
+              "name": "200 Unread",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": [],\n  \"unread_count\": 2\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/unread-count",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "unread-count"
+              ],
+              "query": []
+            },
+            "description": "**عدد غير المقروءة فقط (خفيف).** استخدمه للـ Badge.\n"
+          },
+          "response": [
+            {
+              "name": "200 Count",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Unread notifications count retrieved successfully\",\n  \"data\": {\n    \"unread_count\": 2\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "04 Mark as Read",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/{{notification_id}}/read",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "{{notification_id}}",
+                "read"
+              ],
+              "query": []
+            },
+            "description": "**وضع إشعار كمقروء.**\n\n**Path:** `notificationId` (UUID string)\n"
+          },
+          "response": [
+            {
+              "name": "200 Read",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Notification marked as read successfully\",\n  \"data\": {\n    \"id\": \"uuid...\",\n    \"read_at\": \"2026-09-12T10:00:00Z\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "05 Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/{{notification_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "{{notification_id}}"
+              ],
+              "query": []
+            },
+            "description": "**حذف إشعار.**\n\n**Path:** `notificationId`\n"
+          },
+          "response": [
+            {
+              "name": "200 Deleted",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Notification deleted successfully\",\n  \"unread_count\": 1\n}"
+            }
+          ]
+        },
+        {
+          "name": "06 Test Send To All (SuperAdmin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/noticifation/test-send-to-all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "noticifation",
+                "test-send-to-all"
+              ],
+              "query": []
+            },
+            "description": "**إرسال تجريبي لكل المستخدمين (OneSignal + Database).**\n\n> ⚠️ لاحظ المسار يحتوي typo `noticifation` (كما في المشروع) — لا تصححه.\n\n**Body:** لا يوجد\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Sent",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Test notification sent successfully\",\n  \"data\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "07 Test Send To Customers (SuperAdmin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/noticifation/test-send-to-customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "noticifation",
+                "test-send-to-customers"
+              ],
+              "query": []
+            },
+            "description": "**إرسال تجريبي لكل العملاء.**\n\n**Body (optional):**\n- `title` (max 255)\n- `message` (max 1000)\n\nيُرسل Database لكل customer + OneSignal broadcast مترجم لكل اللغات.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Notification\",\n  \"message\": \"هذه رسالة تجريبية لكل العملاء\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Sent Customers",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Test notification sent to all customers successfully\",\n  \"customers_count\": 15,\n  \"locales_sent\": [\n    \"en\",\n    \"ar\",\n    \"de\"\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 📰 CMS & Content — المحتوى",
+      "description": "الصفحات الثابتة (CMS)، صفحة من نحن، والسلايدرات. كلها **Public** ومخبأة (Cache).",
+      "item": [
+        {
+          "name": "01 CMS Page — by slug",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/pages/privacy-policy?lang=ar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "pages",
+                "privacy-policy"
+              ],
+              "query": [
+                {
+                  "key": "lang",
+                  "value": "ar",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**جلب صفحة CMS حسب الـ slug واللغة.**\n\n**Path:** `slug` (مثل `privacy-policy`, `terms-and-conditions`, `about-us`)\n\n**Query:**\n- `lang` `ar|en|de` — يغلب `Accept-Language` Header\n\n**Caching:** per slug+language, TTL من `config('cms.cache.ttl')`\n\n**Public:** ❌ لا يتطلب Auth\n"
+          },
+          "response": [
+            {
+              "name": "200 Page",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"slug\": \"privacy-policy\",\n    \"language\": \"ar\",\n    \"fallback_language\": \"ar\",\n    \"direction\": \"rtl\",\n    \"blocks\": [\n      {\n        \"type\": \"heading\",\n        \"content\": \"سياسة الخصوصية\"\n      }\n    ]\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 About Us Page",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/about-us?lang=ar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "about-us"
+              ],
+              "query": [
+                {
+                  "key": "lang",
+                  "value": "ar",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**صفحة من نحن (About Us).**\n\n**Headers:** `Accept-Language` يحدد اللغة، أو `?lang=`\n\n**Caching:** 24h model cache + 1h Browser/CDN (`Cache-Control: public, max-age=3600`)\n\n**Response:** حقول متعددة اللغات محلولة للـ locale الحالي.\n"
+          },
+          "response": [
+            {
+              "name": "200 AboutUs",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"About Us page retrieved successfully.\",\n  \"data\": {\n    \"title\": \"من نحن\",\n    \"content\": \"...\",\n    \"team\": []\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Slider — by key",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/sliders/home?lang=ar",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sliders",
+                "home"
+              ],
+              "query": [
+                {
+                  "key": "lang",
+                  "value": "ar",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "**جلب سلايدر بمفتاحه مع شرائحه النشطة والمرئية حالياً.**\n\n**Path:** `key` (مثل `home` — regex `[a-z0-9_\\-]+`)\n\n**Query:** `lang` `ar|en|de`\n\n**Caching:** 5 دقائق Model + 5 دقائق CDN\n\n**Response:** `{ key, items: [{id, sort_order, title, subtitle, description, image_url, starts_at, ends_at, is_permanent}] }`\n"
+          },
+          "response": [
+            {
+              "name": "200 Slider",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Slider retrieved successfully.\",\n  \"data\": {\n    \"key\": \"home\",\n    \"items\": [\n      {\n        \"id\": 1,\n        \"sort_order\": 1,\n        \"title\": \"مرحباً في صالوننا\",\n        \"subtitle\": \"أفضل خدمات الحلاقة\",\n        \"image_url\": \"http://localhost:8000/storage/sliders/1/slide_1.jpg\",\n        \"is_permanent\": true\n      }\n    ]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 🖨️ Print & Invoices — الطباعة",
+      "description": "طباعة الفواتير والمجموعات، روابط الطباعة، اختبار الطابعة، الإحصائيات والسجلات.\n\nتتطلب Auth (verified.customer). الطباعة تُحدث `print_count` وتُنشئ `PrintLog` وتُرجع `copy_label` للنسخ.",
+      "item": [
+        {
+          "name": "01 Print Invoice — API (Single)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoice/{{invoice_id}}/print",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "{{invoice_id}}",
+                "print"
+              ],
+              "query": []
+            },
+            "description": "**طباعة فاتورة واحدة (API).**\n\n**Path:** `invoice` (ID)\n\n**Body (optional):**\n- `printer_id` (exists:printer_settings)\n- `template_id` (exists:invoice_templates)\n- `copies` 1-10 default 1\n\n**Success Response:** يحتوي `print_log_id`, `print_number`, `copy_label` (\"\" أو \"(COPY)\"), `print_url`\n\n**Print count:** يُحدث `print_count`, `first_printed_at`, `last_printed_at` ويُنشئ `PrintLog`.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"printer_id\": 1,\n  \"template_id\": 1,\n  \"copies\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Printed",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Invoice printed successfully\",\n  \"data\": {\n    \"print_log_id\": 10,\n    \"print_number\": 1,\n    \"copy_label\": \"\",\n    \"printer\": {\n      \"id\": 1,\n      \"name\": \"Thermal Printer\"\n    },\n    \"print_url\": \"http://localhost:8000/invoice/1/print?printer_id=1\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "02 Print Batch — دفعات",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoices/print-batch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "invoices",
+                "print-batch"
+              ],
+              "query": []
+            },
+            "description": "**طباعة دفعات (Batch).**\n\n**Body:**\n- `invoice_ids` ✅ (array, min1, exists:invoices)\n- `printer_id` (optional)\n- `template_id` (optional)\n\n**Response:** `{ success, message: \"X/Y successful\", data: { successful, total } }`\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_ids\": [\n    1,\n    2\n  ],\n  \"printer_id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "200 Batch",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Batch print completed: 2/2 successful\",\n  \"data\": {\n    \"success\": true,\n    \"successful\": 2,\n    \"total\": 2\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "03 Get Print URL",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/invoice/{{invoice_id}}/print-url?printer_id=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "{{invoice_id}}",
+                "print-url"
+              ],
+              "query": [
+                {
+                  "key": "printer_id",
+                  "value": "1",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**جلب رابط الطباعة للفاتورة.**\n\n**Query:** `printer_id` optional\n\n**Response:** `{ success, url }`\n"
+          },
+          "response": [
+            {
+              "name": "200 URL",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"url\": \"http://localhost:8000/invoice/1/print?printer_id=1\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "04 Test Printer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/printer/{{printer_id}}/test",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "printer",
+                "{{printer_id}}",
+                "test"
+              ],
+              "query": []
+            },
+            "description": "**اختبار اتصال الطابعة.**\n\n**Path:** `printer` (ID)\n\n**Body:** لا يوجد\n"
+          },
+          "response": [
+            {
+              "name": "200 Test",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Printer is reachable\",\n  \"data\": {\n    \"success\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "05 Print Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/print/statistics?printer_id=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "print",
+                "statistics"
+              ],
+              "query": [
+                {
+                  "key": "printer_id",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**إحصائيات الطباعة.**\n\n**Query:** `printer_id` optional (للفلترة)\n"
+          },
+          "response": [
+            {
+              "name": "200 Stats",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"total_prints\": 120,\n    \"today_prints\": 5\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "06 Print Logs — السجل",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/print/logs?limit=10&printer_id=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "print",
+                "logs"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": false
+                },
+                {
+                  "key": "printer_id",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "**سجل عمليات الطباعة الأخيرة.**\n\n**Query:**\n- `limit` default 10\n- `printer_id` optional\n"
+          },
+          "response": [
+            {
+              "name": "200 Logs",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"invoice_id\": 5,\n      \"printer_id\": 1,\n      \"created_at\": \"2026-09-12T10:00:00Z\"\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "99 🩺 Utility — أدوات",
+      "description": "أدوات مساعدة للاختبار السريع.",
+      "item": [
+        {
+          "name": "Health — GET /api/user (اختبار التوكن)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/user",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "user"
+              ],
+              "query": []
+            },
+            "description": "**اختبار سريع للتوكن:** يُرجع بيانات المستخدم إذا التوكن صالح، و `401` إذا منتهي/غير صالح.\n\nاستخدمه بعد Login للتأكد أن الـ auto-save عمل.\n"
+          },
+          "response": [
+            {
+              "name": "200 User",
+              "originalRequest": {},
+              "status": "200 OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"id\": 5,\n  \"email\": \"hala.alhashimi@gmail.com\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "noauth"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-set dynamic dates if not present",
+          "if (!pm.collectionVariables.get('today')) {",
+          "  const d = new Date();",
+          "  pm.collectionVariables.set('today', d.toISOString().slice(0,10));",
+          "}",
+          "if (!pm.collectionVariables.get('tomorrow')) {",
+          "  const d = new Date(); d.setDate(d.getDate()+1);",
+          "  pm.collectionVariables.set('tomorrow', d.toISOString().slice(0,10));",
+          "}",
+          "if (!pm.collectionVariables.get('next_week')) {",
+          "  const d = new Date(); d.setDate(d.getDate()+5);",
+          "  pm.collectionVariables.set('next_week', d.toISOString().slice(0,10));",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test — log status for debugging",
+          "pm.test('Status is 2xx or expected error', function(){",
+          "  pm.expect(pm.response.code).to.be.oneOf([200,201,204,400,401,403,404,409,422,429]);",
+          "});"
+        ]
+      }
+    }
+  ]
+}
