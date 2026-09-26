@@ -377,11 +377,12 @@ app(InvoiceFinalizationService::class)->finalizeAppointmentPayment(
 |--------|--------|--------|
 | `number` | `APT-20260315-A1B2C3` | `generateAppointmentNumber()` |
 | `customer_id` | `auth()->user()->id` | من الـ Token |
-| `provider_id` | `$firstService['provider_id']` | من أول خدمة بعد الترتيب |
+| `provider_id` | مزود الكتلة | كل كتلة لها مزود واحد (BOOKING-GAP-01) |
+| `parent_appointment_id` | `NULL` للجذر / معرّف الجذر لبقية الكتل | `splitIntoBlocks()` |
 | `appointment_date` | `2026-03-15` | من الـ request |
-| `start_time` | وقت بدء أول خدمة | من أول خدمة مرتبة |
-| `end_time` | وقت انتهاء آخر خدمة | من آخر خدمة مرتبة |
-| `duration_minutes` | مجموع مدد كل الخدمات | `calculateTotals()` |
+| `start_time` | وقت بدء أول خدمة **في الكتلة** | لا يمتد أبداً على فجوة |
+| `end_time` | وقت انتهاء آخر خدمة **في الكتلة** | لا يمتد أبداً على فجوة |
+| `duration_minutes` | مجموع مدد خدمات الكتلة (= `end - start`) | `calculateTotals()` |
 | `subtotal` | السعر قبل الضريبة | `calculateTotals()` |
 | `tax_amount` | مبلغ الضريبة | `calculateTotals()` |
 | `total_amount` | السعر الإجمالي شامل الضريبة | `calculateTotals()` |
@@ -1024,14 +1025,45 @@ $InvoiceService->createDtaftInvoiceFromAppointment(
 `InvoiceFinalizationService::finalizeAppointmentPayment()`، والتي تربط صف
 `PaymentMethod` الفعلي وتوحّد `appointments.payment_method` على `cash`/`card`.
 
-#### 8. provider_id يُؤخذ من أول خدمة فقط
-```php
-'provider_id' => $firstService['provider_id'],
-```
-إذا كانت الخدمات تخص مزودين مختلفين، يُسجَّل فقط مزود الخدمة الأولى في جدول `appointments`. بيانات بقية المزودين موجودة فقط في `appointment_services`.
+#### 8. ~~provider_id يُؤخذ من أول خدمة فقط~~ — ✅ مُصلَحة (BOOKING-GAP-01)
+كل صف صار له مزود واحد حقيقي: خدمة عند مزود آخر تُحفظ موعداً ابناً باسم ذلك المزود، فتُحجب على تقويمه هو.
 
-#### 9. الـ request يقبل خدمات لمزودين مختلفين
-لا يوجد تحقق يمنع إرسال خدمات لـ `provider_id` مختلفة في نفس الطلب، مما قد يسبب تعقيداً في الجدولة.
+#### 9. ~~الـ request يقبل خدمات لمزودين مختلفين~~ — ✅ صار مدعوماً (BOOKING-GAP-01)
+مقبول عمداً، وينتج موعداً مستقلاً لكل مزود (انظر القسم التالي).
+
+---
+
+## الحجز المقسوم إلى كتل (BOOKING-GAP-01 — مُصلَحة 2026-09-25)
+
+### المشكلة التي كانت
+عميل حجز لحية 09:40 وقصاً 15:10 فحُفظ **صفاً واحداً** من 09:40 إلى 15:10: `start` = أول خدمة، و`end` = آخر خدمة. `scopeOverlapping` حجب المزود 5.5 ساعات لعمل 55 دقيقة، و`duration_minutes` (55) ناقض `end - start` (330). التحليل الكامل في [`fixes/BOOKING-GAP-01_multi_service_span_AR.md`](fixes/BOOKING-GAP-01_multi_service_span_AR.md).
+
+### القاعدة الآن
+`BookingService::splitIntoBlocks()` يقسم الخدمات المرتبة إلى **كتل**. تبدأ كتلة جديدة عند **أي فجوة** (ولو دقيقة) أو **تغيّر المزود**. كل كتلة = صف `appointments`:
+
+| الصف | `parent_appointment_id` | يملك الفاتورة؟ |
+|---|---|---|
+| أبكر كتلة (الجذر) | `NULL` | ✅ مسودة واحدة لكل المجموعة |
+| بقية الكتل | معرّف الجذر | ❌ |
+
+- لكل صف: `end_time - start_time == duration_minutes`، ومبالغه = خدماته فقط.
+- كل الكتل تُكتب في **نفس المعاملة وتحت نفس القفل**. رفض أي كتلة = لا شيء يُنشأ.
+- الفاتورة: `createDtaftInvoiceFromAppointment(root)` ثم `rebuildAggregatedInvoice(root)` إذا وُجد أبناء.
+
+### المجموعة ككيان واحد
+| الموضع | كيف يعامل المجموعة |
+|---|---|
+| الفاتورة والدفع | من الأعضاء **النشطين** فقط (`Appointment::activeLinkedGroup()`). الملغى وNO_SHOW خارجها |
+| الحد اليومي | `COUNT(DISTINCT COALESCE(parent_appointment_id, id))` — الحجز المقسوم = حجز واحد |
+| تنبيه الإلغاء المتكرر | نفس العدّ بالمجموعة |
+| التذكير | لكل كتلة |
+| الإيميل | إيميل واحد يسرد كل الكتل (`emails/booking/partials/group-details.blade.php`) |
+
+### الإلغاء — `AppointmentCancellationService` (المسار الوحيد)
+كل الإلغاءات تمر من هنا: العميل (`Appointment::cancel()`)، واللوحة، وFilament.
+- **إلغاء ابن:** يُعاد بناء فاتورة الجذر بدونه.
+- **إلغاء الجذر وله كتل نشطة:** **ترقية** أبكر كتلة نشطة لتصبح الجذر. الفاتورة المسودة تنتقل إليها (`invoices.appointment_id`)، وكل البقية بما فيها الجذر الملغى تُربط بها.
+- الأقفال بنفس ترتيب الدفع والحذف: الجذر أولاً، ثم المجموعة حسب `id`.
 
 ---
 

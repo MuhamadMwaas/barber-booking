@@ -108,7 +108,7 @@ return [
     'not_in' => 'The selected :attribute is invalid.',
     'not_regex' => 'The :attribute field format is invalid.',
     'numeric' => 'The :attribute field must be a number.',
-    'phone' => 'يجب أن يكون حقل :attribute رقم هاتف دولي صحيح، مثال: ‎+49 30 1234567.',
+    'phone' => ':attribute غير صحيح. اكتب الرقم بالصيغة الألمانية أو مع مفتاح الدولة، مثال: ‎01522 3917565 أو ‎+49 1522 3917565.',
     'password' => [
         'letters' => 'The :attribute field must contain at least one letter.',
         'mixed' => 'The :attribute field must contain at least one uppercase and one lowercase letter.',
@@ -158,6 +158,11 @@ return [
         'attribute-name' => [
             'rule-name' => 'custom-message',
         ],
+        'phone' => [
+            'unique' => 'رقم الجوال هذا مسجّل مسبقًا. سجّل الدخول للمتابعة.',
+        ],
     ],
-    'attributes' => [],
+    'attributes' => [
+        'phone' => 'رقم الجوال',
+    ],
 ];

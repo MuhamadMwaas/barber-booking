@@ -162,16 +162,25 @@ class ProviderInfolist
 	                            ->badge()
 	                            ->separator(',')
 	                            ->getStateUsing(function ($record) {
+	                                // Every linked service is listed, but a link switched off in
+	                                // provider_service is labelled as such: the booking modal and
+	                                // BookingValidationService both skip it, so listing it plainly
+	                                // told staff the provider offers a service they cannot book.
 	                                $services = $record->services()
 	                                    ->orderBy('services.sort_order')
 	                                    ->get()
-	                                    ->map(fn ($service) => $service->translated_name)
-	                                    ->filter()
+	                                    ->filter(fn ($service) => filled($service->translated_name))
+	                                    ->map(fn ($service) => $service->pivot->is_active
+	                                        ? $service->translated_name
+	                                        : $service->translated_name . ' — ' . __('resources.provider_resource.service_link_inactive'))
 	                                    ->values()
 	                                    ->toArray();
 
 	                                return $services ?: [__('resources.provider_resource.no_services')];
 	                            })
+	                            ->color(fn (string $state): string => str_ends_with($state, ' — ' . __('resources.provider_resource.service_link_inactive'))
+	                                ? 'gray'
+	                                : 'primary')
 	                            ->listWithLineBreaks()
 	                            ->bulleted()
 	                            ->columnSpanFull(),
@@ -194,7 +203,7 @@ class ProviderInfolist
                                     ->size('lg')
                                     ->weight(FontWeight::Bold)
                                     ->color('primary')
-                                    ->getStateUsing(fn ($record) => $record->services()->count()),
+                                    ->getStateUsing(fn ($record) => $record->services()->wherePivot('is_active', true)->count()),
 
                                 TextEntry::make('completed_bookings')
                                     ->label(__('resources.provider_resource.completed_bookings'))

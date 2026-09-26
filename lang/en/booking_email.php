@@ -34,6 +34,12 @@ return [
     'email'    => 'Email',
     'phone'    => 'Phone',
 
+    // Split booking (one booking, several appointments)
+    'appointments_heading' => 'Your :count appointments',
+    'appointments_intro'   => 'Your services are at different times, so they are booked as separate appointments. Each one can be cancelled on its own.',
+    'appointment_n'        => 'Appointment :n',
+    'group_total'          => 'Total for all appointments',
+
     // Footer
     'thanks'   => 'Thank you for choosing :company!',
     'footer'   => 'This is an automated message, please do not reply directly to this email.',

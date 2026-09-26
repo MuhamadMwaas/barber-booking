@@ -40,12 +40,23 @@ class DashboardService {
             ->get()
             ->keyBy('user_id');
 
+        // Off for the whole day: a full-day leave, or the middle day of a
+        // multi-day hourly leave. Same range rule as BookingValidationService —
+        // the old `end_date >= $date` missed null-ended leaves (BOOK-04).
+        $dayStart = $carbonDate->copy()->startOfDay();
         $fullDayOffIds = ProviderTimeOff::whereIn('user_id', $providerIds)
-            ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
-            ->where('start_date', '<=', $date)
-            ->where('end_date', '>=', $date)
+            ->coveringDate($date)
+            ->get()
+            ->filter(function (ProviderTimeOff $timeOff) use ($dayStart) {
+                $window = $timeOff->blockedWindowOn($dayStart);
+
+                return $window !== null
+                    && $window['start']->lte($dayStart)
+                    && $window['end']->gte($dayStart->copy()->addDay());
+            })
             ->pluck('user_id')
             ->unique()
+            ->values()
             ->toArray();
 
         $bookingCounts = Appointment::whereIn('provider_id', $providerIds)
@@ -106,17 +117,10 @@ class DashboardService {
     }
 
     public function getTimeOffsForDate(string $date, array $providerIds = []): Collection {
+        // Callers draw each row with ProviderTimeOff::blockedWindowOn(), so a
+        // multi-day leave shows the slice it really occupies on $date.
         $query = ProviderTimeOff::with('provider', 'reason')
-            ->where(function ($q) use ($date) {
-                $q->where(function ($q2) use ($date) {
-                    $q2->where('type', ProviderTimeOff::TYPE_FULL_DAY)
-                        ->where('start_date', '<=', $date)
-                        ->where('end_date', '>=', $date);
-                })->orWhere(function ($q2) use ($date) {
-                    $q2->where('type', ProviderTimeOff::TYPE_HOURLY)
-                        ->whereDate('start_date', $date);
-                });
-            });
+            ->coveringDate($date);
 
         if (!empty($providerIds)) {
             $query->whereIn('user_id', $providerIds);
@@ -229,74 +233,109 @@ class DashboardService {
     }
 
     public function getAvailableProvidersForServiceAtTime(int $serviceId, string $date, string $startTime, int $duration, bool $bypassAvailability = false): array {
+        return array_values(array_map(
+            fn (array $provider) => array_diff_key($provider, ['available' => true, 'reason' => true, 'reason_label' => true]),
+            array_filter(
+                $this->getProviderAvailabilityForServiceAtTime($serviceId, $date, $startTime, $duration, $bypassAvailability),
+                fn (array $provider) => $provider['available']
+            )
+        ));
+    }
+
+    /**
+     * Every active provider linked to the service, each flagged available or not
+     * with the reason, so the booking modal can show WHY someone is missing
+     * instead of silently dropping them. Available providers come first.
+     *
+     * The rules mirror BookingValidationService, so whoever this marks available
+     * is accepted on save: the provider_service link must be active, the
+     * provider must work that day within hours, no leave may cover the slot
+     * (coveringDate + blocksWindow) and no booking may block it
+     * (blocksProviderTime + overlapping).
+     *
+     * Reasons: service_disabled, not_working, outside_hours, on_leave, busy.
+     */
+    public function getProviderAvailabilityForServiceAtTime(int $serviceId, string $date, string $startTime, int $duration, bool $bypassAvailability = false): array {
         $service = Service::find($serviceId);
         if (!$service) return [];
 
-        $providers = $service->activeProviders()->get();
-        $carbonDate = Carbon::parse($date);
+        $providers = $service->providers()
+            ->where('users.is_active', true)
+            ->orderBy('first_name')
+            ->get();
         $slotStart = Carbon::parse($date . ' ' . $startTime);
         $slotEnd = $slotStart->copy()->addMinutes($duration);
-        $availableProviders = [];
+
+        $available = [];
+        $unavailable = [];
 
         foreach ($providers as $provider) {
-            // Provider availability window (working day, working hours, full-day &
-            // hourly time-off). Trusted staff "force booking" bypasses this whole
-            // window so on-leave / off-day providers still appear and can be picked
-            // (e.g. Sophie is off today but is coming in for a VIP). The appointment
-            // CONFLICT check below always runs — a busy provider is never offered.
-            if (! $bypassAvailability) {
-                $dayOfWeek = $carbonDate->dayOfWeek;
-                $schedule = ProviderScheduledWork::where('user_id', $provider->id)
-                    ->where('day_of_week', $dayOfWeek)
-                    ->where('is_work_day', true)
-                    ->where('is_active', true)
-                    ->first();
+            $reason = $this->unavailabilityReason($provider, $date, $slotStart, $slotEnd, $bypassAvailability);
 
-                if (!$schedule) continue;
-
-                $scheduleStart = Carbon::parse($date . ' ' . $schedule->start_time);
-                $scheduleEnd = Carbon::parse($date . ' ' . $schedule->end_time);
-                if ($slotStart->lt($scheduleStart) || $slotEnd->gt($scheduleEnd)) continue;
-
-                $hasFullDayOff = ProviderTimeOff::where('user_id', $provider->id)
-                    ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
-                    ->where('start_date', '<=', $date)
-                    ->where('end_date', '>=', $date)
-                    ->exists();
-                if ($hasFullDayOff) continue;
-
-                $hasHourlyConflict = ProviderTimeOff::where('user_id', $provider->id)
-                    ->where('type', ProviderTimeOff::TYPE_HOURLY)
-                    ->whereDate('start_date', $date)
-                    ->where('start_time', '<', $slotEnd->format('H:i:s'))
-                    ->where('end_time', '>', $slotStart->format('H:i:s'))
-                    ->exists();
-                if ($hasHourlyConflict) continue;
-            }
-
-            $hasAppointmentConflict = Appointment::where('provider_id', $provider->id)
-                ->whereDate('appointment_date', $date)
-                ->where('created_status', 1)
-                ->whereNotIn('status', [
-                    AppointmentStatus::USER_CANCELLED->value,
-                    AppointmentStatus::ADMIN_CANCELLED->value,
-                ])
-                ->where(function ($q) use ($slotStart, $slotEnd) {
-                    $q->where('start_time', '<', $slotEnd)
-                        ->where('end_time', '>', $slotStart);
-                })
-                ->exists();
-            if ($hasAppointmentConflict) continue;
-
-            $availableProviders[] = [
+            $row = [
                 'id' => $provider->id,
                 'first_name' => $provider->first_name,
                 'last_name' => $provider->last_name,
                 'name' => $provider->full_name,
+                'available' => $reason === null,
+                'reason' => $reason,
+                'reason_label' => $reason ? __('dashboard.booking_modal.unavailable_reason.' . $reason) : null,
             ];
+
+            if ($reason === null) {
+                $available[] = $row;
+            } else {
+                $unavailable[] = $row;
+            }
         }
 
-        return $availableProviders;
+        return array_merge($available, $unavailable);
+    }
+
+    private function unavailabilityReason(User $provider, string $date, Carbon $slotStart, Carbon $slotEnd, bool $bypassAvailability): ?string {
+        // A link switched off in provider_service: the provider is listed on the
+        // service (grey dot) but does not offer it. Force booking never overrides this.
+        if (! $provider->pivot->is_active) {
+            return 'service_disabled';
+        }
+
+        // Provider availability window (working day, working hours, full-day &
+        // hourly time-off). Trusted staff "force booking" bypasses this whole
+        // window so on-leave / off-day providers still appear and can be picked
+        // (e.g. Sophie is off today but is coming in for a VIP). The appointment
+        // CONFLICT check below always runs — a busy provider is never offered.
+        if (! $bypassAvailability) {
+            $schedule = ProviderScheduledWork::where('user_id', $provider->id)
+                ->where('day_of_week', Carbon::parse($date)->dayOfWeek)
+                ->where('is_work_day', true)
+                ->where('is_active', true)
+                ->first();
+
+            if (! $schedule) {
+                return 'not_working';
+            }
+
+            $scheduleStart = Carbon::parse($date . ' ' . $schedule->start_time);
+            $scheduleEnd = Carbon::parse($date . ' ' . $schedule->end_time);
+            if ($slotStart->lt($scheduleStart) || $slotEnd->gt($scheduleEnd)) {
+                return 'outside_hours';
+            }
+
+            $onLeave = ProviderTimeOff::where('user_id', $provider->id)
+                ->coveringDate($date)
+                ->get()
+                ->contains(fn (ProviderTimeOff $timeOff) => $timeOff->blocksWindow($slotStart, $slotEnd));
+            if ($onLeave) {
+                return 'on_leave';
+            }
+        }
+
+        $isBusy = Appointment::where('provider_id', $provider->id)
+            ->blocksProviderTime()
+            ->overlapping($slotStart, $slotEnd)
+            ->exists();
+
+        return $isBusy ? 'busy' : null;
     }
 
     public function getCustomers(string $search = ''): Collection {

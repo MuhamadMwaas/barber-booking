@@ -234,7 +234,7 @@ class User extends Authenticatable implements FilamentUser, HasName
     public function services(): BelongsToMany
     {
         return $this->belongsToMany(Service::class, 'provider_service', 'provider_id', 'service_id')
-            // ->withPivot('is_active', 'custom_price', 'custom_duration', 'notes')
+            ->withPivot('is_active', 'custom_price', 'custom_duration', 'notes')
             ->withTimestamps();
     }
 

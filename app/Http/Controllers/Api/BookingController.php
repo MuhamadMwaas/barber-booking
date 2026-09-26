@@ -47,7 +47,13 @@ class BookingController extends Controller
             $appointment = $this->bookingService->createBooking($customer, $bookingData);
 
             if ($reminderOffsetHours !== null) {
-                $this->scheduleReminderForBooking($appointment, (int) $reminderOffsetHours);
+                // One reminder per block: a booking split into a morning and an
+                // afternoon appointment (BOOKING-GAP-01) needs the customer
+                // reminded before each visit, not only the first. Each block is
+                // scheduled independently, so one failure never costs another.
+                foreach (collect([$appointment])->merge($appointment->children) as $block) {
+                    $this->scheduleReminderForBooking($block, (int) $reminderOffsetHours);
+                }
             }
 
             return response()->json([

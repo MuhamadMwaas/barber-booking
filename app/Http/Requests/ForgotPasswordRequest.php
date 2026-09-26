@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enum\RegistrationMethod;
+use App\Support\PhoneInput;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -42,6 +43,9 @@ class ForgotPasswordRequest extends FormRequest
                 'registration_method' => strtolower((string) $this->input('registration_method')),
             ]);
         }
+
+        // Look the account up — and key the reset code — by the stored form.
+        PhoneInput::canonicalize($this);
     }
 
     public function registrationMethod(): RegistrationMethod

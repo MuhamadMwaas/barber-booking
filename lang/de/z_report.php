@@ -88,6 +88,15 @@ return [
     'discount_before'    => 'Summe vor Rabatt',
     'discount_percent'   => 'Anteil am Brutto',
 
+    // Tips — kept apart from revenue
+    'tip_title'          => 'Trinkgeld',
+    'tip_count'          => 'Belege mit Trinkgeld',
+    'tip_cash'           => 'Trinkgeld bar',
+    'tip_card'           => 'Trinkgeld per Karte',
+    'tip_total'          => 'Trinkgeld gesamt',
+    'cash_drawer'        => 'Bargeld in der Kasse (Umsatz + Trinkgeld)',
+    'tip_note'           => 'Trinkgeld steht dem Mitarbeiter zu, ist kein Umsatz und enthält keine MwSt. Es ist in keiner Summe oben enthalten.',
+
     // Betrieb
     'operations_title'   => 'Betriebskennzahlen',
     'source_title'       => 'Buchungsquelle',

@@ -15,6 +15,7 @@
     $totals     = $report['totals'];
     $vat        = $report['vat'];
     $discounts  = $report['discounts'];
+    $tips       = $report['tips'];
     $operations = $report['operations'];
     $services   = $report['services'];
     $employees  = $report['employees'];
@@ -818,9 +819,31 @@
                 </div>
             </div>
 
-            {{-- 6. Operations --}}
+            {{-- 6. Tips — outside every sales/VAT figure above (not revenue, no
+                 VAT). The cash-drawer line is what the till should hold. --}}
             <div class="card">
-                <div class="card-head">6 · {{ $tr('operations_title') }}</div>
+                <div class="card-head">6 · {{ $tr('tip_title') }}</div>
+                <div class="card-body">
+                    <dl style="margin:0">
+                        <div class="kv"><dt>{{ $tr('tip_count') }}</dt><dd>{{ $tips['count'] }}</dd></div>
+                        <div class="kv"><dt>{{ $tr('tip_cash') }}</dt><dd class="num-green">{{ $money($tips['cash']) }}</dd></div>
+                        <div class="kv"><dt>{{ $tr('tip_card') }}</dt><dd class="num-blue">{{ $money($tips['card']) }}</dd></div>
+                        <div class="kv strong"><dt>{{ $tr('tip_total') }}</dt><dd class="num-green">{{ $money($tips['total']) }}</dd></div>
+                        @foreach ($tips['providers'] as $tipRow)
+                            <div class="kv"><dt>{{ $tipRow['provider_name'] }}</dt><dd>{{ $money($tipRow['amount']) }}</dd></div>
+                        @endforeach
+                        <div class="kv strong">
+                            <dt>{{ $tr('cash_drawer') }}</dt>
+                            <dd class="num-green">{{ $money($sales['buckets']['cash']['amount'] + $tips['cash']) }}</dd>
+                        </div>
+                    </dl>
+                    <p class="section-note" style="padding:5px 0 0">{{ $tr('tip_note') }}</p>
+                </div>
+            </div>
+
+            {{-- 7. Operations --}}
+            <div class="card">
+                <div class="card-head">7 · {{ $tr('operations_title') }}</div>
                 <div class="card-body">
                     @php
                         $sourceTotal = max(1, $operations['source_online'] + $operations['source_in_person']);
@@ -867,9 +890,9 @@
                 </div>
             </div>
 
-            {{-- 7. Services breakdown --}}
+            {{-- 8. Services breakdown --}}
             <div class="card">
-                <div class="card-head">7 · {{ $tr('services_title') }}</div>
+                <div class="card-head">8 · {{ $tr('services_title') }}</div>
                 <div class="card-body flush">
                     @if (empty($services))
                         <p class="empty">{{ $tr('services_empty') }}</p>
@@ -1026,6 +1049,12 @@
                                             <dt>{{ $tr('total_revenue') }}</dt>
                                             <dd class="num-green">{{ $money($row['total']) }}</dd>
                                         </div>
+                                        @if ($row['tips'] > 0)
+                                            <div class="kv">
+                                                <dt>{{ $tr('tip_title') }}</dt>
+                                                <dd class="num-amber">{{ $money($row['tips']) }}</dd>
+                                            </div>
+                                        @endif
                                     </div>
                                 </div>
                             </div>

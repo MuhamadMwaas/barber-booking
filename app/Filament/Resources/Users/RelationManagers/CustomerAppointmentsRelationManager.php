@@ -3,7 +3,8 @@
 namespace App\Filament\Resources\Users\RelationManagers;
 use App\Enum\AppointmentStatus;
 use App\Enum\PaymentStatus;
-use App\Filament\Resources\Users\UserResource;
+use App\Filament\Resources\Appointments\AppointmentResource;
+use App\Models\Appointment;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\TextColumn;
@@ -13,7 +14,10 @@ class CustomerAppointmentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'customerAppointments';
 
-    protected static ?string $relatedResource = UserResource::class;
+    // No $relatedResource: the rows are appointments, not users. Pointing it at
+    // UserResource injected UsersTable's hidden ViewAction and rendered
+    // UserInfolist against an Appointment on row click. See
+    // Services\RelationManagers\ProvidersRelationManager.
 
         public static function getTitle(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): string
     {
@@ -34,6 +38,11 @@ class CustomerAppointmentsRelationManager extends RelationManager
         protected function buildCustomerServicesTable(Table $table): Table
     {
         return $table
+            ->modelLabel(AppointmentResource::getModelLabel())
+            ->pluralModelLabel(AppointmentResource::getPluralModelLabel())
+            ->recordUrl(fn (Appointment $record): ?string => AppointmentResource::canView($record)
+                ? AppointmentResource::getUrl('view', ['record' => $record])
+                : null)
             ->columns([
                 TextColumn::make('number')
                     ->label(__('resources.appointment.number'))

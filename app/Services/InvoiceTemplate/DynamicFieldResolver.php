@@ -90,13 +90,17 @@ class DynamicFieldResolver
             'tax_rate' => number_format($this->invoice->tax_rate ?? 0, 2),
             'tax_amount' => number_format($this->invoice->tax_amount ?? 0, 2),
             'total' => number_format($this->invoice->total_amount ?? 0, 2),
-            'paid_amount' => number_format($this->invoice->total_amount ?? 0, 2),
+            // What the customer actually handed over: the invoice total plus any
+            // tip. Equals 'total' whenever there is no tip.
+            'paid_amount' => number_format((float) ($this->invoice->total_amount ?? 0) + (float) ($this->invoice->tip_amount ?? 0), 2),
             'remaining' => '0.00',
             // Discount-aware fields. They return '' when there is no discount so a
             // line bound to them (with hide_when_empty) disappears on full-price
             // invoices and only appears when a discount was actually granted.
             'discount' => $this->resolveDiscountValue(),
             'items_total' => $this->resolveItemsTotalValue(),
+            // Tip paid on top of the total (not revenue, no VAT); '' when none.
+            'tip' => $this->resolveTipValue(),
             default => '',
         };
     }
@@ -109,6 +113,16 @@ class DynamicFieldResolver
         $discount = (float) ($this->invoice->discount_amount ?? 0);
 
         return $discount > 0 ? '-' . number_format($discount, 2) : '';
+    }
+
+    /**
+     * Tip shown with a leading plus (e.g. "+5.00"); '' when no tip.
+     */
+    protected function resolveTipValue(): string
+    {
+        $tip = (float) ($this->invoice->tip_amount ?? 0);
+
+        return $tip > 0 ? '+' . number_format($tip, 2) : '';
     }
 
     /**

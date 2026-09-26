@@ -174,6 +174,69 @@ class DailyReportTest extends TestCase
         $this->assertSame(50.00, $report['discounts']['before']);
     }
 
+    /**
+     * A tip is not revenue: it must stay out of sales/VAT/employee revenue, yet
+     * be reported on its own and counted in the cash drawer.
+     */
+    public function test_a_tip_is_reported_apart_from_sales(): void
+    {
+        $this->makePaidBooking(
+            provider: $this->providerA,
+            appointmentDate: $this->today,
+            amount: 50.00,
+            method: PaymentStatus::PAID_ONSTIE_CASH,
+            tip: 5.00,
+        );
+        $this->makePaidBooking($this->providerB, $this->today, 30.00, PaymentStatus::PAID_ONSTIE_CARD, tip: 2.00);
+
+        $report = $this->reports->build($this->today, $this->today);
+
+        $this->assertSame(80.00, $report['sales']['total_amount']);
+        $this->assertSame(80.00, $report['vat']['gross']);
+        $this->assertSame(80.00, $report['employees']['totals']['total']);
+
+        $this->assertSame(7.00, $report['tips']['total']);
+        $this->assertSame(2, $report['tips']['count']);
+        $this->assertSame(5.00, $report['tips']['cash']);
+        $this->assertSame(2.00, $report['tips']['card']);
+        $this->assertSame(7.00, $report['employees']['totals']['tips']);
+    }
+
+    /**
+     * One invoice covering two providers: the tip is split by each provider's
+     * share of the bill, and the shares add up to the tip to the cent.
+     */
+    public function test_a_tip_on_a_linked_invoice_is_split_pro_rata(): void
+    {
+        $invoice = $this->makePaidBooking(
+            provider: $this->providerA,
+            appointmentDate: $this->today,
+            amount: 20.00,
+            method: PaymentStatus::PAID_ONSTIE_CASH,
+            tip: 10.00,
+        );
+
+        $child = $this->makeAppointment(
+            $this->providerB,
+            $this->today,
+            10.00,
+            AppointmentStatus::COMPLETED,
+            PaymentStatus::PAID_ONSTIE_CASH,
+        );
+        $child->update(['parent_appointment_id' => $invoice->appointment_id]);
+
+        $net = round(30.00 / 1.19, 2);
+        $invoice->update(['subtotal' => $net, 'tax_amount' => round(30.00 - $net, 2), 'total_amount' => 30.00]);
+
+        $report = $this->reports->build($this->today, $this->today);
+        $tips = collect($report['tips']['providers'])->keyBy('provider_id');
+
+        $this->assertSame(6.67, $tips[$this->providerA->id]['amount']);
+        $this->assertSame(3.33, $tips[$this->providerB->id]['amount']);
+        $this->assertSame(10.00, $report['tips']['total']);
+        $this->assertSame(30.00, $report['sales']['total_amount']);
+    }
+
     // ── Enum handling ────────────────────────────────────────────────────
 
     /**
@@ -391,6 +454,7 @@ class DailyReportTest extends TestCase
         ?Carbon $collectedAt = null,
         float $discount = 0.0,
         BookingSource $source = BookingSource::IN_PERSON,
+        float $tip = 0.0,
     ): Invoice {
         $appointment = $this->makeAppointment(
             $provider,
@@ -412,6 +476,7 @@ class DailyReportTest extends TestCase
             'tax_rate' => 19.00,
             'total_amount' => $payable,
             'discount_amount' => $discount,
+            'tip_amount' => $tip,
             'status' => InvoiceStatus::PAID,
             'invoice_data' => $collectedAt
                 ? ['finalized_at' => $collectedAt->toISOString(), 'payment_type' => (string) $method->value]

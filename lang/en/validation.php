@@ -120,7 +120,7 @@ return [
     'not_in' => 'The selected :attribute is invalid.',
     'not_regex' => 'The :attribute field format is invalid.',
     'numeric' => 'The :attribute field must be a number.',
-    'phone' => 'The :attribute field must be a valid international phone number, e.g. +49 30 1234567.',
+    'phone' => 'The :attribute is not valid. Enter it in German format or with its country code, e.g. 01522 3917565 or +49 1522 3917565.',
     'password' => [
         'letters' => 'The :attribute field must contain at least one letter.',
         'mixed' => 'The :attribute field must contain at least one uppercase and one lowercase letter.',
@@ -182,6 +182,9 @@ return [
         'attribute-name' => [
             'rule-name' => 'custom-message',
         ],
+        'phone' => [
+            'unique' => 'This phone number is already registered. Please sign in to continue.',
+        ],
     ],
 
     /*
@@ -195,6 +198,8 @@ return [
     |
     */
 
-    'attributes' => [],
+    'attributes' => [
+        'phone' => 'phone number',
+    ],
 
 ];

@@ -323,8 +323,11 @@ class InvoiceService
             // 2) Wipe current items
             $invoice->items()->delete();
 
-            // 3) Collect parent + children
-            $allAppointments = $parent->linkedGroup()
+            // 3) Collect parent + children that still stand. A cancelled or
+            //    no-show block rendered no service, so it bills nothing — this
+            //    used to take linkedGroup() as-is and leave a cancelled child's
+            //    services on the invoice (BOOKING-GAP-01).
+            $allAppointments = $parent->activeLinkedGroup()
                 ->with(['services_record.service', 'provider'])
                 ->orderByRaw('COALESCE(parent_appointment_id, id) ASC') // parent first (null parent_id)
                 ->orderBy('start_time', 'asc')

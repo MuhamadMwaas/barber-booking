@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Enum\AppointmentStatus;
+use App\Exceptions\AppointmentNotDeletableException;
 use App\Exceptions\InvoiceAlreadyFinalizedException;
 use App\Exceptions\PushRequiredException;
 use App\Livewire\Concerns\InteractsWithDashboardPermissions;
@@ -13,6 +14,7 @@ use App\Models\DashboardMessage;
 use App\Models\ProviderTimeOff;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\AppointmentDeletionService;
 use App\Services\AttendanceService;
 use App\Services\BookingLockService;
 use App\Services\BookingService;
@@ -20,8 +22,8 @@ use App\Services\BookingValidationService;
 use App\Services\DashboardMessageService;
 use App\Services\DashboardService;
 use App\Services\GapAnalysisService;
+use App\Services\AppointmentCancellationService;
 use App\Services\InvoiceFinalizationService;
-use App\Services\InvoiceService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -326,7 +328,7 @@ class StaffDashboard extends Component
         if ($appointment) {
             // Every appointment stores only its own services. The payment covers
             // the parent + all linked children, so show their complete gross sum.
-            $groupTotal = (float) $appointment->linkedGroup()->sum('total_amount');
+            $groupTotal = (float) $appointment->activeLinkedGroup()->sum('total_amount');
 
             $this->paymentAmount = $groupTotal;
             // Remember the suggested amount so processPayment() can tell whether
@@ -459,7 +461,9 @@ class StaffDashboard extends Component
         // so a forged request can never surface on-leave providers.
         $bypassAvailability = $bypassAvailability && $this->dashCan('force_booking');
 
-        return $this->dashboardService->getAvailableProvidersForServiceAtTime(
+        // Returns unavailable providers too, flagged with a reason, so the modal
+        // can show them greyed out instead of making them silently disappear.
+        return $this->dashboardService->getProviderAvailabilityForServiceAtTime(
             $serviceId,
             $this->selectedDate,
             $startTime,
@@ -487,12 +491,10 @@ class StaffDashboard extends Component
             return;
         }
 
-        $validServices = array_filter($data['services'] ?? [], function ($bs) {
-            return ! empty($bs['service_id']) && ! empty($bs['provider_id']) && ! empty($bs['start_time']);
-        });
+        [$validServices, $rowsError] = $this->bookingRows($data['services'] ?? [], $bypassAvailability);
 
-        if (empty($validServices)) {
-            $this->dispatch('notify', type: 'error', message: 'Please fill in all service details');
+        if ($rowsError !== null) {
+            $this->dispatch('notify', type: 'error', message: $rowsError);
             $this->dispatch('booking-error');
 
             return;
@@ -522,7 +524,7 @@ class StaffDashboard extends Component
             if (($data['customerType'] ?? 'existing') === 'existing' && ! empty($data['selectedCustomerId'])) {
                 $customer = User::find($data['selectedCustomerId']);
                 if (! $customer) {
-                    $this->dispatch('notify', type: 'error', message: 'Selected customer not found');
+                    $this->dispatch('notify', type: 'error', message: __('dashboard.booking_modal.errors.customer_not_found'));
                     $this->dispatch('booking-error');
 
                     return;
@@ -548,7 +550,7 @@ class StaffDashboard extends Component
             $appointment = $bookingService->createBooking($customer, $bookingData);
 
             $this->dispatch('booking-saved');
-            $this->dispatch('notify', type: 'success', message: __('dashboard.booking_modal.save').' #'.$appointment->number);
+            $this->dispatch('notify', type: 'success', message: __('dashboard.booking_modal.save').' '.$this->bookingNumbersLabel($appointment));
         } catch (\Throwable $e) {
             // Throwable, not Exception: a TypeError is an Error, so it used to
             // escape this catch and take the whole Livewire component down instead
@@ -565,12 +567,10 @@ class StaffDashboard extends Component
             return;
         }
 
-        $validServices = array_filter($this->bookingServices, function ($bs) {
-            return $bs['service_id'] && $bs['provider_id'] && $bs['start_time'];
-        });
+        [$validServices, $rowsError] = $this->bookingRows($this->bookingServices);
 
-        if (empty($validServices)) {
-            $this->dispatch('notify', type: 'error', message: 'Please fill in all service details');
+        if ($rowsError !== null) {
+            $this->dispatch('notify', type: 'error', message: $rowsError);
 
             return;
         }
@@ -609,13 +609,106 @@ class StaffDashboard extends Component
             $appointment = $bookingService->createBooking($customer, $bookingData);
 
             $this->closeBookingModal();
-            $this->dispatch('notify', type: 'success', message: __('dashboard.booking_modal.save').' #'.$appointment->number);
+            $this->dispatch('notify', type: 'success', message: __('dashboard.booking_modal.save').' '.$this->bookingNumbersLabel($appointment));
             $this->dispatch('refreshTimeline');
         } catch (\Throwable $e) {
             // See saveBookingFromAlpine(): a TypeError is an Error, not an Exception.
             Log::error('Dashboard booking error: '.$e->getMessage(), ['exception' => $e::class]);
             $this->dispatch('notify', type: 'error', message: $e->getMessage());
         }
+    }
+
+    /**
+     * Split the modal's service rows into the ones to book, or explain — in the
+     * user's language — why the booking cannot be saved.
+     *
+     * A row with no service picked is ignored, as before. A row with
+     * a service but no time or no provider is an ERROR: it used to be dropped
+     * silently, so a two-service booking whose second barber was greyed out
+     * saved only the first service. The error for a missing provider says WHY
+     * nobody is selected — typically the barber the staff dragged on is outside
+     * their working hours at that time, so the modal refused to select them and
+     * the old generic "Please fill in all service details" made no sense.
+     *
+     * @return array{0: array<int, array>, 1: string|null} [rows to book, error]
+     */
+    private function bookingRows(array $rows, bool $bypassAvailability = false): array
+    {
+        $valid = [];
+
+        foreach ($rows as $row) {
+            // No service picked: an extra row the staff added and did not use
+            // ("Add service" pre-fills its start time). Nothing to book.
+            if (empty($row['service_id'])) {
+                continue;
+            }
+
+            $serviceName = Service::find($row['service_id'])?->name ?? '';
+
+            if (empty($row['start_time'])) {
+                return [[], __('dashboard.booking_modal.errors.time_required', ['service' => $serviceName])];
+            }
+
+            if (empty($row['provider_id'])) {
+                return [[], $this->missingProviderMessage((int) $row['service_id'], $serviceName, $row, $bypassAvailability)];
+            }
+
+            $valid[] = $row;
+        }
+
+        if ($valid === []) {
+            return [[], __('dashboard.booking_modal.errors.service_required')];
+        }
+
+        return [$valid, null];
+    }
+
+    /**
+     * No provider selected: say whether anybody could have been, and if the
+     * timeline pre-selected a barber who is unavailable, name them and why.
+     */
+    private function missingProviderMessage(int $serviceId, string $serviceName, array $row, bool $bypassAvailability): string
+    {
+        $time = (string) $row['start_time'];
+
+        $candidates = collect($this->dashboardService->getProviderAvailabilityForServiceAtTime(
+            $serviceId,
+            $this->selectedDate,
+            $time,
+            (int) ($row['duration'] ?? 0) ?: 30,
+            $bypassAvailability && $this->dashCan('force_booking'),
+        ));
+
+        $preselected = ! empty($row['preselected_provider_id'])
+            ? $candidates->firstWhere('id', (int) $row['preselected_provider_id'])
+            : null;
+
+        if ($preselected && ! $preselected['available']) {
+            return __('dashboard.booking_modal.errors.provider_unavailable', [
+                'provider' => $preselected['name'],
+                'time' => $time,
+                'reason' => $preselected['reason_label'],
+            ]);
+        }
+
+        if (! $candidates->contains('available', true)) {
+            return __('dashboard.booking_modal.errors.no_provider_at_time', ['service' => $serviceName, 'time' => $time]);
+        }
+
+        return __('dashboard.booking_modal.errors.provider_required', ['service' => $serviceName, 'time' => $time]);
+    }
+
+    /**
+     * "#APT-…-A, #APT-…-B": a booking with a gap or with two providers is saved
+     * as one appointment per block (BOOKING-GAP-01), so the success message
+     * names every block the staff member will now see on the timeline.
+     */
+    private function bookingNumbersLabel(Appointment $root): string
+    {
+        return collect([$root])
+            ->merge($root->relationLoaded('children') ? $root->children : collect())
+            ->map(fn (Appointment $block) => '#'.$block->number)
+            ->implode(', ');
     }
 
     public function updateAppointment()
@@ -856,35 +949,16 @@ class StaffDashboard extends Component
             return;
         }
 
-        // Block cancelling a parent that still has active children.
-        $check = $appointment->canBeCancelledOrDeleted();
-        if (! $check['allowed']) {
-            $numbers = implode(', #', $check['children_numbers'] ?? []);
-            $this->dispatch(
-                'notify',
-                type: 'error',
-                message: __('dashboard.cannot_cancel_has_children', ['numbers' => $numbers])
-            );
-
-            return;
-        }
-
         try {
-            $appointment->update([
-                'status' => AppointmentStatus::ADMIN_CANCELLED,
-                'cancelled_at' => now(),
-                'cancellation_reason' => 'Cancelled by staff',
-            ]);
-
-            // If the cancelled appointment is a child → rebuild the parent's invoice
-            // to remove its items.
-            if ($appointment->is_child_booking && $appointment->parent) {
-                try {
-                    app(InvoiceService::class)->rebuildAggregatedInvoice($appointment->parent);
-                } catch (\Throwable $e) {
-                    Log::warning('Aggregated invoice rebuild after child cancel failed: '.$e->getMessage());
-                }
-            }
+            // A parent with active children is no longer refused: each block of
+            // a split booking is cancelled on its own, and the service promotes
+            // the next block to root and moves the invoice with it. Rebuilding
+            // the invoice after a child leaves happens there too (BOOKING-GAP-01).
+            app(AppointmentCancellationService::class)->cancel(
+                $appointment,
+                AppointmentStatus::ADMIN_CANCELLED,
+                'Cancelled by staff',
+            );
 
             $this->closeAppointmentModal();
             $this->dispatch('notify', type: 'success', message: 'Appointment cancelled');
@@ -900,8 +974,7 @@ class StaffDashboard extends Component
             return;
         }
 
-        $appointment = Appointment::with(['invoice', 'invoice.items', 'children', 'parent'])
-            ->find($this->selectedAppointmentId);
+        $appointment = Appointment::find($this->selectedAppointmentId);
         if (! $appointment) {
             return;
         }
@@ -910,49 +983,15 @@ class StaffDashboard extends Component
             return;
         }
 
-        if (in_array($appointment->payment_status->value, [1, 2, 3]) || $appointment->status->value === 1) {
-            $this->dispatch('notify', type: 'error', message: __('dashboard.appointment_modal.cannot_delete_paid'));
-
-            return;
-        }
-
-        // Block deleting a parent that still has active children.
-        $check = $appointment->canBeCancelledOrDeleted();
-        if (! $check['allowed']) {
-            $numbers = implode(', #', $check['children_numbers'] ?? []);
-            $this->dispatch(
-                'notify',
-                type: 'error',
-                message: __('dashboard.cannot_delete_has_children', ['numbers' => $numbers])
-            );
-
-            return;
-        }
-
+        // The rules (paid / completed / active children) and the delete itself
+        // live in AppointmentDeletionService, shared with the Filament admin.
         try {
-            $parent = $appointment->parent; // capture before delete
-            DB::transaction(function () use ($appointment) {
-                if ($appointment->invoice) {
-                    $appointment->invoice->items()->delete();
-                    $appointment->invoice->payments()->delete();
-                    $appointment->invoice->delete();
-                }
-                $appointment->services()->detach();
-                $appointment->services_record()->delete();
-                $appointment->delete();
-            });
-
-            // If the deleted appointment was a child → rebuild the parent's invoice.
-            if ($parent) {
-                try {
-                    app(InvoiceService::class)->rebuildAggregatedInvoice($parent);
-                } catch (\Throwable $e) {
-                    Log::warning('Aggregated invoice rebuild after child delete failed: '.$e->getMessage());
-                }
-            }
+            app(AppointmentDeletionService::class)->delete($appointment);
 
             $this->closeAppointmentModal();
             $this->dispatch('notify', type: 'success', message: 'Appointment deleted');
+        } catch (AppointmentNotDeletableException $e) {
+            $this->dispatch('notify', type: 'error', message: $e->userMessage());
         } catch (\Exception $e) {
             $this->dispatch('notify', type: 'error', message: $e->getMessage());
         }
@@ -1294,7 +1333,9 @@ class StaffDashboard extends Component
                     ? $gap->analyzeAddBefore($anchor, $service, $duration, null, true)
                     : $gap->analyzeAddAfter($anchor, $service, $duration, null, true))
                 : $gap->analyzeChildAdd(
-                    $anchor->parent ?? $anchor,
+                    // The block that was clicked, not the group root — must
+                    // match BookingService::addServiceToBooking() (BOOKING-GAP-01).
+                    $anchor,
                     $provider,
                     $service,
                     $duration,
@@ -1559,8 +1600,17 @@ class StaffDashboard extends Component
             ];
         }
 
+        // Draw the slice each leave occupies on the selected day: a multi-day
+        // hourly leave blocks the whole of its middle days, not the same hours
+        // every day. An edge at midnight is drawn from/to the salon's hours.
+        $dayStart = Carbon::parse($this->selectedDate)->startOfDay();
         $timeOffsByProvider = [];
         foreach ($timeOffs as $to) {
+            $window = $to->blockedWindowOn($dayStart);
+            if ($window === null) {
+                continue;
+            }
+
             $pid = $to->user_id;
             if (! isset($timeOffsByProvider[$pid])) {
                 $timeOffsByProvider[$pid] = [];
@@ -1568,8 +1618,8 @@ class StaffDashboard extends Component
             $timeOffsByProvider[$pid][] = [
                 'id' => $to->id,
                 'type' => $to->type,
-                'start_time' => $to->type === ProviderTimeOff::TYPE_HOURLY ? ($to->start_time?->format('H:i') ?? '') : $startTime,
-                'end_time' => $to->type === ProviderTimeOff::TYPE_HOURLY ? ($to->end_time?->format('H:i') ?? '') : $endTime,
+                'start_time' => $window['start']->lte($dayStart) ? $startTime : $window['start']->format('H:i'),
+                'end_time' => $window['end']->gte($dayStart->copy()->addDay()) ? $endTime : $window['end']->format('H:i'),
                 'reason' => $to->reason?->name ?? '',
             ];
         }

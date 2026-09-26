@@ -34,6 +34,12 @@ return [
     'email'    => 'E-Mail',
     'phone'    => 'Telefon',
 
+    // Aufgeteilte Buchung (eine Buchung, mehrere Termine)
+    'appointments_heading' => 'Ihre :count Termine',
+    'appointments_intro'   => 'Ihre Leistungen finden zu verschiedenen Zeiten statt und wurden daher als einzelne Termine gebucht. Jeder Termin kann einzeln storniert werden.',
+    'appointment_n'        => 'Termin :n',
+    'group_total'          => 'Gesamtbetrag aller Termine',
+
     // Footer
     'thanks'   => 'Vielen Dank, dass Sie sich für :company entschieden haben!',
     'footer'   => 'Dies ist eine automatische Nachricht, bitte antworten Sie nicht direkt auf diese E-Mail.',

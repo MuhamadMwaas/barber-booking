@@ -153,7 +153,7 @@
                     </span>
                 </div>
                 <p class="mpl-stat-value">{{ $thisMonthLeaves }}</p>
-                <div class="mpl-stat-meta">{{ now()->format('F Y') }}</div>
+                <div class="mpl-stat-meta">{{ now()->translatedFormat('F Y') }}</div>
             </div>
         </div>
 

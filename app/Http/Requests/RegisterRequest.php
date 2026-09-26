@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enum\RegistrationMethod;
 use App\Rules\PasswordRequirements;
 use App\Rules\PhoneNumber;
+use App\Support\PhoneInput;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -69,6 +70,10 @@ class RegisterRequest extends FormRequest
                 'registration_method' => strtolower($method),
             ]);
         }
+
+        // Store "015223917565" as "+4915223917565" — and run `unique` against
+        // that same form, so a second spelling of a number is still a duplicate.
+        PhoneInput::canonicalize($this);
 
         // Resolve the locale up-front so the duplicate-email response built in
         // failedValidation() comes back in the caller's language (ar/de/en).

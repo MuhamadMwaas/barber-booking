@@ -82,8 +82,8 @@ class ProviderStatsOverviewWidget extends BaseWidget
         $averageRating = $this->record->serviceReviews()->avg('rating');
         $totalReviews = $this->record->serviceReviews()->count();
 
-        // Services offered count
-        $servicesCount = $this->record->services()->count();
+        // Services offered count — active links only, matching the "active services" caption
+        $servicesCount = $this->record->services()->wherePivot('is_active', true)->count();
 
         // Calculate trend for current vs last month
         $earningsTrend = $lastMonthEarnings > 0

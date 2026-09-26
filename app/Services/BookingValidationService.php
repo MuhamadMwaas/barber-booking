@@ -127,17 +127,17 @@ class BookingValidationService
         }
 
         if ($currentStartTime->lt($previousEndTime)) {
-            throw new InvalidArgumentException(
-                "Service at position {$serviceIndex} start time ({$currentStartTime->format('H:i')}) ".
-                "must be after or equal to previous service end time ({$previousEndTime->format('H:i')}). ".
-                'Services must be sequential.'
-            );
+            throw new InvalidArgumentException(__('booking.services_overlap', [
+                'position' => $serviceIndex,
+                'start' => $currentStartTime->format('H:i'),
+                'end' => $previousEndTime->format('H:i'),
+            ]));
         }
 
-        // Optional: Check for excessive gaps (more than 2 hours)
-        if ($currentStartTime->diffInMinutes($previousEndTime) > 120) {
-            // You can add a warning or log here
-        }
+        // A gap is legitimate and deliberately has no upper bound: a customer
+        // may want 09:40 and 15:10 on the same day. BookingService splits the
+        // booking into one appointment per contiguous block, so the gap is
+        // never held against the provider's calendar (BOOKING-GAP-01).
     }
 
     public function validateTimeSlotAvailability(
@@ -250,10 +250,10 @@ class BookingValidationService
         $workEnd = Carbon::parse($date.' '.$schedule->end_time);
 
         if ($startTime->lt($workStart) || $endTime->gt($workEnd)) {
-            throw new InvalidArgumentException(
-                "Time slot is outside provider's working hours ".
-                "({$workStart->format('H:i')} - {$workEnd->format('H:i')})"
-            );
+            throw new InvalidArgumentException(__('booking.outside_working_hours', [
+                'start' => $workStart->format('H:i'),
+                'end' => $workEnd->format('H:i'),
+            ]));
         }
 
         // 3. Check for full day time off.
@@ -284,9 +284,7 @@ class BookingValidationService
 
         foreach ($hourlyTimeOffs as $timeOff) {
             if ($timeOff->blocksWindow($startTime, $endTime)) {
-                throw new InvalidArgumentException(
-                    'Provider has time off during the requested time slot'
-                );
+                throw new InvalidArgumentException(__('booking.provider_time_off'));
             }
         }
     }
@@ -317,18 +315,14 @@ class BookingValidationService
 
         // 6. Check time slot is not in the past
         if ($startTime->lt(Carbon::now())) {
-            throw new InvalidArgumentException(
-                'Cannot book time slot in the past'
-            );
+            throw new InvalidArgumentException(__('booking.slot_in_past'));
         }
 
         // 7. Check minimum advance booking time
         $book_buffer = intval(get_setting('book_buffer', 60));
 
         if ($startTime->lt(Carbon::now()->addMinutes($book_buffer))) {
-            throw new InvalidArgumentException(
-                "Booking must be at least {$book_buffer} minutes in advance"
-            );
+            throw new InvalidArgumentException(__('booking.min_advance', ['minutes' => $book_buffer]));
         }
     }
 
@@ -401,7 +395,11 @@ class BookingValidationService
     }
 
     /**
-     * Validate daily booking limit
+     * Validate daily booking limit.
+     *
+     * Counts BOOKINGS, not appointment rows: one booking split into several
+     * blocks (BOOKING-GAP-01) is one parent/children group and counts once.
+     * COALESCE(parent_appointment_id, id) is the group's root id.
      */
     public function validateDailyBookingLimit(User $customer, string $date): void
     {
@@ -411,7 +409,7 @@ class BookingValidationService
             $todayBookingsCount = Appointment::where('customer_id', $customer->id)
                 ->whereDate('appointment_date', $date)
                 ->whereIn('status', [AppointmentStatus::PENDING->value])
-                ->count();
+                ->count(DB::raw('DISTINCT COALESCE(parent_appointment_id, id)'));
 
             if ($todayBookingsCount >= $max_daily_bookings) {
                 throw new InvalidArgumentException(

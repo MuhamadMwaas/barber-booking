@@ -53,4 +53,17 @@
             <span>{{ number_format($invoice->total_amount ?? 0, 2) }}</span>
         </div>
     @endif
+
+    {{-- Tip sits OUTSIDE the taxed total (not revenue, no VAT), so it is shown
+         after it, followed by what the customer actually handed over. --}}
+    @if((float) ($invoice->tip_amount ?? 0) > 0)
+        <div class="totals-row">
+            <span>{{ __('invoice_template.tip') }}:</span>
+            <span>+{{ number_format((float) $invoice->tip_amount, 2) }}</span>
+        </div>
+        <div class="totals-row">
+            <span>{{ __('invoice_template.amount_paid') }}:</span>
+            <span>{{ number_format((float) ($invoice->total_amount ?? 0) + (float) $invoice->tip_amount, 2) }}</span>
+        </div>
+    @endif
 </div>

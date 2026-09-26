@@ -29,11 +29,13 @@ class InvoiceFinalizationService
      * Collect one full on-site payment and finalize the unified invoice.
      *
      * A lower final amount is a deliberate special-customer price (discount),
-     * never a partial payment. One payment covers the invoice owner plus every
-     * linked appointment, and all covered appointments are completed together.
+     * never a partial payment. A higher one is the full price plus a tip for the
+     * provider(s); the tip is stored in tip_amount, outside the taxed totals.
+     * One payment covers the invoice owner plus every linked appointment, and
+     * all covered appointments are completed together.
      *
      * @param  int|string  $paymentMethod  Active PaymentMethod id, or `cash`/`card`.
-     * @param  float|null  $finalAmount  Null means the full item total.
+     * @param  float|null  $finalAmount  What the customer paid. Null means the full item total.
      */
     public function finalizeAppointmentPayment(
         Appointment $appointment,
@@ -54,12 +56,21 @@ class InvoiceFinalizationService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $coveredAppointments = $invoiceOwner->linkedGroup()
+            // Lock the WHOLE group (same rows, same order as before, so the
+            // lock order shared with AppointmentDeletionService and
+            // AppointmentCancellationService is unchanged), then settle only
+            // the blocks that still stand. A cancelled block of a split
+            // booking is not paid for and must not block the rest (BOOKING-GAP-01).
+            $lockedGroup = $invoiceOwner->linkedGroup()
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->get();
 
-            $this->assertAppointmentsCanBePaid($coveredAppointments);
+            $this->assertAppointmentsCanBePaid($lockedGroup, $appointment->id);
+
+            $coveredAppointments = $lockedGroup
+                ->filter(fn (Appointment $member) => $member->isActiveInGroup())
+                ->values();
             $this->applyAdjustedDuration(
                 $coveredAppointments,
                 $appointment->id,
@@ -87,11 +98,14 @@ class InvoiceFinalizationService
             // the same behaviour the StaffDashboard established as canonical.
             $invoice = $invoiceService->rebuildAggregatedInvoice($invoiceOwner);
 
-            $this->assertValidFinalAmount($invoice, $finalAmount);
-            $invoice = $invoiceService->applyFinalAmount($invoice, $finalAmount);
+            // What the customer handed over splits into the invoice price
+            // (full or discounted) and, when it exceeds the items total, a tip.
+            [$chargedAmount, $tipAmount] = $this->splitFinalAmount($invoice, $finalAmount);
+            $invoice = $invoiceService->applyFinalAmount($invoice, $chargedAmount);
 
             return $this->finalizeLockedInvoice(
                 invoice: $invoice,
+                tipAmount: $tipAmount,
                 coveredAppointments: $coveredAppointments,
                 paymentMethod: $method,
                 paymentStatus: $paymentStatus,
@@ -107,6 +121,7 @@ class InvoiceFinalizationService
      */
     private function finalizeLockedInvoice(
         Invoice $invoice,
+        string $tipAmount,
         $coveredAppointments,
         PaymentMethod $paymentMethod,
         PaymentStatus $paymentStatus,
@@ -125,6 +140,9 @@ class InvoiceFinalizationService
         $invoice->update([
             'invoice_number' => $invoiceNumber,
             'status' => InvoiceStatus::PAID,
+            // Beside total_amount, never inside it: a tip is not revenue and
+            // carries no VAT, so subtotal + tax_amount == total_amount still holds.
+            'tip_amount' => $tipAmount,
             'notes' => $notes,
             'invoice_data' => array_merge(
                 $invoice->invoice_data ?? [],
@@ -136,6 +154,7 @@ class InvoiceFinalizationService
                     'payment_method_id' => $paymentMethod->id,
                     'payment_method_code' => $appointmentPaymentMethod,
                     'amount_paid' => $amountPaid,
+                    'tip_amount' => $tipAmount,
                     'finalization_method' => $source,
                 ]
             ),
@@ -155,6 +174,7 @@ class InvoiceFinalizationService
             'payment_method_id' => $paymentMethod->id,
             'payment_number' => Payment::generatePaymentNumber(),
             'amount' => $amountPaid,
+            'tip_amount' => $tipAmount,
             // The Payment is proof of this exact invoice, so copy its reconciled
             // post-discount money split rather than calculating VAT a second time.
             'subtotal' => $invoice->subtotal,
@@ -182,6 +202,7 @@ class InvoiceFinalizationService
             'payment_method_id' => $paymentMethod->id,
             'payment_method_code' => $appointmentPaymentMethod,
             'amount_paid' => $amountPaid,
+            'tip_amount' => $tipAmount,
             'covered_appointment_ids' => $coveredAppointments->pluck('id')->all(),
             'source' => $source,
             'tse_enabled' => false,
@@ -224,7 +245,7 @@ class InvoiceFinalizationService
         }
 
         if (! $method) {
-            throw new InvalidArgumentException('طريقة الدفع غير موجودة أو غير مفعلة.');
+            throw new InvalidArgumentException(__('payment.errors.method_not_found'));
         }
 
         // Online gateways and bank transfers are deliberately outside the
@@ -241,7 +262,7 @@ class InvoiceFinalizationService
             PaymentMethod::TYPE_CREDIT_CARD,
             PaymentMethod::TYPE_DEBIT_CARD => PaymentStatus::PAID_ONSTIE_CARD,
             default => throw new InvalidArgumentException(
-                'طريقة الدفع الحالية يجب أن تكون نقداً أو بطاقة داخل الصالون.'
+                __('payment.errors.method_not_on_site')
             ),
         };
     }
@@ -252,47 +273,60 @@ class InvoiceFinalizationService
     }
 
     /**
-     * @param  Collection<int, Appointment>  $appointments
+     * The payment is refused when the appointment the cashier opened is itself
+     * cancelled / no-show, or when nothing in the group still stands.
+     *
+     * It used to refuse when ANY member was cancelled, so cancelling one block
+     * of a group made the remaining blocks impossible to pay for.
+     *
+     * @param  Collection<int, Appointment>  $group  the whole locked group
      */
-    private function assertAppointmentsCanBePaid($appointments): void
+    private function assertAppointmentsCanBePaid($group, int $requestedAppointmentId): void
     {
-        if ($appointments->isEmpty()) {
-            throw new InvalidArgumentException('لا توجد مواعيد مرتبطة بهذه الفاتورة.');
+        if ($group->isEmpty()) {
+            throw new InvalidArgumentException(__('payment.errors.no_appointments'));
         }
 
-        $invalid = $appointments->first(fn (Appointment $appointment) => in_array(
-            $appointment->status,
-            [
-                AppointmentStatus::USER_CANCELLED,
-                AppointmentStatus::ADMIN_CANCELLED,
-                AppointmentStatus::NO_SHOW,
-            ],
-            true
-        ));
+        $requested = $group->firstWhere('id', $requestedAppointmentId);
 
-        if ($invalid) {
-            throw new InvalidArgumentException('لا يمكن تحصيل فاتورة تحتوي على موعد ملغي أو لم يحضر صاحبه.');
+        if (($requested && ! $requested->isActiveInGroup())
+            || $group->every(fn (Appointment $member) => ! $member->isActiveInGroup())) {
+            throw new InvalidArgumentException(__('payment.errors.cancelled_or_no_show'));
         }
     }
 
-    private function assertValidFinalAmount(Invoice $invoice, ?float $finalAmount): void
+    /**
+     * Split the amount the customer paid into [invoice price, tip].
+     *
+     *   paid <  itemsGross  => discount: charge `paid`, no tip
+     *   paid == itemsGross  => full price, no tip
+     *   paid >  itemsGross  => tip: charge the full items total, tip = the excess
+     *
+     * The charged part goes through applyFinalAmount() (discount + VAT); the tip
+     * never does, because a tip is not revenue and carries no VAT.
+     *
+     * @return array{0: float|null, 1: string} Null charge means the full items total.
+     */
+    private function splitFinalAmount(Invoice $invoice, ?float $finalAmount): array
     {
         $itemsGross = (string) $invoice->items()->sum('total_amount');
-        $requested = $finalAmount === null
+        $paid = $finalAmount === null
             ? $itemsGross
             : number_format($finalAmount, 2, '.', '');
 
         if (bccomp($itemsGross, '0.00', 2) <= 0) {
-            throw new InvalidArgumentException('لا يمكن تحصيل فاتورة بلا مبلغ موجب.');
+            throw new InvalidArgumentException(__('payment.errors.invoice_not_positive'));
         }
 
-        if (bccomp($requested, '0.00', 2) <= 0) {
-            throw new InvalidArgumentException('يجب أن يكون مبلغ الدفع أكبر من صفر.');
+        if (bccomp($paid, '0.00', 2) <= 0) {
+            throw new InvalidArgumentException(__('payment.errors.amount_not_positive'));
         }
 
-        if (bccomp($requested, $itemsGross, 2) === 1) {
-            throw new InvalidArgumentException('مبلغ الدفع لا يمكن أن يتجاوز مجموع خدمات الفاتورة.');
+        if (bccomp($paid, $itemsGross, 2) === 1) {
+            return [null, bcsub($paid, $itemsGross, 2)];
         }
+
+        return [$finalAmount, '0.00'];
     }
 
     /**
@@ -308,13 +342,13 @@ class InvoiceFinalizationService
         }
 
         if ($minutes <= 0) {
-            throw new InvalidArgumentException('مدة الموعد المعدلة يجب أن تكون أكبر من صفر.');
+            throw new InvalidArgumentException(__('payment.errors.duration_not_positive'));
         }
 
         /** @var Appointment|null $appointment */
         $appointment = $appointments->firstWhere('id', $appointmentId);
         if (! $appointment) {
-            throw new InvalidArgumentException('الموعد المحدد ليس ضمن الفاتورة الموحدة.');
+            throw new InvalidArgumentException(__('payment.errors.appointment_not_in_invoice'));
         }
 
         if ((int) $appointment->duration_minutes === $minutes) {

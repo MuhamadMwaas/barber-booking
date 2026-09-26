@@ -828,24 +828,35 @@
                                     <template x-if="bs._loadingProviders">
                                         <p class="text-xs text-gray-400">{{ __('dashboard.loading') }}...</p>
                                     </template>
+                                    {{-- The barber this booking was started from cannot take it at
+                                         this time (outside working hours, on leave, busy…): say so
+                                         plainly instead of leaving nobody selected. --}}
+                                    <template x-if="!bs._loadingProviders && bs._blocked && !bs.provider_id">
+                                        <div class="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+                                            x-text="bookingRowError(bs)"></div>
+                                    </template>
                                     <div class="space-y-1" x-show="!bs._loadingProviders">
                                         <template x-for="p in (bs._availableProviders || [])" :key="p.id">
                                             <label
-                                                class="flex items-center space-x-2 px-3 py-2 rounded-lg border cursor-pointer hover:bg-amber-50"
-                                                :class="bs.provider_id == p.id ? 'border-amber-500 bg-amber-50' :
-                                                    'border-gray-200'"
-                                                @click="bs.provider_id = p.id">
+                                                class="flex items-center space-x-2 px-3 py-2 rounded-lg border"
+                                                :class="!p.available ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed' :
+                                                    (bs.provider_id == p.id ? 'border-amber-500 bg-amber-50 cursor-pointer' :
+                                                    'border-gray-200 cursor-pointer hover:bg-amber-50')"
+                                                :title="p.available ? '' : p.reason_label"
+                                                @click="if (p.available) { bs.provider_id = p.id; bs._blocked = null; delete bs._preselectedProvider; }">
                                                 <span
                                                     class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0"
                                                     :class="bs.provider_id == p.id ? 'border-amber-500' : 'border-gray-300'">
                                                     <span x-show="bs.provider_id == p.id"
                                                         class="w-2 h-2 rounded-full bg-amber-500"></span>
                                                 </span>
-                                                <span class="text-sm" x-text="p.name"></span>
+                                                <span class="text-sm" :class="!p.available && 'text-gray-500'" x-text="p.name"></span>
+                                                <span x-show="!p.available" class="ms-auto text-[11px] text-gray-500"
+                                                    x-text="p.reason_label"></span>
                                             </label>
                                         </template>
                                         <template
-                                            x-if="!bs._loadingProviders && (!bs._availableProviders || bs._availableProviders.length === 0)">
+                                            x-if="!bs._loadingProviders && !(bs._availableProviders || []).some(p => p.available)">
                                             <p class="text-xs text-gray-400">
                                                 {{ __('dashboard.booking_modal.no_providers') }}</p>
                                         </template>
@@ -1364,7 +1375,21 @@
         @php $payApt = $selectedAppointment ?? \App\Models\Appointment::with('services_record')->find($selectedAppointmentId); @endphp
         <div class="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4"
             wire:click.self="closePaymentModal">
-            <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm" @click.stop>
+            {{-- Paid < baseline = discount, paid > baseline = tip for the provider.
+                 A tip larger than the bill itself is almost always a typo (200 for 20),
+                 so it must be confirmed before the payment can be sent. --}}
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm" @click.stop
+                x-data="{
+                    baseline: {{ number_format((float) $paymentBaseline, 2, '.', '') }},
+                    bigTipConfirmed: false,
+                    diff() {
+                        const paid = parseFloat($wire.paymentAmount);
+                        return isNaN(paid) ? 0 : Math.round((paid - this.baseline) * 100) / 100;
+                    },
+                    isBigTip() { return this.diff() > this.baseline; },
+                    canPay() { return !this.isBigTip() || this.bigTipConfirmed; },
+                }"
+                x-effect="if (!isBigTip()) bigTipConfirmed = false">
                 <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                     <h3 class="text-lg font-semibold text-gray-800">{{ __('dashboard.payment_modal.title') }}</h3>
                     <button wire:click="closePaymentModal" class="text-gray-400 hover:text-gray-600">
@@ -1387,6 +1412,24 @@
                             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-lg font-semibold text-center focus:ring-amber-500 focus:border-amber-500">
                         <p class="text-[10px] text-gray-400 mt-1">{{ __('dashboard.payment_modal.discount_note') }}
                         </p>
+                        <div class="mt-2 text-sm font-medium text-center" x-show="diff() !== 0" x-cloak>
+                            <span x-show="diff() < 0" class="text-red-600">
+                                {{ __('dashboard.payment_modal.discount_label') }}:
+                                <span dir="ltr" x-text="'-' + Math.abs(diff()).toFixed(2)"></span>
+                            </span>
+                            <span x-show="diff() > 0" class="text-green-600">
+                                {{ __('dashboard.payment_modal.tip_label') }}:
+                                <span dir="ltr" x-text="'+' + diff().toFixed(2)"></span>
+                            </span>
+                        </div>
+                        <label x-show="isBigTip()" x-cloak
+                            class="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800 cursor-pointer">
+                            <input type="checkbox" x-model="bigTipConfirmed" class="mt-0.5 rounded border-amber-400">
+                            <span>
+                                {{ __('dashboard.payment_modal.big_tip_confirm') }}
+                                (<span dir="ltr" class="font-semibold" x-text="'+' + diff().toFixed(2)"></span>)
+                            </span>
+                        </label>
                     </div>
                     <div>
                         <label
@@ -1408,9 +1451,10 @@
                 <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex justify-end space-x-2">
                     <button wire:click="closePaymentModal"
                         class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{{ __('dashboard.payment_modal.cancel') }}</button>
-                    <button wire:click="processPayment"
-                        class="px-5 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg"
-                        wire:loading.attr="disabled">
+                    <button @click="if (canPay()) $wire.processPayment()"
+                        :disabled="!canPay()"
+                        class="px-5 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        wire:loading.attr="disabled" wire:target="processPayment">
                         <span wire:loading.remove
                             wire:target="processPayment">{{ __('dashboard.payment_modal.confirm_pay') }}</span>
                         <span wire:loading wire:target="processPayment">...</span>
@@ -2267,9 +2311,20 @@
                             this.booking.bypassAvailability || false
                         );
                         bs._availableProviders = result;
-                        if (bs._preselectedProvider && result.some(p => p.id == bs._preselectedProvider)) {
-                            bs.provider_id = bs._preselectedProvider;
-                            delete bs._preselectedProvider;
+                        // The barber the booking was started from (timeline click/drag).
+                        // Available → select them. Unavailable (e.g. outside their
+                        // working hours) → keep them remembered and say WHY, instead of
+                        // silently leaving nobody selected; picking another time that
+                        // suits them re-selects them automatically.
+                        bs._blocked = null;
+                        if (bs._preselectedProvider) {
+                            const pre = result.find(p => p.id == bs._preselectedProvider);
+                            if (pre && pre.available) {
+                                bs.provider_id = bs._preselectedProvider;
+                                delete bs._preselectedProvider;
+                            } else if (pre) {
+                                bs._blocked = pre;
+                            }
                         }
                     } catch (e) {
                         bs._availableProviders = [];
@@ -2277,7 +2332,47 @@
                     bs._loadingProviders = false;
                 },
 
+                bookingErrorMessages: @js(__('dashboard.booking_modal.errors')),
+
+                bookingErrorText(key, params = {}) {
+                    return Object.entries(params).reduce(
+                        (text, [name, value]) => text.replaceAll(':' + name, value ?? ''),
+                        this.bookingErrorMessages[key] || key
+                    );
+                },
+
+                // Why this service row cannot be saved, in the user's language — or
+                // null when it is complete. Mirrors StaffDashboard::bookingRows(),
+                // which stays the authority (the server re-checks everything).
+                bookingRowError(bs) {
+                    const service = this.preloaded.services.find(s => s.id == bs.service_id);
+                    const params = { service: service ? service.name : '', time: bs.start_time || '' };
+
+                    if (!bs.start_time) return this.bookingErrorText('time_required', params);
+                    if (bs.provider_id) return null;
+
+                    if (bs._blocked) {
+                        return this.bookingErrorText('provider_unavailable', {
+                            ...params, provider: bs._blocked.name, reason: bs._blocked.reason_label,
+                        });
+                    }
+                    if (!(bs._availableProviders || []).some(p => p.available)) {
+                        return this.bookingErrorText('no_provider_at_time', params);
+                    }
+                    return this.bookingErrorText('provider_required', params);
+                },
+
                 async submitBooking() {
+                    const rows = this.booking.services.filter(bs => bs.service_id);
+                    const firstError = rows.length === 0
+                        ? this.bookingErrorText('service_required')
+                        : rows.map(bs => this.bookingRowError(bs)).find(Boolean);
+
+                    if (firstError) {
+                        window.dispatchEvent(new CustomEvent('notify', { detail: { type: 'error', message: firstError } }));
+                        return;
+                    }
+
                     this.bookingSaving = true;
                     const data = {
                         customerType: this.booking.customerType,
@@ -2294,6 +2389,8 @@
                             start_time: s.start_time,
                             duration: s.duration,
                             provider_id: s.provider_id,
+                            // Lets the server name the unavailable barber too.
+                            preselected_provider_id: s._preselectedProvider || null,
                             price: s.price,
                         })),
                     };

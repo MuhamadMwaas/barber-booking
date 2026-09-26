@@ -38,6 +38,10 @@ use Illuminate\Support\Collection;
  *     invoice-level discount is distributed pro-rata across its appointments so
  *     Σ(employee revenue) == Σ(invoice totals) exactly. See {@see coverageOf()}.
  *
+ *  ── Tips (invoice.tip_amount) are NOT revenue and carry no VAT, so they never
+ *     enter any sales/VAT/revenue figure. They get their own section and are
+ *     split between providers by the same pro-rata rule as the discount.
+ *
  * Anything that has no collection date at all (cancellations, no-shows, money
  * still outstanding) is necessarily counted by `appointment_date` instead, and
  * the view labels it as such.
@@ -98,6 +102,7 @@ class DailyReportService
             'totals'        => $this->reportTotals($transactions),
             'vat'           => $this->vatSummary($transactions),
             'discounts'     => $this->discountSummary($transactions),
+            'tips'          => $this->tipSummary($transactions),
             'operations'    => $this->operationsSummary($transactions, $scheduled),
             'services'      => $this->servicesBreakdown($transactions),
             'employees'     => $this->employeeBreakdown($transactions, $start, $end, $providerIds),
@@ -288,7 +293,8 @@ class DailyReportService
      * The discount lives on the invoice alone, so it is spread pro-rata over the
      * appointments by their gross share. This guarantees
      * Σ(coverage amounts) == invoice.total_amount, which is what makes the
-     * employee table foot to the sales summary.
+     * employee table foot to the sales summary. The tip is split the same way
+     * (the last row absorbs the rounding remainder), so Σ(tip shares) == tip.
      *
      * @return array<int, array<string,mixed>>
      */
@@ -301,9 +307,11 @@ class DailyReportService
         $grossTotal = (float) $appointments->sum(fn (Appointment $a) => (float) $a->total_amount);
         $discount   = (float) ($invoice->discount_amount ?? 0);
         $netTotal   = (float) $invoice->total_amount;
+        $tipTotal   = (float) ($invoice->tip_amount ?? 0);
 
         $rows = [];
         $allocated = 0.0;
+        $tipAllocated = 0.0;
         $lastIndex = $appointments->count() - 1;
 
         foreach ($appointments->values() as $index => $appointment) {
@@ -313,13 +321,17 @@ class DailyReportService
                 // The final row absorbs the rounding remainder so the split is
                 // exact rather than off by a cent.
                 $amount = round($netTotal - $allocated, 2);
+                $tip    = round($tipTotal - $tipAllocated, 2);
             } elseif ($grossTotal > 0) {
                 $amount = round($gross * ($netTotal / $grossTotal), 2);
+                $tip    = round($gross * ($tipTotal / $grossTotal), 2);
             } else {
                 $amount = 0.0;
+                $tip    = 0.0;
             }
 
-            $allocated = round($allocated + $amount, 2);
+            $allocated    = round($allocated + $amount, 2);
+            $tipAllocated = round($tipAllocated + $tip, 2);
 
             $rows[] = [
                 'appointment_id' => $appointment->id,
@@ -329,6 +341,7 @@ class DailyReportService
                 'amount'         => $amount,
                 'gross'          => $gross,
                 'discount_share' => $grossTotal > 0 ? round($gross * ($discount / $grossTotal), 2) : 0.0,
+                'tip_share'      => $tip,
                 'services'       => $appointment->services_record
                     ->map(fn ($r) => [
                         'name'  => $r->service_name ?: ($r->service?->name ?? '—'),
@@ -543,6 +556,56 @@ class DailyReportService
     }
 
     /**
+     * Tips collected, kept apart from sales: not revenue, no VAT. Split by the
+     * drawer they landed in (so cash in the drawer = cash sales + cash tips)
+     * and by the provider they belong to.
+     */
+    private function tipSummary(Collection $transactions): array
+    {
+        $byMethod = ['cash' => 0.0, 'card' => 0.0, 'online' => 0.0];
+        $byProvider = [];
+        $count = 0;
+
+        foreach ($transactions as $t) {
+            $tip = $this->tipOf($t);
+            if ($tip <= 0) {
+                continue;
+            }
+
+            $count++;
+            $byMethod[$t['method']] = round($byMethod[$t['method']] + $tip, 2);
+
+            foreach ($t['coverage'] as $c) {
+                if ($c['tip_share'] <= 0) {
+                    continue;
+                }
+
+                $byProvider[$c['provider_id']] ??= [
+                    'provider_id'   => $c['provider_id'],
+                    'provider_name' => $c['provider_name'],
+                    'amount'        => 0.0,
+                ];
+                $byProvider[$c['provider_id']]['amount'] = round(
+                    $byProvider[$c['provider_id']]['amount'] + $c['tip_share'],
+                    2
+                );
+            }
+        }
+
+        $providers = array_values($byProvider);
+        usort($providers, fn ($a, $b) => $b['amount'] <=> $a['amount']);
+
+        return [
+            'total'     => round(array_sum($byMethod), 2),
+            'count'     => $count,
+            'cash'      => $byMethod['cash'],
+            'card'      => $byMethod['card'],
+            'online'    => $byMethod['online'],
+            'providers' => $providers,
+        ];
+    }
+
+    /**
      * Non-money operational context. Source split comes from the paid receipts;
      * cancellations / no-shows / outstanding necessarily come from the schedule,
      * because unpaid bookings have no collection date to be filed under.
@@ -639,10 +702,12 @@ class DailyReportService
                     'card'          => 0.0,
                     'online'        => 0.0,
                     'total'         => 0.0,
+                    'tips'          => 0.0,
                     'customer_keys' => [],
                     'service_tally' => [],
                 ];
 
+                $rows[$pid]['tips'] = round($rows[$pid]['tips'] + $c['tip_share'], 2);
                 $rows[$pid]['appointments']++;
                 $rows[$pid]['services'] += count($c['services']);
                 $rows[$pid][$method] = round($rows[$pid][$method] + $c['amount'], 2);
@@ -669,6 +734,7 @@ class DailyReportService
                 'card'          => 0.0,
                 'online'        => 0.0,
                 'total'         => 0.0,
+                'tips'          => 0.0,
                 'customer_keys' => [],
                 'service_tally' => [],
             ];
@@ -701,6 +767,7 @@ class DailyReportService
                 'card'         => round(array_sum(array_column($rows, 'card')), 2),
                 'online'       => round(array_sum(array_column($rows, 'online')), 2),
                 'total'        => round(array_sum(array_column($rows, 'total')), 2),
+                'tips'         => round(array_sum(array_column($rows, 'tips')), 2),
                 'avg_ticket'   => array_sum(array_column($rows, 'appointments')) > 0
                     ? round(array_sum(array_column($rows, 'total')) / array_sum(array_column($rows, 'appointments')), 2)
                     : 0.0,
@@ -811,6 +878,7 @@ class DailyReportService
                 'provider'       => $providers ?: '—',
                 'method'         => $t['method'],
                 'amount'         => $this->amountOf($t),
+                'tip'            => $this->tipOf($t),
             ];
         })->all();
     }
@@ -823,6 +891,12 @@ class DailyReportService
     private function amountOf(array $transaction): float
     {
         return round(collect($transaction['coverage'])->sum(fn (array $c) => $c['amount']), 2);
+    }
+
+    /** The tip this report counts for a transaction (post provider-filter). */
+    private function tipOf(array $transaction): float
+    {
+        return round(collect($transaction['coverage'])->sum(fn (array $c) => $c['tip_share']), 2);
     }
 
     /**

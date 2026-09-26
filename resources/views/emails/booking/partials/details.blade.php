@@ -1,6 +1,18 @@
 {{-- Shared booking details block (services table + totals + meta) --}}
 {{-- Expects: $appointment, $currency --}}
 @php
+    // A booking split into several blocks (BOOKING-GAP-01) lists every block;
+    // a single-block booking renders exactly as it always has, below.
+    $blocks = collect([$appointment])
+        ->merge($appointment->relationLoaded('children') ? $appointment->children : collect())
+        ->filter(fn ($block) => $block->isActiveInGroup())
+        ->sortBy('start_time')
+        ->values();
+@endphp
+@if ($blocks->count() > 1)
+@include('emails.booking.partials.group-details', ['appointment' => $appointment, 'blocks' => $blocks, 'currency' => $currency])
+@else
+@php
     $servicesRecords = $appointment->relationLoaded('services_record')
         ? $appointment->services_record->sortBy('sequence_order')
         : $appointment->services_record()->orderBy('sequence_order')->get();
@@ -74,3 +86,4 @@
         <td style="padding: 8px 12px; font-weight: 700; font-size: 16px; text-align: end; border-top: 2px solid #e5e7eb;">{{ $currency }} {{ number_format((float) $appointment->total_amount, 2) }}</td>
     </tr>
 </table>
+@endif

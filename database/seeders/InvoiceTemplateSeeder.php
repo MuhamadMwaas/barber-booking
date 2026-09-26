@@ -321,10 +321,29 @@ class InvoiceTemplateSeeder extends Seeder
             'type' => 'two_column',
             'order' => 9,
             'properties' => [
+                'label' => 'Trinkgeld',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.tip',
+                'font_size' => 9,
+                'label_bold' => false,
+                'alignment' => 'left',
+                'margin_bottom' => 1,
+                // Only printed when the customer left a tip.
+                'hide_when_empty' => true,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 10,
+            'properties' => [
                 'label' => 'Gegeben Eur',
                 'label_width' => 60,
                 'value_type' => 'dynamic',
-                'dynamic_field' => 'payment.amount',
+                // Total + tip: what the customer actually handed over.
+                'dynamic_field' => 'invoice.paid_amount',
                 'font_size' => 9,
                 'label_bold' => false,
                 'alignment' => 'left',
@@ -335,7 +354,7 @@ class InvoiceTemplateSeeder extends Seeder
         $template->lines()->create([
             'section' => 'body',
             'type' => 'text',
-            'order' => 10,
+            'order' => 11,
             'properties' => [
                 'content_type' => 'static',
                 'static_value' => 'Bezahlt per Girocard',
@@ -731,10 +750,29 @@ class InvoiceTemplateSeeder extends Seeder
             'type' => 'two_column',
             'order' => 9,
             'properties' => [
+                'label' => 'Tip',
+                'label_width' => 60,
+                'value_type' => 'dynamic',
+                'dynamic_field' => 'invoice.tip',
+                'font_size' => 9,
+                'label_bold' => false,
+                'alignment' => 'left',
+                'margin_bottom' => 1,
+                // Only printed when the customer left a tip.
+                'hide_when_empty' => true,
+            ],
+        ]);
+
+        $template->lines()->create([
+            'section' => 'body',
+            'type' => 'two_column',
+            'order' => 10,
+            'properties' => [
                 'label' => 'Paid Eur',
                 'label_width' => 60,
                 'value_type' => 'dynamic',
-                'dynamic_field' => 'payment.amount',
+                // Total + tip: what the customer actually handed over.
+                'dynamic_field' => 'invoice.paid_amount',
                 'font_size' => 9,
                 'label_bold' => false,
                 'alignment' => 'left',
@@ -745,7 +783,7 @@ class InvoiceTemplateSeeder extends Seeder
         $template->lines()->create([
             'section' => 'body',
             'type' => 'text',
-            'order' => 10,
+            'order' => 11,
             'properties' => [
                 'content_type' => 'static',
                 'static_value' => 'Paid by Girocard',

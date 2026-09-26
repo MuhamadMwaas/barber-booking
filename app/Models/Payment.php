@@ -17,6 +17,7 @@ class Payment extends Model
         'payment_method_id',
         'payment_number',
         'amount',
+        'tip_amount',
         'subtotal',
         'status',
         'payment_gateway_id',
@@ -29,6 +30,7 @@ class Payment extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'tip_amount' => 'decimal:2',
         'subtotal' => 'decimal:2',
         'tax_amount' => 'decimal:2',
         'status' => PaymentStatus::class,

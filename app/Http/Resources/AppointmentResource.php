@@ -70,6 +70,36 @@ class AppointmentResource extends JsonResource
                 AppointmentServiceResource::collection($this->services_record)
             ),
 
+            /*
+             * Linked booking (BOOKING-GAP-01). A booking whose services are not
+             * back-to-back at one provider is stored as one appointment per
+             * block: the earliest block is the root, the others its children,
+             * and every block appears in the lists as its own card. These keys
+             * are additive — nothing above changed shape — so an app that does
+             * not know them keeps working.
+             *
+             *  - group_root_id: the same value on every block of one booking.
+             *  - linked_appointments / group_total_amount: on the ROOT only, and
+             *    only when its children are loaded (the create response and the
+             *    detail endpoints) — never in the lists, so no query per card.
+             *    A child's own `children` is always empty, so on a child these
+             *    would claim a one-block group; they are omitted instead.
+             */
+            'parent_appointment_id' => $this->parent_appointment_id,
+            'group_root_id' => $this->group_root_id,
+            'is_child_booking' => $this->parent_appointment_id !== null,
+            'linked_appointments' => $this->when(
+                $this->parent_appointment_id === null && $this->relationLoaded('children'),
+                fn () => LinkedAppointmentResource::collection($this->children->sortBy('start_time')->values())
+            ),
+            'group_total_amount' => $this->when(
+                $this->parent_appointment_id === null && $this->relationLoaded('children'),
+                fn () => (float) collect([$this->resource])
+                    ->merge($this->children)
+                    ->filter(fn ($member) => $member->isActiveInGroup())
+                    ->sum('total_amount')
+            ),
+
             'booking_source' => $this->booking_source?->value,
             'notes' => $this->notes,
             'created_at' => $this->created_at->format('Y-m-d H:i:s'),

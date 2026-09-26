@@ -112,6 +112,9 @@ class AppointmentService
                 'services.category:id,name,description',
                 'services_record',
                 'activeReminder',
+                // The other blocks of a split booking (BOOKING-GAP-01).
+                'children.services_record',
+                'children.provider',
             ])->findOrFail($appointmentId);
 
 

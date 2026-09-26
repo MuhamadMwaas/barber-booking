@@ -13,6 +13,7 @@ return [
     // Zusammenfassung
     'items_total'       => 'Artikel gesamt',
     'discount'          => 'Rabatt',
+    'tip'               => 'Trinkgeld',
     'subtotal_net'      => 'Netto',
 
     // Zahlungsinformationen

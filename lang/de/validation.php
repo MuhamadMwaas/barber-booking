@@ -108,7 +108,7 @@ return [
     'not_in' => 'Der ausgewaehlte Wert fuer :attribute ist ungueltig.',
     'not_regex' => 'Das Format des Feldes :attribute ist ungueltig.',
     'numeric' => 'Das Feld :attribute muss eine Zahl sein.',
-    'phone' => 'Das Feld :attribute muss eine gueltige internationale Telefonnummer sein, z. B. +49 30 1234567.',
+    'phone' => 'Die :attribute ist ungueltig. Bitte im deutschen Format oder mit Laendervorwahl eingeben, z. B. 01522 3917565 oder +49 1522 3917565.',
     'password' => [
         'letters' => 'Das Feld :attribute muss mindestens einen Buchstaben enthalten.',
         'mixed' => 'Das Feld :attribute muss mindestens einen Gross- und einen Kleinbuchstaben enthalten.',
@@ -158,6 +158,11 @@ return [
         'attribute-name' => [
             'rule-name' => 'benutzerdefinierte-nachricht',
         ],
+        'phone' => [
+            'unique' => 'Diese Handynummer ist bereits registriert. Bitte melden Sie sich an.',
+        ],
     ],
-    'attributes' => [],
+    'attributes' => [
+        'phone' => 'Handynummer',
+    ],
 ];

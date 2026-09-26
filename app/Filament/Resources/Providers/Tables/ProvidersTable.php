@@ -56,7 +56,8 @@ class ProvidersTable
 
                 TextColumn::make('services_count')
                     ->label(__('resources.provider_resource.services'))
-                    ->counts('services')
+                    // Active links only — a switched-off link cannot be booked.
+                    ->counts(['services' => fn ($query) => $query->where('provider_service.is_active', true)])
                     ->badge()
                     ->color('info')
                     ->sortable(),

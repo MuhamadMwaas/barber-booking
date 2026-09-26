@@ -198,7 +198,7 @@ class UserInfolist
                                     ->size('lg')
                                     ->weight(FontWeight::Bold)
                                     ->color('primary')
-                                    ->getStateUsing(fn ($record) => $record->services()->count()),
+                                    ->getStateUsing(fn ($record) => $record->services()->wherePivot('is_active', true)->count()),
 
                                 TextEntry::make('completed_bookings')
                                     ->label(__('resources.user.completed_bookings'))
@@ -345,12 +345,20 @@ class UserInfolist
                                     ->badge()
                                     ->separator(',')
                                     ->getStateUsing(function ($record) {
+                                        // A link switched off in provider_service cannot be booked,
+                                        // so it is labelled instead of listed as a plain offer.
                                         $services = $record->services()
-                                            ->pluck('services.name')
+                                            ->get()
+                                            ->map(fn ($service) => $service->pivot->is_active
+                                                ? $service->name
+                                                : $service->name . ' — ' . __('resources.provider_resource.service_link_inactive'))
                                             ->toArray();
 
                                         return $services ?: [__('resources.user.no_services')];
                                     })
+                                    ->color(fn (string $state): string => str_ends_with($state, ' — ' . __('resources.provider_resource.service_link_inactive'))
+                                        ? 'gray'
+                                        : 'primary')
                                     ->listWithLineBreaks()
                                     ->bulleted()
                                     ->columnSpan(1),

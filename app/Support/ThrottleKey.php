@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Services\Sms\PhoneNumberNormalizer;
 use Illuminate\Http\Request;
 
 /**
@@ -73,14 +74,15 @@ final class ThrottleKey
             return null;
         }
 
-        // Phone numbers arrive formatted in many ways (+49 30 123, 0049-30-123).
-        // Reducing to digits and a leading + keeps one bucket per real number.
-        // Deliberately NOT using Services\Sms\PhoneNumberNormalizer: that class may
-        // reject input it considers invalid, and a throttle key must be derivable
-        // from malformed input too — that is precisely when it is under attack.
+        // Phone numbers arrive formatted in many ways, and since the API accepts
+        // "015223917565", "15223917565", "0049…" and "+49…" as ONE account, the
+        // key must fold them into one bucket too — otherwise rotating spellings
+        // quadruples the per-account budget. PhoneNumberNormalizer is total (it
+        // never rejects; junk just yields "+digits" or ''), so a throttle key is
+        // still derivable from malformed input, which is when it matters most.
         $normalised = str_contains($value, '@')
             ? mb_strtolower($value)
-            : (string) preg_replace('/(?!^\+)\D/', '', $value);
+            : app(PhoneNumberNormalizer::class)->normalize($value, config('sms.default_country_code'));
 
         return $normalised === '' ? null : $normalised;
     }

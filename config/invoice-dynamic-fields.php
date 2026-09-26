@@ -175,8 +175,14 @@ return [
             'example' => '-10.00',
         ],
 
+        'invoice.tip' => [
+            'label' => 'Tip (+ amount, blank if none)',
+            'category' => 'Totals',
+            'example' => '+5.00',
+        ],
+
         'invoice.paid_amount' => [
-            'label' => 'Paid Amount',
+            'label' => 'Paid Amount (total + tip)',
             'category' => 'Totals',
             'example' => '350.00',
         ],

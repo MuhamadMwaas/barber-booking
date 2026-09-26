@@ -25,6 +25,7 @@ class Invoice extends Model
         'tax_rate',
         'total_amount',
         'discount_amount',
+        'tip_amount',
         'status',
         'notes',
         'invoice_data',
@@ -42,6 +43,7 @@ class Invoice extends Model
         'tax_rate' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'discount_amount' => 'decimal:2',
+        'tip_amount' => 'decimal:2',
         'invoice_data' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
@@ -260,9 +262,10 @@ class Invoice extends Model
         }
 
         // The invoice always lives on the PARENT (or standalone).
-        // So $this->appointment is the root of the linked group.
+        // So $this->appointment is the root of the linked group. Cancelled and
+        // no-show blocks are not on the invoice, so they are not "covered".
         return $this->appointment
-            ->linkedGroup()
+            ->activeLinkedGroup()
             ->with(['services_record.service', 'provider'])
             ->orderByRaw('COALESCE(parent_appointment_id, id) ASC') // parent first (null), then children
             ->orderBy('start_time', 'asc')

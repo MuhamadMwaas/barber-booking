@@ -6,17 +6,28 @@ namespace App\Services\Sms;
  * Turns a human-formatted phone number into the bare international form every
  * SMS gateway expects.
  *
- * This is not cosmetic. Numbers in this database are stored with separators —
- * "+971-50-101-0101" is the norm, not the exception — and seven.io rejects those
- * outright with code 202 (invalid recipient). Normalising at the gateway edge
- * means no other part of the app has to care.
+ * This is not cosmetic. seven.io rejects numbers with separators outright with
+ * code 202 (invalid recipient). The API now stores users.phone already in this
+ * form (see App\Rules\PhoneNumber::toE164()), but staff-entered numbers can still
+ * carry separators, so the gateway edge keeps normalising too.
  */
 class PhoneNumberNormalizer
 {
     /**
-     * @param  string|null  $defaultCountryCode  Digits only, no "+". Used only for
+     * Bare digits at least this long that already start with the default country
+     * code are read as a full international number typed without its "+".
+     *
+     * "4915223917565" (13 digits) is +49 1522 3917565, not +49 4915223917565.
+     * German numbers without their trunk zero are 10-11 digits long, so twelve is
+     * the first length that cannot be one of them.
+     */
+    private const MIN_INTERNATIONAL_DIGITS = 12;
+
+    /**
+     * @param  string|null  $defaultCountryCode  Digits only, no "+". Used for
      *                                           numbers written in national format
-     *                                           with a single leading zero.
+     *                                           (a single leading zero) and for
+     *                                           bare digits with no prefix at all.
      */
     public function normalize(string $phone, ?string $defaultCountryCode = null): string
     {
@@ -56,9 +67,21 @@ class PhoneNumberNormalizer
                 : '+' . $defaultCountryCode . ltrim($digits, '0');
         }
 
-        // Already international, just without the "+" — seven.io accepts this,
-        // but adding the "+" removes any ambiguity.
-        return '+' . $digits;
+        // No country configured: read the digits as already international, just
+        // without the "+" — the behaviour gateways document for this form.
+        if ($defaultCountryCode === null) {
+            return '+' . $digits;
+        }
+
+        // The country code typed without its "+": "4915223917565".
+        if (str_starts_with($digits, $defaultCountryCode) && strlen($digits) >= self::MIN_INTERNATIONAL_DIGITS) {
+            return '+' . $digits;
+        }
+
+        // A national number whose trunk zero was dropped: "15223917565". Reading
+        // it as international would make it +1 522… — a US number the OTP is
+        // texted to and never arrives.
+        return '+' . $defaultCountryCode . $digits;
     }
 
     /**

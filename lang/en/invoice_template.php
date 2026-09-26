@@ -13,6 +13,7 @@ return [
     // Totals summary
     'items_total'       => 'Items total',
     'discount'          => 'Discount',
+    'tip'               => 'Tip',
     'subtotal_net'      => 'Subtotal (Net)',
 
     // Payment info

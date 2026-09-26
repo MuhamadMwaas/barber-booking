@@ -9,6 +9,7 @@ use App\Rules\PasswordRequirements;
 use App\Rules\PhoneNumber;
 use App\Services\AccountDeletionService;
 use App\Support\ImageUploadRules;
+use App\Support\PhoneInput;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -27,6 +28,11 @@ class ProfileController extends Controller
     public function update(Request $request)
     {
         $user = $request->user();
+
+        // Stored form, so `unique` and the "did it change?" check below compare
+        // like with like — re-saving one's own number in another spelling is
+        // not a change and must not drop its verification.
+        PhoneInput::canonicalize($request);
 
         $data = $request->validate([
             'first_name' => 'sometimes|string|max:255',

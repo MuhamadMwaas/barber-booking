@@ -3,7 +3,8 @@
 namespace App\Filament\Resources\Services\RelationManagers;
 
 use App\Enum\AppointmentStatus;
-use App\Filament\Resources\Services\ServiceResource;
+use App\Filament\Resources\Providers\ProviderResource;
+use App\Models\User;
 use Filament\Actions\AttachAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DetachAction;
@@ -20,16 +21,31 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class ProvidersRelationManager extends RelationManager
 {
     protected static string $relationship = 'providers';
 
-    protected static ?string $relatedResource = ServiceResource::class;
+    // No $relatedResource here: the rows are providers (User), not services.
+    // A $relatedResource injects that resource's table, form and infolist into
+    // this manager, and its ViewAction survives our recordActions() as a hidden
+    // row-click action — pointing it at ServiceResource rendered ServiceInfolist
+    // against a User and crashed. Row clicks go to the provider page instead.
+
+    public static function getTitle(Model $ownerRecord, string $pageClass): string
+    {
+        return __('resources.service.providers');
+    }
 
     public function table(Table $table): Table
     {
         return $table
+            ->modelLabel(ProviderResource::getModelLabel())
+            ->pluralModelLabel(ProviderResource::getPluralModelLabel())
+            ->recordUrl(fn (User $record): ?string => $record->hasRole('provider') && ProviderResource::canView($record)
+                ? ProviderResource::getUrl('view', ['record' => $record])
+                : null)
             ->columns([
                 // صورة مقدم الخدمة
                 ImageColumn::make('profile_image_url')

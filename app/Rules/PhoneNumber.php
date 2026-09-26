@@ -5,6 +5,7 @@ namespace App\Rules;
 use App\Services\Sms\PhoneNumberNormalizer;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Contracts\Validation\Validator;
 
 /**
  * Validates that a phone number is a real, reachable international number
@@ -13,15 +14,15 @@ use Illuminate\Contracts\Validation\ValidationRule;
  * WHY THIS IS NOT A BARE REGEX
  *
  * The audit proposed `regex:/^\+[1-9]\d{7,14}$/` against the raw input. That
- * regex is the right *definition* of E.164 and the wrong *subject*: this
- * database deliberately stores numbers in human form — "+971-50-101-0101" is
- * the norm, see `config/sms.php` — and normalises only at the SMS gateway edge.
- * Applied to the raw string, the regex matches ZERO of the numbers currently
- * stored, so the first time an existing user pressed "save profile" with their
- * own unchanged number in the payload they would get a 422.
+ * regex is the right *definition* of E.164 and the wrong *subject*: users type
+ * "0152 2391 7565", "+49-1522-3917565" and "0049 1522 3917565" for one number,
+ * and the app must accept all of them.
  *
  * So the rule normalises first and validates the result. Punctuation a human
- * added is not a security property; the digits underneath are.
+ * added is not a security property; the digits underneath are. Since the
+ * German-prefix fix the API also STORES the normalised form — see toE164() and
+ * App\Support\PhoneInput — so lookups and the unique check compare like with
+ * like.
  *
  * Reusing Services\Sms\PhoneNumberNormalizer is the point, not a convenience:
  * it means a number that passes validation is by construction a number the SMS
@@ -52,9 +53,52 @@ class PhoneNumber implements ValidationRule
         }
     }
 
+    /** Returned to the client when a phone number cannot be read as a real number. */
+    public const ERROR_INVALID = 'INVALID_PHONE_NUMBER';
+
+    /** Returned when the number already belongs to another account. */
+    public const ERROR_TAKEN = 'PHONE_ALREADY_EXISTS';
+
     public static function isValid(?string $phone): bool
     {
         return preg_match(self::E164, self::normalize($phone)) === 1;
+    }
+
+    /**
+     * The form users.phone is stored and looked up in ("+4915223917565"), or
+     * null when the input is not a valid number.
+     *
+     * Every API path that accepts a phone passes it through here before it is
+     * validated, stored or compared, so "015223917565", "0049 1522 3917565" and
+     * "+49 1522 3917565" are one account, not three.
+     */
+    public static function toE164(mixed $phone): ?string
+    {
+        if (! is_string($phone)) {
+            return null;
+        }
+
+        $normalized = self::normalize($phone);
+
+        return preg_match(self::E164, $normalized) === 1 ? $normalized : null;
+    }
+
+    /**
+     * The machine-readable reason a validator rejected the phone field, or null
+     * when the phone field did not fail (or failed only as "required").
+     *
+     * Read from failed() rather than from the message text, so the code stays
+     * stable across languages and wording changes.
+     */
+    public static function errorCode(Validator $validator, string $field = 'phone'): ?string
+    {
+        $failed = $validator->failed()[$field] ?? [];
+
+        return match (true) {
+            array_key_exists(self::class, $failed) => self::ERROR_INVALID,
+            array_key_exists('Unique', $failed) => self::ERROR_TAKEN,
+            default => null,
+        };
     }
 
     /**

@@ -10,7 +10,9 @@ use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\AccountVerificationService;
 use App\Services\OtpService;
+use App\Support\PhoneInput;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -39,23 +41,31 @@ class PhoneVerificationController extends Controller
      */
     public function sendOtp(Request $request)
     {
+        /** @var User $user */
+        $user = $request->user();
+
+        // Stored form, so the comparison below and `unique` see one spelling.
+        PhoneInput::canonicalize($request);
+
         $request->validate([
             // AUTH-07: this endpoint writes users.phone too, so it carries the
             // same rule. A format check on one of two write paths is not a
             // format check.
-            'phone' => ['sometimes', 'string', 'max:20', new PhoneNumber],
+            //
+            // `unique` is a rule here (it used to be a hand-written query) so
+            // that a taken number fails with the same PHONE_ALREADY_EXISTS code
+            // as registration — see PhoneNumber::errorCode().
+            'phone' => [
+                'sometimes', 'string', 'max:20', new PhoneNumber,
+                Rule::unique('users', 'phone')->ignore($user->id),
+            ],
         ]);
-
-        /** @var User $user */
-        $user = $request->user();
 
         // (1) Adopt a new/edited phone number before sending, if provided.
         if ($request->filled('phone')) {
-            $newPhone = trim((string) $request->input('phone'));
+            $newPhone = (string) $request->input('phone');
 
             if ($newPhone !== (string) $user->phone) {
-                $this->ensurePhoneIsAvailable($newPhone, $user);
-
                 $user->forceFill([
                     'phone' => $newPhone,
                     'phone_verified_at' => null,
@@ -157,23 +167,5 @@ class PhoneVerificationController extends Controller
             'message' => 'Your phone number has been verified successfully.',
             'data' => new UserResource($user),
         ]);
-    }
-
-    /**
-     * Reject a phone number that is already taken by another account, matching
-     * the database-level unique(phone) constraint with a friendly 422.
-     */
-    private function ensurePhoneIsAvailable(string $phone, User $user): void
-    {
-        $exists = User::query()
-            ->where('phone', $phone)
-            ->where('id', '!=', $user->id)
-            ->exists();
-
-        if ($exists) {
-            throw ValidationException::withMessages([
-                'phone' => ['This phone number is already in use by another account.'],
-            ]);
-        }
     }
 }

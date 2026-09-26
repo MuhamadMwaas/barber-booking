@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\ProviderTimeOff;
 use App\Models\User;
+use App\Support\DateFormat;
 use App\Traits\NavigationDefaultAccess;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
@@ -75,13 +76,19 @@ class ManageProviderLeaves extends Page implements HasTable, HasForms
 
                 TextColumn::make('start_date')
                     ->label(__('resources.provider_resource.start_date'))
-                    ->date('Y-m-d')
+                    ->date(fn (): string => DateFormat::date())
+                    ->description(fn (ProviderTimeOff $record): ?string => $record->type === ProviderTimeOff::TYPE_HOURLY
+                        ? $record->start_time?->format(DateFormat::time())
+                        : null)
                     ->icon('heroicon-o-calendar')
                     ->sortable(),
 
                 TextColumn::make('end_date')
                     ->label(__('resources.provider_resource.end_date'))
-                    ->date('Y-m-d')
+                    ->date(fn (): string => DateFormat::date())
+                    ->description(fn (ProviderTimeOff $record): ?string => $record->type === ProviderTimeOff::TYPE_HOURLY
+                        ? $record->end_time?->format(DateFormat::time())
+                        : null)
                     ->icon('heroicon-o-calendar')
                     ->sortable(),
 

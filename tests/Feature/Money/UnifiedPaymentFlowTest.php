@@ -12,6 +12,7 @@ use App\Enum\AppointmentStatus;
 use App\Enum\InvoiceStatus;
 use App\Enum\PaymentStatus;
 use App\Models\Appointment;
+use App\Models\InvoiceTemplate;
 use App\Models\AppointmentService;
 use App\Models\Invoice;
 use App\Models\Payment;
@@ -19,6 +20,7 @@ use App\Models\PaymentMethod;
 use App\Services\BookingService;
 use App\Services\InvoiceFinalizationService;
 use App\Services\InvoiceService;
+use App\Services\InvoiceTemplate\DynamicFieldResolver;
 use App\Services\TaxCalculatorService;
 use Illuminate\Support\Carbon;
 use Tests\Support\SalonFixture;
@@ -153,7 +155,87 @@ it('finalizes one invoice and completes the parent and every linked appointment 
         ->and($child->fresh()->payment_status)->toBe(PaymentStatus::PAID_ONSTIE_CASH);
 });
 
-it('rejects zero, overpayment, inactive methods and non-onsite methods without partial writes', function (
+it('treats a higher amount as the full price plus a tip outside the taxed totals', function () {
+    $appointment = bookForUnifiedPayment();
+    $expectedSplit = app(TaxCalculatorService::class)->extractTax('100.00', '19', 2);
+
+    $invoice = app(InvoiceFinalizationService::class)->finalizeAppointmentPayment(
+        appointment: $appointment,
+        paymentMethod: 'cash',
+        finalAmount: 115.00,
+        source: 'staff_dashboard',
+    );
+
+    $payment = $invoice->payments()->sole();
+
+    // The sale and its VAT are exactly the full-price ones; the tip sits beside them.
+    expect($invoice->status)->toBe(InvoiceStatus::PAID)
+        ->and($invoice->total_amount)->toEqual('100.00')
+        ->and($invoice->discount_amount)->toEqual('0.00')
+        ->and($invoice->tip_amount)->toEqual('15.00')
+        ->and($invoice->subtotal)->toEqual($expectedSplit['net'])
+        ->and($invoice->tax_amount)->toEqual($expectedSplit['tax'])
+        ->and($invoice->invoice_data['tip_amount'])->toBe('15.00')
+        ->and($payment->amount)->toEqual('100.00')
+        ->and($payment->tip_amount)->toEqual('15.00')
+        ->and($payment->subtotal)->toEqual($invoice->subtotal)
+        ->and($payment->tax_amount)->toEqual($invoice->tax_amount)
+        ->and($appointment->fresh()->status)->toBe(AppointmentStatus::COMPLETED);
+});
+
+it('records no tip for a full or discounted payment', function (?float $amount, string $total, string $discount) {
+    $invoice = app(InvoiceFinalizationService::class)->finalizeAppointmentPayment(
+        appointment: bookForUnifiedPayment(),
+        paymentMethod: 'cash',
+        finalAmount: $amount,
+    );
+
+    expect($invoice->total_amount)->toEqual($total)
+        ->and($invoice->discount_amount)->toEqual($discount)
+        ->and($invoice->tip_amount)->toEqual('0.00')
+        ->and($invoice->payments()->sole()->tip_amount)->toEqual('0.00');
+})->with([
+    'full price' => [null, '100.00', '0.00'],
+    'exact amount typed' => [100.00, '100.00', '0.00'],
+    'discount' => [90.00, '90.00', '10.00'],
+]);
+
+it('prints the tip and the amount actually handed over on the receipt', function () {
+    $invoice = app(InvoiceFinalizationService::class)->finalizeAppointmentPayment(
+        appointment: bookForUnifiedPayment(),
+        paymentMethod: 'cash',
+        finalAmount: 105.00,
+    );
+    $resolver = new DynamicFieldResolver($invoice, new InvoiceTemplate(['language' => 'de']));
+
+    expect($resolver->resolve('invoice.total'))->toBe('100.00')
+        ->and($resolver->resolve('invoice.tip'))->toBe('+5.00')
+        ->and($resolver->resolve('invoice.paid_amount'))->toBe('105.00');
+
+    $untipped = app(InvoiceFinalizationService::class)->finalizeAppointmentPayment(
+        appointment: bookForUnifiedPayment('12:00'),
+        paymentMethod: 'cash',
+    );
+    $resolver = new DynamicFieldResolver($untipped, new InvoiceTemplate(['language' => 'de']));
+
+    // Blank so the hide_when_empty tip line disappears on a receipt without a tip.
+    expect($resolver->resolve('invoice.tip'))->toBe('')
+        ->and($resolver->resolve('invoice.paid_amount'))->toBe('100.00');
+});
+
+it('reports payment errors in the language of the current user', function (string $locale, string $message) {
+    app()->setLocale($locale);
+
+    expect(fn () => app(InvoiceFinalizationService::class)
+        ->finalizeAppointmentPayment(bookForUnifiedPayment(), 'cash', 0.00))
+        ->toThrow(InvalidArgumentException::class, $message);
+})->with([
+    'german' => ['de', 'Der Zahlungsbetrag muss größer als null sein.'],
+    'english' => ['en', 'The payment amount must be greater than zero.'],
+    'arabic' => ['ar', 'يجب أن يكون مبلغ الدفع أكبر من صفر.'],
+]);
+
+it('rejects zero, inactive methods and non-onsite methods without partial writes', function (
     string $case
 ) {
     $appointment = bookForUnifiedPayment();
@@ -161,7 +243,6 @@ it('rejects zero, overpayment, inactive methods and non-onsite methods without p
 
     $method = match ($case) {
         'zero' => 'cash',
-        'overpayment' => 'cash',
         'inactive' => PaymentMethod::create([
             'name' => 'Disabled Cash',
             'code' => 'offcash',
@@ -178,7 +259,6 @@ it('rejects zero, overpayment, inactive methods and non-onsite methods without p
 
     $amount = match ($case) {
         'zero' => 0.00,
-        'overpayment' => 101.00,
         default => null,
     };
 
@@ -188,7 +268,7 @@ it('rejects zero, overpayment, inactive methods and non-onsite methods without p
     expect($appointment->invoice->fresh()->status)->toBe(InvoiceStatus::DRAFT)
         ->and($appointment->fresh()->status)->toBe(AppointmentStatus::PENDING)
         ->and(Payment::query()->count())->toBe(0);
-})->with(['zero', 'overpayment', 'inactive', 'online']);
+})->with(['zero', 'inactive', 'online']);
 
 it('has no alternate invoice finalization method left in InvoiceService', function () {
     expect(method_exists(InvoiceService::class, 'finalizeDraftInvoice'))->toBeFalse()

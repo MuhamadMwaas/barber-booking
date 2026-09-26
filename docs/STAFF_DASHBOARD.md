@@ -730,15 +730,17 @@ with(['services', 'services_record.service', 'customer', 'provider', 'invoice'])
 
 > اختر خدمة + وقت، ثم اعرض أي providers متاحين في هذا الوقت
 
-هذه الدالة تتحقق من:
+نافذة الحجز تستدعي الآن `getProviderAvailabilityForServiceAtTime()`، وهي تعيد **كل** مزود فعّال مربوط بالخدمة مع `available` و `reason` و `reason_label`. المتاحون يأتون أولاً. غير المتاحين يظهرون باهتين وغير قابلين للاختيار، ومعهم السبب:
 
-- provider works that day
-- الوقت ضمن schedule
-- لا يوجد full day off
-- لا يوجد hourly time off conflict
-- لا يوجد appointment conflict
+| `reason` | المعنى |
+|---|---|
+| `service_disabled` | الربط في `provider_service` موقوف (`is_active = 0`)، وهو النقطة الرمادية في صفحة الخدمة. force booking لا يتجاوزه |
+| `not_working` | لا يوجد جدول دوام لهذا اليوم |
+| `outside_hours` | الـ slot خارج ساعات الدوام |
+| `on_leave` | إجازة تغطي الـ slot: `coveringDate()` + `blocksWindow()`، ويشمل ذلك إجازة بتاريخ نهاية فارغ والإجازة الساعية على عدة أيام |
+| `busy` | حجز متعارض: `blocksProviderTime()` + `overlapping()`. الـ No Show لا يحجز الكرسي |
 
-وتعيد فقط providers المتاحين لهذا slot.
+القواعد هي نفسها قواعد `BookingValidationService`. أي مزود تعلّمه الدالة متاحاً يُقبل عند الحفظ، ويحمي ذلك parity test في `tests/Feature/Booking/DashboardProviderAvailabilityTest.php`. الدالة القديمة `getAvailableProvidersForServiceAtTime()` باقية كغلاف يعيد المتاحين فقط بشكلها القديم.
 
 ### 13.10 `getAppointmentDetails()`
 
@@ -1000,7 +1002,7 @@ cancelAppointment()
 
 ### 17.3 Result
 
-يتم تحديث الموعد إلى:
+الإلغاء يمر عبر `AppointmentCancellationService::cancel()`، المسار الوحيد المشترك مع API العميل وFilament (BOOKING-GAP-01):
 
 ```php
 status = AppointmentStatus::ADMIN_CANCELLED
@@ -1009,6 +1011,15 @@ cancellation_reason = 'Cancelled by staff'
 ```
 
 ثم يغلق المودال ويرسل toast.
+
+### 17.4 الأب والأبناء (BOOKING-GAP-01)
+
+- **لم يعد إلغاء الأب ممنوعاً** إذا كان له أبناء نشطون. الرسالة `dashboard.cannot_cancel_has_children` لم تعد تُستعمل للإلغاء.
+- إلغاء **ابن**: تُعاد بناء فاتورة الأب بدون خدماته.
+- إلغاء **الأب** وله أبناء نشطون: يُرقّى أبكر ابن نشط ليصبح الأب، وتنتقل إليه الفاتورة المسودة، وتُربط به بقية الكتل (بما فيها الأب الملغى).
+- الحذف (§18) **لم يتغير**: حذف أب له أبناء نشطون ما زال ممنوعاً.
+
+الحجز من المودال بخدمات بينها فجوة أو بمزودين مختلفين يُنشئ **موعداً لكل كتلة** مربوطة أب/أبناء، ورسالة النجاح تسرد أرقامها كلها. الـ Timeline يرسمها كبطاقات منفصلة مع خط الربط الموجود أصلاً. «إضافة خدمة» بمزود آخر تُقاس فجوتها على **الكتلة المضغوطة** لا على الأب.
 
 ---
 
@@ -1052,7 +1063,7 @@ openPaymentModal(int $appointmentId)
 يحمّل:
 
 - `selectedAppointmentId`
-- `paymentAmount = SUM(linkedGroup.total_amount)` لأن الفاتورة تغطي الأب والأبناء
+- `paymentAmount = SUM(activeLinkedGroup.total_amount)` لأن الفاتورة تغطي الأب والأبناء **غير الملغاة** (BOOKING-GAP-01)
 - `paymentBaseline` بنفس القيمة لكشف السعر الخاص الحقيقي
 - `paymentType = 'cash'` افتراضيًا، والاختيار الآخر `card`
 
@@ -1114,6 +1125,21 @@ payment.amount = invoice.total_amount
 ```
 
 التفاصيل الكاملة: `docs/fixes/MON-05_unified_payment_flow.md`.
+
+### 19.7 Tip (Trinkgeld) — 2026-09-25
+
+المبلغ **الأعلى** من المجموع ليس خطأ: الفاتورة تُحصَّل بالمجموع الكامل، والفرق
+بقشيش للحلاق يُحفظ في `invoices.tip_amount` و`payments.tip_amount`، **خارج**
+`total_amount/subtotal/tax_amount` (ليس إيراداً ولا ضريبة عليه). يحسم ذلك
+`InvoiceFinalizationService::splitFinalAmount()`.
+
+- المودال يعرض تحت الحقل «حسم ‎-x» أو «بقشيش ‎+x» مباشرة أثناء الكتابة.
+- بقشيش أكبر من الفاتورة نفسها يتطلب مربع تأكيد قبل أن يعمل زر الدفع.
+- الإيصال: سطر `invoice.tip` (`hide_when_empty`) ثم «Gegeben» = `invoice.paid_amount` (المجموع + البقشيش).
+- تقرير Z: قسم Trinkgeld منفصل، يُوزَّع البقشيش على الحلاقين بالتناسب مثل الحسم، و«Bargeld in der Kasse» = نقد المبيعات + نقد البقشيش.
+- رسائل خطأ الدفع صارت مترجمة في `lang/*/payment.php`.
+
+التفاصيل: `docs/fixes/PAY-01_tip_on_overpayment.md`.
 
 ---
 

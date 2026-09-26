@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\AccountVerificationService;
 use App\Services\AuthTokenService;
 use App\Services\OtpService;
+use App\Support\PhoneInput;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -25,6 +26,10 @@ class OtpController extends Controller
 
     public function requestOtp(Request $request)
     {
+        // The OTP row and users.phone both hold the stored form; match it,
+        // whichever way the number was typed.
+        PhoneInput::canonicalize($request);
+
         $request->validate([
             'registration_method' => ['sometimes', Rule::enum(RegistrationMethod::class)],
             'type' => 'sometimes|integer|in:' . OtpType::EMAIL_OTP->value . ',' . OtpType::SMS_OTP->value,
@@ -56,6 +61,10 @@ class OtpController extends Controller
 
     public function verifyOtp(Request $request)
     {
+        // The OTP row and users.phone both hold the stored form; match it,
+        // whichever way the number was typed.
+        PhoneInput::canonicalize($request);
+
         $request->validate([
             'registration_method' => ['sometimes', Rule::enum(RegistrationMethod::class)],
             'type' => 'sometimes|integer|in:' . OtpType::EMAIL_OTP->value . ',' . OtpType::SMS_OTP->value,
@@ -114,6 +123,10 @@ class OtpController extends Controller
 
     public function resendVerificationOtp(Request $request)
     {
+        // The OTP row and users.phone both hold the stored form; match it,
+        // whichever way the number was typed.
+        PhoneInput::canonicalize($request);
+
         $request->validate([
             'registration_method' => ['sometimes', Rule::enum(RegistrationMethod::class)],
             'type' => 'sometimes|integer|in:' . OtpType::EMAIL_OTP->value . ',' . OtpType::SMS_OTP->value,

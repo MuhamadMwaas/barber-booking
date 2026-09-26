@@ -9,13 +9,17 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use App\Filament\Auth\StaffLoginResponse;
 use App\Http\Middleware\EnsureStaffDashboardAccess;
+use App\Support\DateFormat;
 use App\Support\ThrottleKey;
 use App\Services\Landing\LandingContent;
 use App\Services\Sms\SmsGateway;
 use App\Services\Sms\SmsManager;
 use App\Notifications\Filament\TranslatableNotification;
 use Filament\Auth\Http\Responses\Contracts\LoginResponse;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Notifications\Notification as BaseNotification;
+use Filament\Schemas\Schema;
+use Filament\Tables\Table;
 use Livewire\Livewire;
 
 class AppServiceProvider extends ServiceProvider
@@ -78,6 +82,38 @@ class AppServiceProvider extends ServiceProvider
 
         $this->registerAuthRateLimiters();
         $this->registerStaffDashboardPersistentMiddleware();
+        $this->registerFilamentDateFormats();
+    }
+
+    /**
+     * Locale-aware defaults for every Filament date/time the admin displays.
+     *
+     * Covers ->date() / ->dateTime() / ->time() without an explicit format on
+     * table columns and infolist entries, plus every non-native date/time picker.
+     * The fallbacks are Filament's own defaults, so only German changes
+     * (day-first, 24-hour clock — see App\Support\DateFormat).
+     *
+     * Formats are closures so they are resolved per render, after
+     * SetLocaleFromSession has picked the request's locale.
+     */
+    private function registerFilamentDateFormats(): void
+    {
+        Table::configureUsing(fn (Table $table) => $table
+            ->defaultDateDisplayFormat(fn (): string => DateFormat::date('M j, Y'))
+            ->defaultDateTimeDisplayFormat(fn (): string => DateFormat::dateTimeWithSeconds('M j, Y H:i:s'))
+            ->defaultTimeDisplayFormat(fn (): string => DateFormat::timeWithSeconds('H:i:s')));
+
+        Schema::configureUsing(fn (Schema $schema) => $schema
+            ->defaultDateDisplayFormat(fn (): string => DateFormat::date('M j, Y'))
+            ->defaultDateTimeDisplayFormat(fn (): string => DateFormat::dateTimeWithSeconds('M j, Y H:i:s'))
+            ->defaultTimeDisplayFormat(fn (): string => DateFormat::timeWithSeconds('H:i:s')));
+
+        DateTimePicker::configureUsing(fn (DateTimePicker $picker) => $picker
+            ->defaultDateDisplayFormat(fn (): string => DateFormat::date('M j, Y'))
+            ->defaultDateTimeDisplayFormat(fn (): string => DateFormat::dateTime('M j, Y H:i'))
+            ->defaultDateTimeWithSecondsDisplayFormat(fn (): string => DateFormat::dateTimeWithSeconds('M j, Y H:i:s'))
+            ->defaultTimeDisplayFormat(fn (): string => DateFormat::time('H:i'))
+            ->defaultTimeWithSecondsDisplayFormat(fn (): string => DateFormat::timeWithSeconds('H:i:s')));
     }
 
     /**

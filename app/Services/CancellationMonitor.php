@@ -8,6 +8,7 @@ use App\Models\Appointment;
 use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -81,11 +82,16 @@ class CancellationMonitor
      */
     public function recentCancellationCount(User $customer): int
     {
+        // Counted per BOOKING, not per appointment row. A booking with a gap is
+        // stored as several blocks (BOOKING-GAP-01); a customer who drops both
+        // the morning and the afternoon block has cancelled one booking, not
+        // two, and must not trip the alert on their own. The group key survives
+        // a root promotion because the old root is re-linked under the new one.
         return Appointment::query()
             ->where('customer_id', $customer->id)
             ->where('status', AppointmentStatus::USER_CANCELLED->value)
             ->where('cancelled_at', '>=', now()->subDays(self::WINDOW_DAYS))
-            ->count();
+            ->count(DB::raw('DISTINCT COALESCE(parent_appointment_id, id)'));
     }
 
     /**

@@ -3,7 +3,8 @@
 namespace App\Filament\Resources\Users\RelationManagers;
 
 use App\Enum\AppointmentStatus;
-use App\Filament\Resources\Users\UserResource;
+use App\Filament\Resources\Services\ServiceResource;
+use App\Models\Service;
 use Filament\Actions\CreateAction;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
@@ -16,7 +17,9 @@ class ServicesRelationManager extends RelationManager
 {
     protected static string $relationship = 'services';
 
-    protected static ?string $relatedResource = UserResource::class;
+    // No $relatedResource: the rows are services, not users. Pointing it at
+    // UserResource injected UsersTable's hidden ViewAction and rendered
+    // UserInfolist against a Service on row click. See ProvidersRelationManager.
 
     public static function getTitle(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): string
     {
@@ -36,6 +39,13 @@ class ServicesRelationManager extends RelationManager
     {
         // تحديد نوع المستخدم (عميل أو مزود خدمة)
         $isCustomer = $this->ownerRecord->hasRole('customer');
+
+        $table
+            ->modelLabel(ServiceResource::getModelLabel())
+            ->pluralModelLabel(ServiceResource::getPluralModelLabel())
+            ->recordUrl(fn (Service $record): ?string => ServiceResource::canView($record)
+                ? ServiceResource::getUrl('view', ['record' => $record])
+                : null);
 
         if ($isCustomer) {
             return $this->buildCustomerServicesTable($table);
@@ -211,7 +221,10 @@ class ServicesRelationManager extends RelationManager
                     ->color('info')
                     ->sortable(),
 
-                TextColumn::make('is_active')
+                // The provider's link to the service, not the service itself:
+                // a globally active service can still be switched off for this
+                // provider, and then it cannot be booked with them.
+                TextColumn::make('pivot.is_active')
                     ->label(__('resources.user.status'))
                     ->badge()
                     ->formatStateUsing(fn ($state) => $state ? __('resources.user.active') : __('resources.user.inactive'))

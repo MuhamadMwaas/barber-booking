@@ -28,8 +28,14 @@ class BookingMailService
     public function sendForNewBooking(Appointment $appointment): void
     {
         try {
-            // Make sure the relations the templates need are present.
-            $appointment->loadMissing(['services_record', 'provider', 'customer']);
+            // Make sure the relations the templates need are present. The
+            // children are the other blocks of a split booking (BOOKING-GAP-01):
+            // ONE email lists every block, instead of one email per block.
+            // SerializesModels re-loads these nested relations on the queue.
+            $appointment->loadMissing([
+                'services_record', 'provider', 'customer',
+                'children.services_record', 'children.provider',
+            ]);
 
             $companyName = (string) (get_setting('company_name', '') ?: config('app.name'));
             $currency    = (string) get_setting('currency_symbol', '€');

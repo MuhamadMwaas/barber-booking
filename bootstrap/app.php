@@ -4,10 +4,12 @@ use App\Http\Middleware\EnforceJsonAcceptHeader;
 use App\Http\Middleware\EnsureEmailIsVerifiedViaOtp;
 use App\Http\Middleware\SetApiLocale;
 use App\Http\Middleware\SetLocaleFromSession;
+use App\Rules\PhoneNumber;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
@@ -59,5 +61,26 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // A 422 on the phone field carries a machine-readable `error_code`
+        // (INVALID_PHONE_NUMBER / PHONE_ALREADY_EXISTS) next to Laravel's usual
+        // {message, errors} body, so the mobile app can react to the reason
+        // instead of parsing translated text. Every other validation failure —
+        // and every web request — falls through to the default rendering.
+        $exceptions->render(function (ValidationException $e, Request $request) {
+            if (! $request->is('api/*')) {
+                return null;
+            }
+
+            $code = PhoneNumber::errorCode($e->validator);
+
+            if ($code === null) {
+                return null;
+            }
+
+            return response()->json([
+                'message' => $e->getMessage(),
+                'error_code' => $code,
+                'errors' => $e->errors(),
+            ], $e->status);
+        });
     })->create();

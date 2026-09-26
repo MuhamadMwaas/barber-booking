@@ -277,7 +277,7 @@ class AppointmentsRelationManager extends RelationManager
                         && $record->status !== AppointmentStatus::USER_CANCELLED
                         && $record->status !== AppointmentStatus::NO_SHOW)
                     ->fillForm(function ($record): array {
-                        $amount = (string) $record->linkedGroup()->sum('total_amount');
+                        $amount = (string) $record->activeLinkedGroup()->sum('total_amount');
                         $breakdown = app(TaxCalculatorService::class)->extractTax(
                             $amount,
                             (string) get_setting('tax_rate', 19),
@@ -351,7 +351,7 @@ class AppointmentsRelationManager extends RelationManager
                             ->numeric()
                             ->prefix('EUR')
                             ->suffix(__('resources.provider_resource.includes_tax_suffix'))
-                            ->default(fn ($record) => $record->linkedGroup()->sum('total_amount'))
+                            ->default(fn ($record) => $record->activeLinkedGroup()->sum('total_amount'))
                             ->required()
                             ->afterStateUpdated(function ($state, $set) {
                                 if ($state !== null && $state !== '') {

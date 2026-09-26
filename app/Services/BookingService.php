@@ -114,32 +114,20 @@ class BookingService
 
             $preparedServices = $this->validateAndPrepareServices($services, $date, $customer, $customerPhone, $allowSameDayPast, $bypassAvailability, $allowCustomerOverlap);
 
-            $totals = $this->calculateTotals($preparedServices);
-
             // Allow staff-created bookings to be confirmed without being marked as paid yet.
             $createdStatus = $isConfirmed ? 1 : 0;
             $paymentStatus = $markAsPaid
                 ? PaymentStatus::PAID_ONSTIE_CASH
                 : PaymentStatus::PENDING;
 
-            // Get first service for main appointment data
-            $firstService = $preparedServices[0];
-
-            // Create main appointment
-            $appointment = Appointment::create([
-                'number' => $this->generateAppointmentNumber(),
+            // Everything every block of this booking shares.
+            $common = [
                 'customer_id' => $customer?->id ?? null,
-                'provider_id' => $firstService['provider_id'],
                 'appointment_date' => $date,
-                'start_time' => Carbon::parse($date . ' ' . $firstService['start_time']),
-                'end_time' => Carbon::parse($date . ' ' . $preparedServices[count($preparedServices) - 1]['end_time']),
-                'duration_minutes' => $totals['total_duration'],
-                'subtotal' => $totals['subtotal'],
-                'tax_amount' => $totals['tax_amount'],
-                'total_amount' => $totals['total_amount'],
                 'status' => AppointmentStatus::PENDING,
                 'payment_method' => $paymentMethod,
                 'payment_status' => $paymentStatus,
+                // Copied onto every block so each provider sees the customer's note.
                 'notes' => $notes,
                 'created_status' => $createdStatus,
                 'booking_source' => $bookingData['booking_source'] ?? 'in_person',
@@ -148,32 +136,125 @@ class BookingService
                 'customer_name' => $customerName,
                 'customer_email' => $customerEmail,
                 'customer_phone' => $customerPhone,
-            ]);
+            ];
 
-            // Create appointment services
-            foreach ($preparedServices as $index => $serviceData) {
-                AppointmentService::create([
-                    'appointment_id' => $appointment->id,
-                    'service_id' => $serviceData['service_id'],
-                    'service_name' => $serviceData['service_name'],
-                    'duration_minutes' => $serviceData['duration_minutes'],
-                    'price' => $serviceData['price'],
-                    'sequence_order' => $index + 1,
+            // One appointment per contiguous block (BOOKING-GAP-01). A booking
+            // used to be ONE row spanning first-start → last-end, so a customer
+            // who picked 09:40 and 15:10 blocked the provider for the whole
+            // five and a half hours in between — and a second provider's block
+            // was never put on that provider's calendar at all. Now each row's
+            // window is exactly the time its services take.
+            $blocks = $this->splitIntoBlocks($preparedServices);
+
+            $appointment = $this->createBlockAppointment($blocks[0], $date, $common);
+
+            foreach (array_slice($blocks, 1) as $block) {
+                $this->linkingService->validateChildCandidate($appointment, ['appointment_date' => $date]);
+
+                $this->createBlockAppointment($block, $date, $common + [
+                    'parent_appointment_id' => $appointment->id,
                 ]);
             }
-            $InvoiceService = app(InvoiceService::class);
 
-            $InvoiceService->createDtaftInvoiceFromAppointment(
+            // The invoice lives on the root, as for any linked group.
+            $invoiceService = app(InvoiceService::class);
+
+            $invoiceService->createDtaftInvoiceFromAppointment(
                 $appointment,
                 'cash',
                 0
             );
-            return $appointment->load(['services', 'customer', 'provider', 'services_record']);
+
+            // Only a real group needs the aggregated rebuild; a single block
+            // keeps the exact invoice items it has always had.
+            if (count($blocks) > 1) {
+                $invoiceService->rebuildAggregatedInvoice($appointment);
+            }
+
+            return $appointment->load([
+                'services', 'customer', 'provider', 'services_record',
+                'children.services_record', 'children.provider',
+            ]);
         });
 
         // 7. Notify customer (online only) + company — after commit, queued,
         //    and fully guarded so email issues never affect the booking.
         app(BookingMailService::class)->sendForNewBooking($appointment);
+
+        return $appointment;
+    }
+
+    /**
+     * Group the prepared services into blocks: runs of services with the SAME
+     * provider where each one starts exactly when the previous one ends.
+     *
+     * A new block starts on any gap — even a minute, because a row must never
+     * claim time nobody works in — and on any change of provider, because a row
+     * has exactly one provider_id and its window has to land on that provider's
+     * calendar. The services arrive sorted and already checked not to overlap.
+     *
+     * @param  array<int, array>  $preparedServices
+     * @return array<int, array<int, array>> at least one block, in time order
+     */
+    private function splitIntoBlocks(array $preparedServices): array
+    {
+        $blocks = [];
+        $current = [];
+
+        foreach ($preparedServices as $service) {
+            $previous = end($current);
+
+            $continuesBlock = $previous !== false
+                && (int) $previous['provider_id'] === (int) $service['provider_id']
+                && $previous['end_time'] === $service['start_time'];
+
+            if ($previous !== false && ! $continuesBlock) {
+                $blocks[] = $current;
+                $current = [];
+            }
+
+            $current[] = $service;
+        }
+
+        $blocks[] = $current;
+
+        return $blocks;
+    }
+
+    /**
+     * Persist one block as an appointment with its own services and totals.
+     * Its window is the block's own, so end_time - start_time == duration_minutes.
+     *
+     * @param  array<int, array>  $block
+     * @param  array<string, mixed>  $attributes  fields shared by the whole booking
+     */
+    private function createBlockAppointment(array $block, string $date, array $attributes): Appointment
+    {
+        $totals = $this->calculateTotals($block);
+        $first = $block[0];
+        $last = $block[count($block) - 1];
+
+        $appointment = Appointment::create($attributes + [
+            'number' => $this->generateAppointmentNumber(),
+            'provider_id' => $first['provider_id'],
+            'start_time' => Carbon::parse($date . ' ' . $first['start_time']),
+            'end_time' => Carbon::parse($date . ' ' . $last['end_time']),
+            'duration_minutes' => $totals['total_duration'],
+            'subtotal' => $totals['subtotal'],
+            'tax_amount' => $totals['tax_amount'],
+            'total_amount' => $totals['total_amount'],
+        ]);
+
+        foreach ($block as $index => $serviceData) {
+            AppointmentService::create([
+                'appointment_id' => $appointment->id,
+                'service_id' => $serviceData['service_id'],
+                'service_name' => $serviceData['service_name'],
+                'duration_minutes' => $serviceData['duration_minutes'],
+                'price' => $serviceData['price'],
+                'sequence_order' => $index + 1,
+            ]);
+        }
 
         return $appointment;
     }
@@ -411,8 +492,11 @@ class BookingService
      */
     public function getBookingDetails(int $appointmentId, User $customer): Appointment
     {
-        $appointment = Appointment::with(['services', 'provider', 'customer', 'services_record', 'activeReminder'])
-            ->find($appointmentId);
+        $appointment = Appointment::with([
+            'services', 'provider', 'customer', 'services_record', 'activeReminder',
+            // The other blocks of a split booking (BOOKING-GAP-01).
+            'children.services_record', 'children.provider',
+        ])->find($appointmentId);
         if (!$appointment) {
             throw new \Illuminate\Database\Eloquent\ModelNotFoundException(
                 "Appointment #{$appointmentId} not found"
@@ -498,10 +582,14 @@ class BookingService
                 ? $this->gapAnalysis->analyzeAddBefore($anchor, $service, $duration, $requestedStart, $allowSameDayPast)
                 : $this->gapAnalysis->analyzeAddAfter($anchor, $service, $duration, $requestedStart, $allowSameDayPast);
         } else {
-            // Child mode — gap measured against invoice owner (parent or self)
-            $invoiceOwner = $this->linkingService->getInvoiceOwner($anchor);
+            // Child mode — gap measured against the block the staff acted on.
+            // It used to be measured against the invoice owner (the group
+            // root), but since a booking with a gap is stored as several blocks
+            // the root may be the 09:40 block while staff are adding next to
+            // the 15:10 one — every such add failed as gap_too_large. The new
+            // child is still linked to the root in addServiceDifferentProvider().
             $analysis = $this->gapAnalysis->analyzeChildAdd(
-                $invoiceOwner,
+                $anchor,
                 $newProvider,
                 $service,
                 $duration,

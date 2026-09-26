@@ -93,6 +93,15 @@ return [
     'discount_before'    => 'Total before discount',
     'discount_percent'   => 'Share of gross',
 
+    // Tips — kept apart from revenue
+    'tip_title'          => 'Tips',
+    'tip_count'          => 'Receipts with a tip',
+    'tip_cash'           => 'Tips in cash',
+    'tip_card'           => 'Tips by card',
+    'tip_total'          => 'Total tips',
+    'cash_drawer'        => 'Cash in drawer (sales + tips)',
+    'tip_note'           => 'Tips belong to the provider, are not revenue and carry no VAT. They are not included in any total above.',
+
     // Operations
     'operations_title'   => 'Operations',
     'source_title'       => 'Booking source',

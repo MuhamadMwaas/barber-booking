@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Enum\RegistrationMethod;
+use App\Support\PhoneInput;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -53,5 +54,8 @@ class LoginRequest extends FormRequest
                 'registration_method' => strtolower($method),
             ]);
         }
+
+        // Look the account up by the stored form, whichever way it was typed.
+        PhoneInput::canonicalize($this);
     }
 }

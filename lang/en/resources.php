@@ -281,6 +281,9 @@ return [
         'cancel_description' => 'Are you sure you want to cancel this appointment? This action cannot be undone.',
         'cancellation_reason' => 'Cancellation Reason',
         'cancelled_successfully' => 'Appointment cancelled successfully',
+        'delete_blocked_title' => 'This appointment cannot be deleted',
+        'bulk_delete_blocked_title' => 'Nothing was deleted — some selected appointments cannot be deleted',
+        'bulk_deleted' => ':count appointment(s) deleted',
 
         // Other
         'number' => 'Booking #',
@@ -1329,6 +1332,7 @@ return [
         'scheduled_future' => 'Scheduled for Future',
         'awaiting_completion' => 'Awaiting Completion',
         'active_services' => 'Active Services',
+        'service_link_inactive' => 'Disabled for this provider',
 
         // Actions in table
         'add_leave' => 'Add Leave',

@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Enum\RegistrationMethod;
 use App\Rules\PasswordRequirements;
+use App\Support\PhoneInput;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -61,6 +62,9 @@ class ResetPasswordRequest extends FormRequest
                 'registration_method' => strtolower((string) $this->input('registration_method')),
             ]);
         }
+
+        // Look the account up — and match the reset code — by the stored form.
+        PhoneInput::canonicalize($this);
     }
 
     public function usesGrantToken(): bool

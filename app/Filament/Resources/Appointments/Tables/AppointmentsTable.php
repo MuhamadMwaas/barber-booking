@@ -5,8 +5,12 @@ namespace App\Filament\Resources\Appointments\Tables;
 use App\Enum\AppointmentStatus;
 use App\Enum\BookingSource;
 use App\Enum\PaymentStatus;
+use App\Exceptions\AppointmentNotDeletableException;
+use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Models\Appointment;
 use App\Models\PaymentMethod;
+use App\Services\AppointmentCancellationService;
+use App\Services\AppointmentDeletionService;
 use App\Services\InvoiceFinalizationService;
 use App\Services\TaxCalculatorService;
 use Carbon\Carbon;
@@ -354,7 +358,7 @@ class AppointmentsTable
                     ->fillForm(function ($record): array {
                         // A linked booking has one invoice, so its suggested price
                         // is the gross sum of parent + children, not this row alone.
-                        $amount = (string) $record->linkedGroup()->sum('total_amount');
+                        $amount = (string) $record->activeLinkedGroup()->sum('total_amount');
                         $breakdown = app(TaxCalculatorService::class)->extractTax(
                             $amount,
                             (string) get_setting('tax_rate', 19),
@@ -395,7 +399,7 @@ class AppointmentsTable
                             ->numeric()
                             ->prefix('EUR')
                             ->suffix(__('resources.provider_resource.includes_tax_suffix'))
-                            ->default(fn ($record) => $record->linkedGroup()->sum('total_amount'))
+                            ->default(fn ($record) => $record->activeLinkedGroup()->sum('total_amount'))
                             ->required()
                             ->afterStateUpdated(function ($state, $set) {
                                 if ($state !== null && $state !== '') {
@@ -562,11 +566,22 @@ class AppointmentsTable
                             ->maxLength(500),
                     ])
                     ->action(function ($record, array $data) {
-                        $record->update([
-                            'status' => AppointmentStatus::ADMIN_CANCELLED,
-                            'cancellation_reason' => $data['cancellation_reason'],
-                            'cancelled_at' => now(),
-                        ]);
+                        // The one cancel path: rebuilds the group invoice, or
+                        // promotes the next block when this is the group root.
+                        try {
+                            app(AppointmentCancellationService::class)->cancel(
+                                $record,
+                                AppointmentStatus::ADMIN_CANCELLED,
+                                $data['cancellation_reason'],
+                            );
+                        } catch (\InvalidArgumentException $e) {
+                            Notification::make()
+                                ->title($e->getMessage())
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
 
                         Notification::make()
                             ->title(__('resources.appointment.cancelled_successfully'))
@@ -578,12 +593,36 @@ class AppointmentsTable
             ])
             ->bulkActions([
                 BulkActionGroup::make([
+                    // All-or-nothing: if any selected appointment may not be
+                    // deleted, none are, and the notification lists every
+                    // blocked one so the selection can be fixed in one go.
                     Action::make('delete')
                     ->label(__('resources.delete'))
                     ->icon('heroicon-o-trash')
                     ->color('danger')
+                    ->authorize(fn (): bool => AppointmentResource::canDeleteAny())
+                    ->accessSelectedRecords()
                     ->requiresConfirmation()
-                    ->action(fn ($records) => $records->each->delete()),
+                    ->deselectRecordsAfterCompletion()
+                    ->action(function ($records) {
+                        try {
+                            $count = app(AppointmentDeletionService::class)->deleteMany($records);
+                        } catch (AppointmentNotDeletableException $e) {
+                            Notification::make()
+                                ->title(__('resources.appointment.bulk_delete_blocked_title'))
+                                ->body($e->userMessage())
+                                ->danger()
+                                ->persistent()
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title(__('resources.appointment.bulk_deleted', ['count' => $count]))
+                            ->success()
+                            ->send();
+                    }),
                 ]),
             ])
             ->poll('30s') // تحديث تلقائي كل 30 ثانية لمراقبة الحجوزات الجديدة

@@ -309,8 +309,10 @@ class GapAnalysisService
     /**
      * Analyze adding a service via a DIFFERENT provider — produces a CHILD appointment.
      *
-     * Boundary reference: the invoiceOwner's start_time / end_time, with the same
-     * 60-min gap rule.
+     * Boundary reference: the $invoiceOwner argument's start_time / end_time,
+     * with the same 60-min gap rule. Callers pass the block the staff acted on
+     * (not necessarily the group root) since BOOKING-GAP-01 — the parameter
+     * name predates that.
      * Conflict reference: the NEW provider's schedule & bookings.
      *
      * Push is NEVER applied for child placement (no chain to push — different provider).

@@ -43,14 +43,19 @@ return [
     | e.g. "+971-50-101-0101". Gateways want bare E.164 digits, so every number
     | is normalised before it is sent.
     |
-    | `default_country_code` (digits only, no "+") is used for numbers typed in
-    | national format with a single leading zero, e.g. "050-101-0101" with a
-    | default of 971 becomes "+971501010101". Leave it empty to send such numbers
-    | through untouched and let the gateway account default decide.
+    | `default_country_code` (digits only, no "+") is the country a number
+    | belongs to when the user did not type one: "01522 3917565" (national, with
+    | the trunk zero) and "1522 3917565" (bare digits) both become
+    | "+4915223917565". Numbers starting with "+" or "00" keep their own country.
+    |
+    | Germany is the fallback, not merely the default: an empty
+    | SMS_DEFAULT_COUNTRY_CODE= line in .env would otherwise switch the rule off
+    | and make every German customer who types their number the usual way fail
+    | registration.
     |
     */
 
-    'default_country_code' => env('SMS_DEFAULT_COUNTRY_CODE'),
+    'default_country_code' => env('SMS_DEFAULT_COUNTRY_CODE') ?: '49',
 
     /*
     |--------------------------------------------------------------------------

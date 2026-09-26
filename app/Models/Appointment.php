@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use App\Enum\AppointmentStatus;
-use App\Services\CancellationMonitor;
+use App\Services\AppointmentCancellationService;
 use App\Enum\BookingSource;
 use App\Enum\InvoiceStatus;
 use App\Enum\PaymentStatus;
@@ -22,6 +22,17 @@ use Illuminate\Support\Facades\Log;
 class Appointment extends Model
 {
     use HasFactory;
+
+    /**
+     * Statuses that take an appointment out of its linked group's invoice and
+     * payment. NO_SHOW is included for the same reason as a cancellation: no
+     * service was rendered, so there is nothing to charge for.
+     */
+    public const INACTIVE_GROUP_STATUSES = [
+        AppointmentStatus::USER_CANCELLED->value,
+        AppointmentStatus::ADMIN_CANCELLED->value,
+        AppointmentStatus::NO_SHOW->value,
+    ];
 
 
     protected $fillable = [
@@ -260,20 +271,21 @@ class Appointment extends Model
      */
     public function cancel(?string $reason = null): bool
     {
-        $cancelled = $this->update([
-            'status' => AppointmentStatus::USER_CANCELLED,
-            'cancellation_reason' => $reason,
-            'cancelled_at' => now(),
-        ]);
+        // One block of a split booking may be cancelled on its own, and when it
+        // is the group's root the invoice has to move to the next block — that
+        // bookkeeping lives in AppointmentCancellationService, the single path
+        // every cancellation goes through (BOOKING-GAP-01). It also calls
+        // CancellationMonitor after commit, and the `updated` hook in boot()
+        // still retires the reminder because the status column changes.
+        $cancelled = app(AppointmentCancellationService::class)->cancel(
+            $this,
+            AppointmentStatus::USER_CANCELLED,
+            $reason,
+        );
 
-        if ($cancelled) {
-            // The reminder is retired by the `updated` hook in boot(), which
-            // watches the status column itself — so staff cancellations that
-            // write ADMIN_CANCELLED directly are covered by the same rule.
-            app(CancellationMonitor::class)->recordCustomerCancellation($this);
-        }
+        $this->setRawAttributes($cancelled->getAttributes(), true);
 
-        return $cancelled;
+        return true;
     }
 
 
@@ -385,6 +397,37 @@ class Appointment extends Model
     }
 
     /**
+     * The members of the linked group that still stand: not cancelled, not a
+     * no-show. The unified invoice, the payment, and every "amount due" figure
+     * are built from these only.
+     *
+     * Before BOOKING-GAP-01 every caller used linkedGroup() as-is, so a cancelled
+     * child kept its services on the parent's invoice and — worse — made
+     * InvoiceFinalizationService refuse to settle the whole group. Individual
+     * cancellation was rare then; with a split booking it is the normal case.
+     */
+    public function activeLinkedGroup(): Builder
+    {
+        return $this->linkedGroup()->activeInGroup();
+    }
+
+    /**
+     * The id that identifies this appointment's group: the root's own id.
+     * Mirrors COALESCE(parent_appointment_id, id), which the SQL counters use.
+     */
+    public function getGroupRootIdAttribute(): int
+    {
+        return (int) ($this->parent_appointment_id ?? $this->id);
+    }
+
+    public function isActiveInGroup(): bool
+    {
+        $status = $this->status?->value ?? $this->status;
+
+        return ! in_array($status, self::INACTIVE_GROUP_STATUSES, true);
+    }
+
+    /**
      * True only if this appointment is a parent with at least one child.
      * NOTE: Uses children()->exists() — eager load 'children' to avoid N+1.
      */
@@ -431,6 +474,14 @@ class Appointment extends Model
     public function scopeParentsOnly(Builder $query): Builder
     {
         return $query->whereNull('parent_appointment_id');
+    }
+
+    /**
+     * Group members that still count: see activeLinkedGroup().
+     */
+    public function scopeActiveInGroup(Builder $query): Builder
+    {
+        return $query->whereNotIn('status', self::INACTIVE_GROUP_STATUSES);
     }
 
     public function scopeForProvider(Builder $query, int $providerId): Builder
@@ -565,8 +616,10 @@ class Appointment extends Model
     }
 
     /**
-     * Returns whether this appointment can be cancelled or deleted,
-     * accounting for linked children.
+     * Returns whether this appointment can be DELETED, accounting for linked
+     * children. (Despite the name, cancelling no longer consults it: since
+     * BOOKING-GAP-01 a root with active children may be cancelled, and
+     * AppointmentCancellationService promotes the next block to root.)
      *
      * @return array{allowed: bool, reason?: string, children_numbers?: array}
      */
