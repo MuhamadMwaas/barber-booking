@@ -1419,6 +1419,11 @@ abstract class StaffDashboardComponent extends Component
 **الموقع:** [`app/Http/Controllers/PrintController.php:22, 55, 99`](app/Http/Controllers/PrintController.php#L22) · [`app/Http/Controllers/AppointmentPrintController.php:18`](app/Http/Controllers/AppointmentPrintController.php#L18) · [`app/Http/Controllers/InvoiceTemplateController.php:44`](app/Http/Controllers/InvoiceTemplateController.php#L44)
 **الحالة:** ✅ مؤكد بالكود (بحثتُ عن `auth()` و`Gate::` و`authorize` و`customer_id` و`abort` — **صفر نتائج** في `PrintController`)
 
+> **✅ أُصلحت (2026-09-27).** `InvoicePolicy` (`view` للعميل / `print` للموظف) + Gate `printAppointmentTicket`، مطبّقة في كل مسار طباعة، وصلاحيتان جديدتان
+> `Invoice:print` / `Invoice:print_others` (migration إضافية). اختلافات عن الاقتراح أدناه: المزوّد يطبع أيضاً إن خدم **جزءاً** من مجموعة
+> الحجز أو **قبض** الدفعة؛ العميل **لا يطبع** بل يقرأ فواتيره المدفوعة عبر `GET /api/my/invoices` + رابط HTML موقّع لا يمسّ `print_count`؛
+> ومسار المعاينة صار `auth + can:InvoiceTemplate:view`. التفاصيل: `docs/05-api/print.md` — الاختبارات: `tests/Feature/Authorization/InvoiceIdorTest.php`.
+
 ### الشرح
 
 ```php

@@ -144,6 +144,7 @@ class RoleForm
             'ServiceCategory' => 'heroicon-o-rectangle-stack',
             'Role' => 'heroicon-o-shield-check',
             'InvoiceTemplate' => 'heroicon-o-document-text',
+            'Invoice' => 'heroicon-o-receipt-percent',
             'PrintLog' => 'heroicon-o-printer',
             'PrinterSetting' => 'heroicon-o-cog-6-tooth',
             'Reports', 'ProviderReport' => 'heroicon-o-chart-bar',

@@ -33,8 +33,10 @@ class InvoiceTemplateController extends Controller
         try {
             $html = $this->builder->buildPreview($template);
             return response($html)->header('Content-Type', 'text/html');
-        } catch (\Exception $e) {
-            return response('Error generating preview: ' . $e->getMessage(), 500);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response(__('Unable to generate the preview.'), 500);
         }
     }
 

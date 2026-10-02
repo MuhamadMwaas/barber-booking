@@ -1327,7 +1327,7 @@
                         @endif
 
                         {{-- Print Invoice Button: only when invoice is paid --}}
-                        @if ($selectedAppointment->canPrintInvoice() && $this->dashCan('print_invoice'))
+                        @if ($selectedAppointment->canPrintInvoice() && $this->dashCan('print_invoice') && auth()->user()->can('print', ($selectedAppointment->parent ?? $selectedAppointment)->invoice))
                             <button wire:click="printInvoiceForAppointment({{ $selectedAppointment->id }})"
                                 class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg inline-flex items-center gap-1"
                                 title="{{ $selectedAppointment->is_child_booking ? __('dashboard.print.combined_with_parent') : ($selectedAppointment->is_parent_booking ? __('dashboard.print.combined_invoice') : '') }}">
@@ -1340,7 +1340,7 @@
                         @endif
 
                         {{-- Print Order Ticket Button: shown for all non-cancelled appointments --}}
-                        @if (! in_array($selectedAppointment->status, [\App\Enum\AppointmentStatus::USER_CANCELLED, \App\Enum\AppointmentStatus::ADMIN_CANCELLED], true) && $this->dashCan('print_ticket'))
+                        @if (! in_array($selectedAppointment->status, [\App\Enum\AppointmentStatus::USER_CANCELLED, \App\Enum\AppointmentStatus::ADMIN_CANCELLED], true) && $this->dashCan('print_ticket') && auth()->user()->can(\App\Policies\AppointmentTicketPolicy::ABILITY, $selectedAppointment))
                             <button wire:click="printAppointmentTicket({{ $selectedAppointment->id }})"
                                 class="px-3 py-2 bg-slate-700 hover:bg-slate-800 text-white text-sm font-medium rounded-lg inline-flex items-center gap-1 cursor-pointer transform transition-transform duration-150 ease-out hover:scale-105 hover:shadow-md active:scale-95"
                                 title="{{ ($selectedAppointment->is_child_booking || $selectedAppointment->is_parent_booking) ? __('dashboard.print.order_combined_group') : '' }}">

@@ -537,7 +537,8 @@ class AppointmentsTable
                     ? route('invoice.print', ['invoice' => $record->invoice])
                     : null)
                     ->openUrlInNewTab()
-                    ->visible(fn (Appointment $record): bool => $record->canPrintInvoice()),
+                    ->visible(fn (Appointment $record): bool => $record->canPrintInvoice()
+                        && (bool) auth()->user()?->can('print', $record->invoice)),
 
                 ActionGroup::make([
                     Action::make('view')

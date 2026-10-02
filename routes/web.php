@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\StaffAuthController;
 use App\Http\Controllers\DailyReportController;
+use App\Http\Controllers\InvoiceCopyController;
 use App\Http\Controllers\InvoiceTemplateController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\PageController;
@@ -165,13 +166,29 @@ Route::get('/terms', [PageController::class, 'terms'])->name('page.terms');
 
 
 
+// Used to sit outside every middleware group, so anyone on the internet could
+// read the salon's template designs. Sample data only, but still staff-only.
 Route::get('/invoice-template/{template}/preview', [InvoiceTemplateController::class, 'preview'])
+    ->middleware(['auth', 'can:InvoiceTemplate:view'])
     ->name('invoice-template.preview');
+
+// A customer's receipt opened from the mobile app (WebView). No session: the
+// temporary signature IS the credential — it is minted by GET /api/my/invoices
+// for the authenticated owner. See InvoiceCopyController.
+Route::get('/my/invoices/{invoice}/view', [InvoiceCopyController::class, 'show'])
+    ->middleware(['signed', 'throttle:30,1'])
+    ->whereNumber('invoice')
+    ->name('invoice.customer-copy');
 
 /*
 |--------------------------------------------------------------------------
 | Print Web Routes (Browser Printing)
 |--------------------------------------------------------------------------
+|
+| `auth` only says who you are. Whether THIS invoice / appointment is yours to
+| print is decided in the controllers by InvoicePolicy::print() and the
+| printAppointmentTicket gate (AUTHZ-03).
+|
 */
 Route::middleware(['auth'])->group(function () {
     Route::get('/invoice/{invoice}/print', [PrintController::class, 'print'])

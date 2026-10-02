@@ -7,8 +7,19 @@ use App\Models\PrinterSetting;
 use App\Models\InvoiceTemplate;
 use App\Services\Print\PrintService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Validator;
 
+/**
+ * Staff printing. Every method that takes an invoice id asks InvoicePolicy
+ * (`print`) BEFORE any work — see AUTHZ-03. Customers never print; they read
+ * their own receipts through Api\MyInvoiceController.
+ */
 class PrintController extends Controller {
+    /** Upper bound for one batch, so one request cannot dump the whole salon. */
+    private const MAX_BATCH = 50;
+
     protected PrintService $printService;
 
     public function __construct(PrintService $printService) {
@@ -20,32 +31,36 @@ class PrintController extends Controller {
      * GET /invoice/{invoice}/print
      */
     public function print(Request $request, Invoice $invoice) {
+        Gate::authorize('print', $invoice);
+
+        $validated = $request->validate([
+            'printer_id' => 'nullable|integer|exists:printer_settings,id',
+            'template_id' => 'nullable|integer|exists:invoice_templates,id',
+            'copies' => 'nullable|integer|min:1|max:10',
+        ]);
+
+        $printer = isset($validated['printer_id'])
+            ? PrinterSetting::find($validated['printer_id'])
+            : PrinterSetting::getDefault();
+
+        $template = isset($validated['template_id'])
+            ? InvoiceTemplate::find($validated['template_id'])
+            : $invoice->getTemplateOrDefault();
+
         try {
-            // Get printer
-            $printerId = $request->get('printer_id');
-            $printer = $printerId
-                ? PrinterSetting::findOrFail($printerId)
-                : PrinterSetting::getDefault();
-
-            // Get template
-            $templateId = $request->get('template_id');
-            $template = $templateId
-                ? InvoiceTemplate::findOrFail($templateId)
-                : $invoice->getTemplateOrDefault();
-
-            // Get copies
-            $copies = $request->get('copies', 1);
-            // Print
-            $result = $this->printService->print($invoice, $printer, $template, $copies);
-
-            if (!$result['success']) {
-                return response('Print Error: ' . $result['error'], 500);
-            }
-
-            return response($result['html'])->header('Content-Type', 'text/html');
-        } catch (\Exception $e) {
-            return response('Error: ' . $e->getMessage(), 500);
+            $result = $this->printService->print($invoice, $printer, $template, $validated['copies'] ?? 1);
+        } catch (\Throwable $e) {
+            report($e);
+            $result = ['success' => false];
         }
+
+        if (!$result['success']) {
+            // PrintService has already logged the reason; the browser gets no
+            // internals (the old handler echoed getMessage() to the page).
+            return response(__('Unable to print the invoice.'), 500);
+        }
+
+        return response($result['html'])->header('Content-Type', 'text/html');
     }
 
     /**
@@ -53,6 +68,8 @@ class PrintController extends Controller {
      * POST /api/invoice/{invoice}/print
      */
     public function apiPrint(Request $request, Invoice $invoice) {
+        Gate::authorize('print', $invoice);
+
         $validated = $request->validate([
             'printer_id' => 'nullable|exists:printer_settings,id',
             'template_id' => 'nullable|exists:invoice_templates,id',
@@ -88,7 +105,6 @@ class PrintController extends Controller {
         return response()->json([
             'success' => false,
             'message' => 'Print failed',
-            'error' => $result['error'],
         ], 500);
     }
 
@@ -97,19 +113,26 @@ class PrintController extends Controller {
      * GET /invoices/print-batch?invoice_ids=1,2,3
      */
     public function printBatch(Request $request) {
-        $invoiceIds = explode(',', $request->get('invoice_ids', ''));
+        // explode(',', '') is [''] — a NON-empty array — so the old empty() guard
+        // never fired. Parse and validate like the API does instead.
+        $ids = array_values(array_filter(
+            explode(',', (string) $request->query('invoice_ids', '')),
+            fn ($id) => $id !== ''
+        ));
 
-        if (empty($invoiceIds)) {
-            return response('No invoices specified', 400);
-        }
+        $validated = Validator::make(
+            ['invoice_ids' => $ids, 'printer_id' => $request->query('printer_id')],
+            $this->batchRules() + ['printer_id' => 'nullable|integer|exists:printer_settings,id'],
+        )->validate();
 
-        $printerId = $request->get('printer_id');
-        $printer = $printerId ? PrinterSetting::find($printerId) : null;
+        $invoices = $this->authorizedBatch($validated['invoice_ids']);
 
-        $result = $this->printService->printBatch($invoiceIds, $printer);
+        $printer = isset($validated['printer_id']) ? PrinterSetting::find($validated['printer_id']) : null;
+
+        $result = $this->printService->printBatch($invoices->modelKeys(), $printer);
 
         if (!$result['success']) {
-            return response('Batch print error: ' . $result['error'], 500);
+            return response(__('Unable to print the invoices.'), 500);
         }
 
         return response($result['html'])->header('Content-Type', 'text/html');
@@ -120,12 +143,12 @@ class PrintController extends Controller {
      * POST /api/invoices/print-batch
      */
     public function apiPrintBatch(Request $request) {
-        $validated = $request->validate([
-            'invoice_ids' => 'required|array|min:1',
-            'invoice_ids.*' => 'exists:invoices,id',
+        $validated = $request->validate($this->batchRules() + [
             'printer_id' => 'nullable|exists:printer_settings,id',
             'template_id' => 'nullable|exists:invoice_templates,id',
         ]);
+
+        $invoices = $this->authorizedBatch($validated['invoice_ids']);
 
         $printer = isset($validated['printer_id'])
             ? PrinterSetting::find($validated['printer_id'])
@@ -136,7 +159,7 @@ class PrintController extends Controller {
             : null;
 
         $result = $this->printService->printBatch(
-            $validated['invoice_ids'],
+            $invoices->modelKeys(),
             $printer,
             $template
         );
@@ -155,6 +178,8 @@ class PrintController extends Controller {
      * POST /api/printer/{printer}/test
      */
     public function testPrinter(PrinterSetting $printer) {
+        Gate::authorize('PrinterSetting:edit');
+
         $result = $this->printService->testPrinter($printer);
 
         return response()->json([
@@ -169,6 +194,8 @@ class PrintController extends Controller {
      * GET /api/print/statistics
      */
     public function statistics(Request $request) {
+        Gate::authorize('PrintLog:view');
+
         $printerId = $request->get('printer_id');
         $stats = $this->printService->getStatistics($printerId);
 
@@ -183,10 +210,14 @@ class PrintController extends Controller {
      * GET /api/print/logs
      */
     public function logs(Request $request) {
-        $limit = $request->get('limit', 10);
-        $printerId = $request->get('printer_id');
+        Gate::authorize('PrintLog:view');
 
-        $logs = $this->printService->getRecentLogs($limit, $printerId);
+        $validated = $request->validate([
+            'limit' => 'nullable|integer|min:1|max:100',
+            'printer_id' => 'nullable|integer',
+        ]);
+
+        $logs = $this->printService->getRecentLogs($validated['limit'] ?? 10, $validated['printer_id'] ?? null);
 
         return response()->json([
             'success' => true,
@@ -199,6 +230,8 @@ class PrintController extends Controller {
      * GET /api/invoice/{invoice}/print-url
      */
     public function getPrintUrl(Request $request, Invoice $invoice) {
+        Gate::authorize('print', $invoice);
+
         $printerId = $request->get('printer_id');
         $url = $this->printService->getPrintUrl($invoice, $printerId);
 
@@ -206,5 +239,30 @@ class PrintController extends Controller {
             'success' => true,
             'url' => $url,
         ]);
+    }
+
+    /** @return array<string, string> */
+    private function batchRules(): array {
+        return [
+            'invoice_ids' => 'required|array|min:1|max:' . self::MAX_BATCH,
+            'invoice_ids.*' => 'integer|distinct|exists:invoices,id',
+        ];
+    }
+
+    /**
+     * Authorize EVERY invoice before printing ANY of them: one foreign id fails
+     * the whole batch with 403 instead of silently printing the rest.
+     *
+     * @param  array<int, int|string>  $ids
+     * @return Collection<int, Invoice>
+     */
+    private function authorizedBatch(array $ids): Collection {
+        $invoices = Invoice::with('appointment')->whereIn('id', $ids)->get();
+
+        foreach ($invoices as $invoice) {
+            Gate::authorize('print', $invoice);
+        }
+
+        return $invoices;
     }
 }

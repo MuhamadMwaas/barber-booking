@@ -150,6 +150,10 @@ class InvoiceFinalizationService
                     'tse_data' => $tseData,
                     'finalized_at' => now()->toISOString(),
                     'finalized_by' => Auth::user()?->full_name ?? 'System',
+                    // The name above is for display; the id is what
+                    // InvoicePolicy::print() trusts — the cashier may always
+                    // hand out the receipt for money they just took.
+                    'finalized_by_id' => Auth::id(),
                     'payment_type' => (string) $paymentStatus->value,
                     'payment_method_id' => $paymentMethod->id,
                     'payment_method_code' => $appointmentPaymentMethod,

@@ -24,7 +24,7 @@ class PrintLogsTable {
                     ->sortable()
                     ->weight('bold')
                     ->url(
-                        fn($record) => $record->invoice
+                        fn($record) => $record->invoice && auth()->user()?->can('print', $record->invoice)
                             ? route('invoice.print', $record->invoice)
                             : null
                     )
@@ -161,7 +161,8 @@ class PrintLogsTable {
                     ->color('warning')
                     ->url(fn(PrintLog $record): string => route('invoice.print', $record->invoice_id))
                     ->openUrlInNewTab()
-                    ->visible(fn(PrintLog $record) => $record->invoice !== null),
+                    ->visible(fn(PrintLog $record) => $record->invoice !== null
+                        && (bool) auth()->user()?->can('print', $record->invoice)),
 
                 ViewAction::make(),
             ])

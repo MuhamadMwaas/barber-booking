@@ -21,4 +21,4 @@ use Tests\TestCase;
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
-    ->in('Feature/Booking', 'Feature/Money', 'Feature/Reminders', 'Feature/Filament');
+    ->in('Feature/Booking', 'Feature/Money', 'Feature/Reminders', 'Feature/Filament', 'Feature/Authorization');

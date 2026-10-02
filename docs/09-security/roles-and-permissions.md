@@ -48,6 +48,12 @@ PermissionsSeeder:
 - `force_booking` يُفحص في `StaffDashboard.php` قبل رفع `bypass_availability` / `allow_customer_overlap`.
 - العميل لا يستطيع رفعها — `BookingService.php:75` يعلق "Raised server-side only".
 
+## 5. الفواتير — Policy لا مجرد `auth` (AUTHZ-03)
+
+- `app/Policies/InvoicePolicy.php` — `view` (العميل: فاتورته المدفوعة) و `print` (الموظف: `Invoice:print` + حجزه/قبضه، أو `Invoice:print_others`).
+- `app/Policies/AppointmentTicketPolicy.php` — Gate باسم `printAppointmentTicket`، **ليست** `AppointmentPolicy` لأن Filament 4 كان سيلتقطها ويقفل Appointments resource.
+- التفاصيل والجدول الكامل: [`05-api/print.md`](../05-api/print.md).
+
 ---
 
 *التالي: [`tse-and-tax.md`](tse-and-tax.md)*

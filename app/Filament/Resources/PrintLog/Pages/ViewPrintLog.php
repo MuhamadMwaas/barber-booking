@@ -17,7 +17,8 @@ class ViewPrintLog extends ViewRecord {
                 ->color('warning')
                 ->url(fn(): string => route('invoice.print', $this->record->invoice_id))
                 ->openUrlInNewTab()
-                ->visible(fn(): bool => $this->record->invoice !== null),
+                ->visible(fn(): bool => $this->record->invoice !== null
+                    && (bool) auth()->user()?->can('print', $this->record->invoice)),
         ];
     }
 }

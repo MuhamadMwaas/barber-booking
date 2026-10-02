@@ -16,6 +16,13 @@ class Invoice extends Model
 {
     use HasFactory;
 
+    /**
+     * Render-time only (a real property, never an attribute, so it is never
+     * saved): set by the customer's read-only view so the receipt always shows
+     * "(Kopie)" — see getCopyLabel() and InvoicePolicy::view().
+     */
+    public bool $renderAsCustomerCopy = false;
+
     protected $fillable = [
         'appointment_id',
         'customer_id',
@@ -100,13 +107,19 @@ class Invoice extends Model
 
     public function getCopyLabel(string $language = 'en'): string {
         $nextPrintNumber = $this->getNextPrintNumber();
+        $word = $language === 'de' ? 'Kopie' : 'COPY';
+
+        // The customer's view in the app is never the original, whether or not
+        // the salon has printed it yet. It carries no number: the numbered copies
+        // track physical reprints at the counter.
+        if ($this->renderAsCustomerCopy) {
+            return ' (' . $word . ')';
+        }
 
         // Only label as a copy once the invoice has been printed before.
         if ($nextPrintNumber <= 1) {
             return '';
         }
-
-        $word = $language === 'de' ? 'Kopie' : 'COPY';
 
         if ($nextPrintNumber === 2) {
             return ' (' . $word . ')';

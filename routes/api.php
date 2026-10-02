@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AvailabilityController;
 use App\Http\Controllers\Api\BookingController;
 use App\Http\Controllers\Api\DevicesController;
+use App\Http\Controllers\Api\MyInvoiceController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OtpController;
 use App\Http\Controllers\Api\PasswordResetController;
@@ -242,8 +243,8 @@ Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
 
 
     Route::prefix('noticifation')->name('noticifation.')->group(function () {
-        Route::post('/test-send-to-all', [NotificationController::class, 'testSendToAll'])->name('test-send-to-all');
-        Route::post('/test-send-to-customers', [NotificationController::class, 'testSendToAllCustomers'])->name('test-send-to-customers');
+        // Route::post('/test-send-to-all', [NotificationController::class, 'testSendToAll'])->name('test-send-to-all');
+        // Route::post('/test-send-to-customers', [NotificationController::class, 'testSendToAllCustomers'])->name('test-send-to-customers');
     });
 
     Route::prefix('notifications')->name('notifications.')->middleware(['auth:sanctum', 'role:SuperAdmin'])->group(function () {
@@ -346,8 +347,32 @@ Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Print API Routes
+| Customer invoices (read-only)
 |--------------------------------------------------------------------------
+|
+| A customer's own PAID receipts. Nothing here prints or counts a print; each
+| item carries a short-lived signed `view_url` for the HTML copy (AUTHZ-03).
+|
+*/
+Route::middleware(['auth:sanctum', 'verified.customer', 'throttle:60,1'])
+    ->prefix('my/invoices')
+    ->name('my.invoices.')
+    ->group(function () {
+        Route::get('/', [MyInvoiceController::class, 'index'])->name('index');
+        Route::get('/{id}', [MyInvoiceController::class, 'show'])
+            ->whereNumber('id')
+            ->name('show');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| Print API Routes — STAFF ONLY
+|--------------------------------------------------------------------------
+|
+| The group admits any verified account; each action then authorizes itself
+| (InvoicePolicy::print, PrintLog:view, PrinterSetting:edit), so a customer
+| token gets 403 here. Customers read receipts through /api/my/invoices.
+|
 */
 Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
 

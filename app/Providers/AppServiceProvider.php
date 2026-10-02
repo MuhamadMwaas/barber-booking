@@ -5,10 +5,12 @@ namespace App\Providers;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Console\Command;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use App\Filament\Auth\StaffLoginResponse;
 use App\Http\Middleware\EnsureStaffDashboardAccess;
+use App\Policies\AppointmentTicketPolicy;
 use App\Support\DateFormat;
 use App\Support\ThrottleKey;
 use App\Services\Landing\LandingContent;
@@ -83,6 +85,10 @@ class AppServiceProvider extends ServiceProvider
         $this->registerAuthRateLimiters();
         $this->registerStaffDashboardPersistentMiddleware();
         $this->registerFilamentDateFormats();
+
+        // InvoicePolicy is auto-discovered; the ticket rule cannot be an
+        // AppointmentPolicy (see AppointmentTicketPolicy for why).
+        Gate::define(AppointmentTicketPolicy::ABILITY, [AppointmentTicketPolicy::class, 'print']);
     }
 
     /**

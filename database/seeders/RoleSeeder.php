@@ -55,6 +55,9 @@ class RoleSeeder extends Seeder
             // Invoices — can view & print, not edit/delete templates
             'InvoiceTemplate:access', 'InvoiceTemplate:view', 'InvoiceTemplate:print',
 
+            // Invoice printing (AUTHZ-03) — any booking in the salon.
+            'Invoice:print', 'Invoice:print_others',
+
             // Printers & Print Logs — view & export only
             'PrinterSetting:access', 'PrinterSetting:view',
             'PrintLog:access',       'PrintLog:view', 'PrintLog:export',
@@ -124,6 +127,12 @@ class RoleSeeder extends Seeder
             'StaffDashboard:manage_timeoff', 'StaffDashboard:manage_colors',
             'StaffDashboard:edit_notes', 'StaffDashboard:post_message',
             'StaffDashboard:view_team',
+
+            // Invoice printing (AUTHZ-03) — own bookings only. NOT
+            // `Invoice:print_others`: `edit_others` above lets a provider work on
+            // a colleague's booking, but that is not a licence to read the
+            // colleague's customers' bills.
+            'Invoice:print',
         ],
 
         // ── Customer ───────────────────────────────────────────────────────

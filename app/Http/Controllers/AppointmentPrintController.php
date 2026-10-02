@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Enum\AppointmentStatus;
 use App\Models\Appointment;
+use App\Policies\AppointmentTicketPolicy;
 use App\Services\SettingsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class AppointmentPrintController extends Controller
 {
@@ -17,6 +19,9 @@ class AppointmentPrintController extends Controller
      */
     public function print(Request $request, Appointment $appointment)
     {
+        // AUTHZ-03: the ticket carries the customer's name and phone.
+        Gate::authorize(AppointmentTicketPolicy::ABILITY, $appointment);
+
         // Block printing for cancelled appointments — they are not operationally useful.
         $blockedStatuses = [
             AppointmentStatus::USER_CANCELLED,

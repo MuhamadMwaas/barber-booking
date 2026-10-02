@@ -22,7 +22,8 @@ class ViewAppointment extends ViewRecord
                     ? route('invoice.print', ['invoice' => $this->record->invoice])
                     : null)
                 ->openUrlInNewTab()
-                ->visible(fn (): bool => $this->record->canPrintInvoice()),
+                ->visible(fn (): bool => $this->record->canPrintInvoice()
+                    && (bool) auth()->user()?->can('print', $this->record->invoice)),
             EditAction::make(),
         ];
     }

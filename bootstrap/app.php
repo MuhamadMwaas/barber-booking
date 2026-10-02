@@ -25,6 +25,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->appendToGroup('web', SetLocaleFromSession::class);
 
+        // There is no route named `login` (staff sign in at the dashboard's own
+        // /login, the panel at its own), so a guest hitting any `auth` web route
+        // — /invoice/{id}/print, the template preview — died with a 500
+        // RouteNotFoundException instead of being sent to sign in.
+        $middleware->redirectGuestsTo(fn () => route('staff.dashboard.login'));
+
         $middleware->appendToGroup('api', [
             EnforceJsonAcceptHeader::class,
             SetApiLocale::class,

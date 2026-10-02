@@ -14,6 +14,7 @@ use App\Models\DashboardMessage;
 use App\Models\ProviderTimeOff;
 use App\Models\Service;
 use App\Models\User;
+use App\Policies\AppointmentTicketPolicy;
 use App\Services\AppointmentDeletionService;
 use App\Services\AttendanceService;
 use App\Services\BookingLockService;
@@ -26,6 +27,7 @@ use App\Services\AppointmentCancellationService;
 use App\Services\InvoiceFinalizationService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
@@ -1463,6 +1465,14 @@ class StaffDashboard extends Component
             return;
         }
 
+        // The button switch above is not the data rule: the print URL enforces
+        // InvoicePolicy on its own, so say so here instead of opening a 403 tab.
+        if (Gate::denies('print', $invoice)) {
+            $this->dispatch('notify', type: 'error', message: __('dashboard.not_your_booking_denied'));
+
+            return;
+        }
+
         $this->dispatch('printInvoice', invoiceId: $invoice->id);
     }
 
@@ -1489,6 +1499,12 @@ class StaffDashboard extends Component
         ];
         if (in_array($appointment->status, $cancelledStatuses, true)) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.print.order_cancelled'));
+
+            return;
+        }
+
+        if (Gate::denies(AppointmentTicketPolicy::ABILITY, $appointment)) {
+            $this->dispatch('notify', type: 'error', message: __('dashboard.not_your_booking_denied'));
 
             return;
         }

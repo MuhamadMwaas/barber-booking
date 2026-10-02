@@ -89,6 +89,17 @@ class PermissionsSeeder extends Seeder
         'ProviderTimeOff' => ['view', 'create', 'edit', 'delete'],
     ];
 
+    /**
+     * Abilities checked by a Policy on a model that has no Resource of its own
+     * (AUTHZ-03). See {@see \App\Policies\InvoicePolicy}:
+     *   - print         print invoices for bookings the user served
+     *   - print_others  print invoices for anyone else's bookings (management)
+     * A customer's access to their OWN receipts is ownership, not a permission.
+     */
+    private const POLICY_ABILITIES = [
+        'Invoice' => ['print', 'print_others'],
+    ];
+
     private const ROLES = [
         'SuperAdmin',
     ];
@@ -257,6 +268,13 @@ class PermissionsSeeder extends Seeder
 
         // ─ Relation managers ──────────────────────
         foreach (self::RELATION_ABILITIES as $modelName => $abilities) {
+            foreach ($abilities as $ability) {
+                $permissions[] = "{$modelName}:{$ability}";
+            }
+        }
+
+        // ─ Policy-only models ─────────────────────
+        foreach (self::POLICY_ABILITIES as $modelName => $abilities) {
             foreach ($abilities as $ability) {
                 $permissions[] = "{$modelName}:{$ability}";
             }
