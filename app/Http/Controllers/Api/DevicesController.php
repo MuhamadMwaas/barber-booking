@@ -23,12 +23,18 @@ class DevicesController extends Controller{
 
         $user = $request->user();
 
+        // Keyed on device_id ALONE, matching the table's unique index. device_id
+        // is the OneSignal Subscription ID, which belongs to the phone, not the
+        // account: when a second account signs in on the same phone the row is
+        // handed over to it. Keying on (user_id, device_id) made that INSERT
+        // collide with the unique index (500), and while the old row stayed
+        // active the previous owner's reminders kept landing on this phone.
         $device = UserDevice::updateOrCreate(
             [
-                'user_id' => $user->id,
                 'device_id' => $request->input('device_id'),
             ],
             [
+                'user_id' => $user->id,
                 'device_token' => $request->input('device_token'),
                 'platform' => $request->input('platform'),
                 'os_version' => $request->input('os_version'),

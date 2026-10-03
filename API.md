@@ -2352,16 +2352,18 @@ POST /api/bookings/{id}/cancel
 POST /api/register-device
 ```
 
-**الوصف:** تسجيل أو تحديث جهاز للمستخدم الحالي. يستخدم `updateOrCreate` بناءً على `device_id + user_id`.
+**الوصف:** تسجيل أو تحديث جهاز للمستخدم الحالي. يستخدم `updateOrCreate` بناءً على `device_id` وحده — إن كان الجوال مسجلاً لحساب آخر يُنقل للحساب الحالي.
 
-**Authentication:** ✅ يتطلب Bearer Token
+> ⚠️ `device_id` **يجب** أن يكون OneSignal Subscription ID (`OneSignal.User.pushSubscription.id`) — السيرفر يرسل الإشعارات إلى هذا الحقل بالذات. أي معرّف آخر (UUID الجهاز، FCM token) = لا إشعارات بصمت. الدليل الكامل: [`docs/ONESIGNAL_PUSH_MOBILE_GUIDE_AR.md`](docs/ONESIGNAL_PUSH_MOBILE_GUIDE_AR.md)
+
+**Authentication:** ✅ يتطلب Bearer Token (حساب مُفعّل — غير المُفعّل يأخذ 403)
 
 **Request Body:**
 
 | Field          | Type   | Required | Description           |
 | -------------- | ------ | -------- | --------------------- |
-| `device_id`    | string | ✅        | معرف الجهاز الفريد    |
-| `device_token` | string | ❌        | FCM/APNs push token   |
+| `device_id`    | string | ✅        | OneSignal Subscription ID |
+| `device_token` | string | ❌        | اختياري للمعلومات فقط (FCM/APNs token) — لا يُستخدم في الإرسال |
 | `platform`     | string | ❌        | `android` أو `ios`    |
 | `os_version`   | string | ❌        | إصدار نظام التشغيل    |
 | `app_version`  | string | ❌        | إصدار التطبيق         |
@@ -2370,7 +2372,7 @@ POST /api/register-device
 **Example Request:**
 ```json
 {
-  "device_id": "device-uuid-abc123",
+  "device_id": "1dd608f2-c6a1-11e3-851d-000c2940e62c",
   "device_token": "fcm-push-token-here",
   "platform": "android",
   "os_version": "14.0",
@@ -2389,7 +2391,7 @@ POST /api/register-device
   "data": {
     "id": 1,
     "user_id": 5,
-    "device_id": "device-uuid-abc123",
+    "device_id": "1dd608f2-c6a1-11e3-851d-000c2940e62c",
     "platform": "android",
     "is_active": true,
     "last_active_at": "2026-02-28T10:00:00.000000Z"
@@ -2418,7 +2420,7 @@ POST /api/deregister-device
 **Example Request:**
 ```json
 {
-  "device_id": "device-uuid-abc123"
+  "device_id": "1dd608f2-c6a1-11e3-851d-000c2940e62c"
 }
 ```
 

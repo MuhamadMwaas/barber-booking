@@ -247,7 +247,7 @@ Route::middleware(['auth:sanctum', 'verified.customer'])->group(function () {
         // Route::post('/test-send-to-customers', [NotificationController::class, 'testSendToAllCustomers'])->name('test-send-to-customers');
     });
 
-    Route::prefix('notifications')->name('notifications.')->middleware(['auth:sanctum', 'role:SuperAdmin'])->group(function () {
+    Route::prefix('notifications')->name('notifications.')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/', [NotificationController::class, 'index'])->name('index');
         Route::get('/unread', [NotificationController::class, 'unread'])->name('unread');
         Route::get('/unread-count', [NotificationController::class, 'unreadCount'])->name('unread-count');

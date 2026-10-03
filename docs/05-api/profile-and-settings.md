@@ -48,21 +48,23 @@ POST /api/profile/phone/verify-otp { phone, otp } → throttle 10,1
 ## 6. `GET /api/settings` + `PATCH /api/settings/{key}`
 
 ```
-GET /api/settings → { catalog:[{key, default, rule}], values:{reminder_channel_push:true, ...} }
-PATCH /api/settings/reminder_channel_push { value: false } → 200
+GET /api/settings → { catalog:[{key, default, rule}], values:{reminder_push_enabled:true, ...} }
+PATCH /api/settings/reminder_push_enabled { value: false } → 200
 ```
 
 - الكتالوج من `AppSetting`، القيم من `UserSetting` (override) — `UserSettingService.php:1`
-- القنوات الثلاث: `reminder_channel_push` / `email` / `sms` — كلها gated بـ `ReminderChannelResolver`.
+- القنوات الثلاث: `reminder_push_enabled` / `reminder_email_enabled` / `reminder_sms_enabled` — كلها gated بـ `ReminderChannelResolver`.
 
 ## 7. Devices — Push
 
 ```
-POST /api/register-device { player_id, platform: ios/android/web }
-POST /api/deregister-device { player_id }
+POST /api/register-device   { device_id: <OneSignal Subscription ID>, platform: android|ios, ... }
+POST /api/deregister-device { device_id: <OneSignal Subscription ID> }
 ```
 
-`UserDevice` — OneSignal `player_id` — `DevicesController.php:1`
+- `device_id` **هو** OneSignal Subscription ID (`OneSignal.User.pushSubscription.id`) — `NotificationService::resolveDeviceIdsForUsers()` يرسل إلى هذا العمود عبر `include_player_ids`، و`device_token` لا يُستخدم في الإرسال.
+- `device_id` فريد على مستوى الجدول: تسجيله من حساب ثانٍ على نفس الجوال ينقل الصف لهذا الحساب.
+- دليل تطبيق Flutter الكامل: [`../ONESIGNAL_PUSH_MOBILE_GUIDE_AR.md`](../ONESIGNAL_PUSH_MOBILE_GUIDE_AR.md)
 
 ---
 
