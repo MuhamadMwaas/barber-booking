@@ -16,9 +16,10 @@ use Tests\TestCase;
 | `Feature/Money` holds the cross-layer VAT parity suite (MON-01).
 | `Feature/Reminders` holds the appointment-reminder channel suite.
 | `Feature/Filament` holds admin-panel regression tests (RM-01).
+| `Feature/Mail` holds the customer booking-email wording/language suite.
 |
 */
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
-    ->in('Feature/Booking', 'Feature/Money', 'Feature/Reminders', 'Feature/Filament', 'Feature/Authorization');
+    ->in('Feature/Booking', 'Feature/Money', 'Feature/Reminders', 'Feature/Filament', 'Feature/Authorization', 'Feature/Mail');

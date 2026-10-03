@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\UserDevice;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+
 class DevicesController extends Controller{
 
 
@@ -36,6 +38,13 @@ class DevicesController extends Controller{
                 'meta' => $request->input('meta', []),
             ]
         );
+        Log::info('Device registered', [
+            'user_id' => $user->id,
+            'device_id' => $device->device_id,
+            'platform' => $device->platform,
+            'os_version' => $device->os_version,
+            'app_version' => $device->app_version,
+        ]);
 
         return response()->json([
             'message' => 'Device registered successfully',

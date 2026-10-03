@@ -18,7 +18,7 @@
         </p>
 
         <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.7; color: #374151;">
-            {{ __('booking_email.confirm_intro') }}
+            {{ __('booking_email.confirm_intro', ['company' => $companyName ?: config('app.name')]) }}
         </p>
 
         @include('emails.booking.partials.details', ['appointment' => $appointment, 'currency' => $currency])

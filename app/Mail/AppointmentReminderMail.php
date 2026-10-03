@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Models\Appointment;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
@@ -9,25 +10,35 @@ use Illuminate\Queue\SerializesModels;
 /**
  * Email channel for appointment reminders.
  *
- * Receives the ALREADY-translated subject/body (resolved by NotificationService
- * in the recipient's locale) so the same reminder text is shared across the push,
- * email and SMS channels.
+ * Same layout and booking-details block as the booking confirmation, so the
+ * customer sees one consistent design. Push and SMS keep the short shared
+ * reminder text (appointment_reminder.message); the email has room for the
+ * full details instead.
  */
 class AppointmentReminderMail extends Mailable
 {
     use Queueable, SerializesModels;
 
     public function __construct(
-        public string $title,
-        public string $body,
-        public string $userName
+        public Appointment $appointment,
+        public string $companyName,
+        public string $currency,
+        string $locale,
     ) {
+        $this->locale = $locale;
     }
 
     public function build(): self
     {
         return $this
-            ->subject($this->title)
-            ->view('emails.appointment-reminder');
+            ->subject(__('booking_email.reminder_subject', [
+                'number' => $this->appointment->number,
+            ]))
+            ->view('emails.appointment-reminder', [
+                'appointment' => $this->appointment,
+                'companyName' => $this->companyName,
+                'currency'    => $this->currency,
+                'audience'    => 'customer',
+            ]);
     }
 }

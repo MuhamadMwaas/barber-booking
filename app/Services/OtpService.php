@@ -45,6 +45,8 @@ class OtpService
                 otp: $otp,
                 type: $type,
                 expiresAt: $expiresAt->toIso8601String(),
+                purpose: $purpose,
+                locale: app()->getLocale(),
             )->afterCommit();
         });
 

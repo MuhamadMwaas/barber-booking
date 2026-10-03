@@ -110,7 +110,10 @@ class AppointmentReminderService
                 'status' => AppointmentReminder::STATUS_PENDING,
                 // Claims the one live slot. The unique index refuses a second.
                 'active_slot' => AppointmentReminder::ACTIVE_SLOT,
-                'locale' => $customer->locale ?? app()->getLocale(),
+                // The language of the request that set the reminder (the
+                // customer's app). users.locale is not used: registration never
+                // fills it, so it is the 'en' default for nearly everyone.
+                'locale' => app()->getLocale(),
                 'title_key' => $titleKey,
                 'message_key' => $messageKey,
                 'params' => $params,

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enum\OtpPurpose;
 use App\Enum\OtpType;
 use App\Models\User;
 use App\Services\OtpDeliveryService;
@@ -21,6 +22,10 @@ class SendOtpDeliveryJob implements ShouldQueue
         public string $otp,
         public OtpType $type,
         public string $expiresAt,
+        public OtpPurpose $purpose = OtpPurpose::ACCOUNT_VERIFICATION,
+        // Captured at dispatch: the worker runs outside the request, so its
+        // own app()->getLocale() is not the language the customer asked in.
+        public ?string $locale = null,
     ) {
     }
 
@@ -37,6 +42,10 @@ class SendOtpDeliveryJob implements ShouldQueue
             otp: $this->otp,
             expiresAt: Carbon::parse($this->expiresAt),
             type: $this->type,
+            // `??`: a job queued before these properties existed unserializes
+            // with them uninitialised, and must still deliver.
+            purpose: $this->purpose ?? OtpPurpose::ACCOUNT_VERIFICATION,
+            locale: $this->locale ?? null,
         );
     }
 }

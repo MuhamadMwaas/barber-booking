@@ -7,7 +7,7 @@ return [
 
     // Intros
     'greeting'       => 'Hallo :name,',
-    'confirm_intro'  => 'Ihre Buchung wurde erfolgreich erhalten. Hier sind die Details:',
+    'confirm_intro'  => 'Vielen Dank für Ihre Buchung bei :company. Ihre Buchung wurde erfolgreich entgegengenommen.',
     'company_intro'  => 'Soeben wurde eine neue Online-Buchung erstellt. Die Details finden Sie unten:',
 
     // Booking fields
@@ -15,10 +15,10 @@ return [
     'date'           => 'Datum',
     'time'           => 'Uhrzeit',
     'duration'       => 'Dauer',
-    'provider'       => 'Dienstleister',
+    'provider'       => 'Mitarbeiter/in',
     'payment_method' => 'Zahlungsmethode',
     'source'         => 'Buchungsquelle',
-    'notes'          => 'Anmerkungen',
+    'notes'          => 'Hinweise',
 
     // Services table
     'services' => 'Leistungen',
@@ -26,7 +26,7 @@ return [
     'price'    => 'Preis',
     'subtotal' => 'Zwischensumme',
     'tax'      => 'Steuer',
-    'total'    => 'Gesamt',
+    'total'    => 'Gesamtpreis',
 
     // Customer block (company email)
     'customer' => 'Kundendaten',
@@ -40,7 +40,21 @@ return [
     'appointment_n'        => 'Termin :n',
     'group_total'          => 'Gesamtbetrag aller Termine',
 
+    // Kundenansicht (Bestätigung + Erinnerung)
+    'details_heading'   => 'Ihre Buchungsdetails',
+    'services_customer' => 'Ihre Leistungen',
+    'payment_summary'   => 'Zahlungsübersicht',
+    'payment_methods'   => [
+        'cash'   => 'Barzahlung',
+        'online' => 'Online',
+    ],
+
+    // Terminerinnerung per E-Mail
+    'reminder_subject' => 'Terminerinnerung — :number',
+    'reminder_intro'   => 'Wir möchten Sie an Ihren bevorstehenden Termin bei :company erinnern.',
+    'reminder_thanks'  => 'Wir freuen uns auf Ihren Besuch bei :company!',
+
     // Footer
-    'thanks'   => 'Vielen Dank, dass Sie sich für :company entschieden haben!',
-    'footer'   => 'Dies ist eine automatische Nachricht, bitte antworten Sie nicht direkt auf diese E-Mail.',
+    'thanks'   => 'Vielen Dank, dass Sie sich für :company entschieden haben! Wir freuen uns auf Ihren Besuch.',
+    'footer'   => 'Dies ist eine automatisch versendete E-Mail. Bitte antworten Sie nicht direkt auf diese Nachricht.',
 ];

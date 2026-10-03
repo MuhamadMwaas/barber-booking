@@ -7,7 +7,7 @@ return [
 
     // Intros
     'greeting'       => 'Hello :name,',
-    'confirm_intro'  => 'Your booking has been received successfully. Here are the details:',
+    'confirm_intro'  => 'Thank you for booking with :company. Your booking has been received successfully.',
     'company_intro'  => 'A new online booking has just been created. Details are below:',
 
     // Booking fields
@@ -15,7 +15,7 @@ return [
     'date'           => 'Date',
     'time'           => 'Time',
     'duration'       => 'Duration',
-    'provider'       => 'Provider',
+    'provider'       => 'Staff member',
     'payment_method' => 'Payment Method',
     'source'         => 'Booking Source',
     'notes'          => 'Notes',
@@ -26,7 +26,7 @@ return [
     'price'    => 'Price',
     'subtotal' => 'Subtotal',
     'tax'      => 'Tax',
-    'total'    => 'Total',
+    'total'    => 'Total price',
 
     // Customer block (company email)
     'customer' => 'Customer Details',
@@ -40,7 +40,21 @@ return [
     'appointment_n'        => 'Appointment :n',
     'group_total'          => 'Total for all appointments',
 
+    // Customer view (confirmation + reminder)
+    'details_heading'   => 'Your booking details',
+    'services_customer' => 'Your services',
+    'payment_summary'   => 'Payment summary',
+    'payment_methods'   => [
+        'cash'   => 'Cash',
+        'online' => 'Online',
+    ],
+
+    // Appointment reminder email
+    'reminder_subject' => 'Appointment reminder — :number',
+    'reminder_intro'   => 'This is a reminder of your upcoming appointment at :company.',
+    'reminder_thanks'  => 'We look forward to seeing you at :company!',
+
     // Footer
-    'thanks'   => 'Thank you for choosing :company!',
-    'footer'   => 'This is an automated message, please do not reply directly to this email.',
+    'thanks'   => 'Thank you for choosing :company! We look forward to your visit.',
+    'footer'   => 'This is an automatically generated email. Please do not reply directly to this message.',
 ];

@@ -6,6 +6,7 @@ use App\Enum\BookingSource;
 use App\Mail\BookingConfirmationMail;
 use App\Mail\BookingNotificationMail;
 use App\Models\Appointment;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
@@ -23,6 +24,12 @@ use Illuminate\Support\Facades\Mail;
 class BookingMailService
 {
     /**
+     * The salon is in Germany: a customer email in a language with no
+     * translation goes out in German.
+     */
+    public const FALLBACK_CUSTOMER_LOCALE = 'de';
+
+    /**
      * Entry point called right after a booking is successfully committed.
      */
     public function sendForNewBooking(Appointment $appointment): void
@@ -37,8 +44,8 @@ class BookingMailService
                 'children.services_record', 'children.provider',
             ]);
 
-            $companyName = (string) (get_setting('company_name', '') ?: config('app.name'));
-            $currency    = (string) get_setting('currency_symbol', '€');
+            $companyName = $this->companyName();
+            $currency    = $this->currency();
 
             $this->sendCustomerConfirmation($appointment, $companyName, $currency);
             $this->sendCompanyNotification($appointment, $companyName, $currency);
@@ -73,7 +80,7 @@ class BookingMailService
             appointment: $appointment,
             companyName: $companyName,
             currency: $currency,
-            locale: $this->customerLocale($appointment),
+            locale: self::customerLocale(app()->getLocale()),
         ));
     }
 
@@ -100,13 +107,32 @@ class BookingMailService
     }
 
     /**
-     * Render the customer email in the customer's preferred language,
-     * falling back to the salon default.
+     * The language a customer email is rendered in.
+     *
+     * The caller passes the language the customer is actually using — for a
+     * booking, the request's locale (SetApiLocale: ?lang, Accept-Language). It
+     * is NOT read from users.locale: registration never fills that column, so
+     * it holds the 'en' default for nearly everyone and would send every
+     * customer an English email.
      */
-    protected function customerLocale(Appointment $appointment): string
+    public static function customerLocale(?string $locale): string
     {
-        return $appointment->customer?->locale
-            ?: $this->companyLocale();
+        return $locale !== null && Lang::has('booking_email.subject_customer', $locale, false)
+            ? $locale
+            : self::FALLBACK_CUSTOMER_LOCALE;
+    }
+
+    /**
+     * Brand name shown in customer emails; the company_name setting, else APP_NAME.
+     */
+    public function companyName(): string
+    {
+        return (string) (get_setting('company_name', '') ?: config('app.name'));
+    }
+
+    public function currency(): string
+    {
+        return (string) get_setting('currency_symbol', '€');
     }
 
     /**

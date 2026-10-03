@@ -7,7 +7,7 @@ return [
 
     // Intros
     'greeting'       => 'مرحباً :name،',
-    'confirm_intro'  => 'تم استلام حجزك بنجاح. إليك تفاصيل الحجز:',
+    'confirm_intro'  => 'شكراً لحجزك لدى :company. تم استلام حجزك بنجاح.',
     'company_intro'  => 'تم إنشاء حجز أونلاين جديد للتو. التفاصيل أدناه:',
 
     // Booking fields
@@ -15,10 +15,10 @@ return [
     'date'           => 'التاريخ',
     'time'           => 'الوقت',
     'duration'       => 'المدة',
-    'provider'       => 'مقدّم الخدمة',
+    'provider'       => 'مقدم الخدمة',
     'payment_method' => 'طريقة الدفع',
     'source'         => 'مصدر الحجز',
-    'notes'          => 'ملاحظات',
+    'notes'          => 'الملاحظات',
 
     // Services table
     'services' => 'الخدمات',
@@ -26,7 +26,7 @@ return [
     'price'    => 'السعر',
     'subtotal' => 'المجموع قبل الضريبة',
     'tax'      => 'الضريبة',
-    'total'    => 'الإجمالي',
+    'total'    => 'السعر الإجمالي',
 
     // Customer block (company email)
     'customer' => 'بيانات الزبون',
@@ -40,7 +40,21 @@ return [
     'appointment_n'        => 'الموعد :n',
     'group_total'          => 'المجموع لكل المواعيد',
 
+    // عرض الزبون (التأكيد + التذكير)
+    'details_heading'   => 'تفاصيل حجزك',
+    'services_customer' => 'الخدمات التي اخترتها',
+    'payment_summary'   => 'ملخص الدفع',
+    'payment_methods'   => [
+        'cash'   => 'نقداً',
+        'online' => 'أونلاين',
+    ],
+
+    // تذكير الموعد عبر البريد
+    'reminder_subject' => 'تذكير بالموعد — :number',
+    'reminder_intro'   => 'نودّ تذكيرك بموعدك القادم لدى :company.',
+    'reminder_thanks'  => 'نتطلع إلى زيارتك لدى :company!',
+
     // Footer
-    'thanks'   => 'شكراً لاختيارك :company!',
-    'footer'   => 'هذه رسالة آلية، الرجاء عدم الرد عليها مباشرة.',
+    'thanks'   => 'شكراً لاختيارك :company! نتطلع إلى زيارتك.',
+    'footer'   => 'هذه رسالة بريد إلكتروني مرسلة تلقائياً. يرجى عدم الرد مباشرةً على هذه الرسالة.',
 ];

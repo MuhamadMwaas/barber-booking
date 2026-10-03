@@ -17,8 +17,26 @@
         ? $appointment->services_record->sortBy('sequence_order')
         : $appointment->services_record()->orderBy('sequence_order')->get();
     $providerName = optional($appointment->provider)->full_name ?? '—';
+    // Stored as a machine value ("cash", "online"); shown translated, raw
+    // only for a value no translation knows about.
+    $paymentMethodKey = 'booking_email.payment_methods.' . $appointment->payment_method;
+    $paymentMethodLabel = \Illuminate\Support\Facades\Lang::has($paymentMethodKey)
+        ? __($paymentMethodKey)
+        : $appointment->payment_method;
+    // Customer-facing headings ("Ihre ...") never leak into the salon's copy.
+    $isCustomer = ($audience ?? 'company') === 'customer';
+    // Dates/times in the email's own locale (German: 30/12/2026, 14:30). The
+    // model accessors stay untouched: the API serves them as they are. The
+    // time is wrapped in dir="ltr" so an Arabic email does not reorder
+    // "10:00 - 11:00" into "11:00 - 10:00".
+    $emailDate = fn ($a) => $a->appointment_date->format(\App\Support\DateFormat::date('M d, Y'));
+    $emailTime = fn ($a) => $a->start_time->format(\App\Support\DateFormat::time('h:i A'))
+        . ' - ' . $a->end_time->format(\App\Support\DateFormat::time('h:i A'));
 @endphp
 
+@if($isCustomer)
+<h3 style="margin: 0 0 8px; font-size: 15px; color: #111827;">{{ __('booking_email.details_heading') }}</h3>
+@endif
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 20px; font-size: 14px; color: #1f2937;">
     <tr>
         <td style="padding: 6px 0; color: #6b7280;">{{ __('booking_email.booking_number') }}</td>
@@ -26,11 +44,11 @@
     </tr>
     <tr>
         <td style="padding: 6px 0; color: #6b7280;">{{ __('booking_email.date') }}</td>
-        <td style="padding: 6px 0; font-weight: 600; text-align: end;">{{ $appointment->formatted_date }}</td>
+        <td style="padding: 6px 0; font-weight: 600; text-align: end;">{{ $emailDate($appointment) }}</td>
     </tr>
     <tr>
         <td style="padding: 6px 0; color: #6b7280;">{{ __('booking_email.time') }}</td>
-        <td style="padding: 6px 0; font-weight: 600; text-align: end;">{{ $appointment->time_range }}</td>
+        <td style="padding: 6px 0; font-weight: 600; text-align: end;"><span dir="ltr">{{ $emailTime($appointment) }}</span></td>
     </tr>
     <tr>
         <td style="padding: 6px 0; color: #6b7280;">{{ __('booking_email.duration') }}</td>
@@ -42,7 +60,7 @@
     </tr>
     <tr>
         <td style="padding: 6px 0; color: #6b7280;">{{ __('booking_email.payment_method') }}</td>
-        <td style="padding: 6px 0; font-weight: 600; text-align: end;">{{ $appointment->payment_method }}</td>
+        <td style="padding: 6px 0; font-weight: 600; text-align: end;">{{ $paymentMethodLabel }}</td>
     </tr>
     @if($appointment->notes)
     <tr>
@@ -52,7 +70,7 @@
     @endif
 </table>
 
-<h3 style="margin: 24px 0 8px; font-size: 15px; color: #111827;">{{ __('booking_email.services') }}</h3>
+<h3 style="margin: 24px 0 8px; font-size: 15px; color: #111827;">{{ $isCustomer ? __('booking_email.services_customer') : __('booking_email.services') }}</h3>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 14px; color: #1f2937;">
     <thead>
         <tr style="background-color: #f3f4f6;">
@@ -72,6 +90,9 @@
     </tbody>
 </table>
 
+@if($isCustomer)
+<h3 style="margin: 24px 0 0; font-size: 15px; color: #111827;">{{ __('booking_email.payment_summary') }}</h3>
+@endif
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0 0; font-size: 14px; color: #1f2937;">
     <tr>
         <td style="padding: 4px 12px; color: #6b7280; text-align: end;">{{ __('booking_email.subtotal') }}</td>

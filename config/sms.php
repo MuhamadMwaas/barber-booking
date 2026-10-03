@@ -73,7 +73,7 @@ return [
             // numeric ones); anything longer is rejected with code 201. Leave it
             // empty to fall back to the account's default sender number, which is
             // what some countries require anyway for unregistered alpha senders.
-            'from' => env('SEVEN_FROM', 'Barber'),
+            'from' => env('SEVEN_FROM', 'LookUp'),
 
             'base_url' => env('SEVEN_BASE_URL', 'https://gateway.seven.io/api'),
 
@@ -102,7 +102,7 @@ return [
 
         'log' => [
             'channel' => env('SMS_LOG_CHANNEL'),
-            'from' => env('SMS_LOG_FROM', 'Barber'),
+            'from' => env('SMS_LOG_FROM', 'LookUp'),
         ],
 
     ],

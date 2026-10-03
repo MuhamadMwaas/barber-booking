@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Enum\AppointmentStatus;
 use App\Mail\AppointmentReminderMail;
 use App\Models\AppointmentReminder;
+use App\Services\BookingMailService;
 use App\Services\NotificationService;
 use App\Services\Reminders\ReminderChannelResolver;
 use App\Services\SmsService;
@@ -172,9 +173,8 @@ class SendAppointmentReminderJob implements ShouldQueue
         $params = $reminder->params ?? [];
         $delivered = [];
 
-        // Resolved once and shared, so the three channels can never show the
-        // customer three differently-worded versions of the same reminder.
-        $title = $notificationService->translateKey($reminder->title_key, $params, $locale);
+        // The short reminder text, for SMS. The email renders its own fuller
+        // layout (AppointmentReminderMail) in the same locale.
         $message = $notificationService->translateKey($reminder->message_key, $params, $locale);
 
         // Push / in-app notification.
@@ -206,9 +206,18 @@ class SendAppointmentReminderJob implements ShouldQueue
                 ]);
             } else {
                 try {
-                    Mail::to($user->email)->send(
-                        new AppointmentReminderMail($title, $message, $user->full_name)
-                    );
+                    $mailer = app(BookingMailService::class);
+                    $appointment = $reminder->appointment->loadMissing([
+                        'services_record', 'provider',
+                        'children.services_record', 'children.provider',
+                    ]);
+
+                    Mail::to($user->email)->send(new AppointmentReminderMail(
+                        appointment: $appointment,
+                        companyName: $mailer->companyName(),
+                        currency: $mailer->currency(),
+                        locale: BookingMailService::customerLocale($locale),
+                    ));
                     $delivered[] = ReminderChannelResolver::CHANNEL_EMAIL;
                 } catch (\Throwable $e) {
                     Log::error('Failed to send appointment reminder email', [
