@@ -51,7 +51,7 @@
 
 | الخطورة | العدد | المعرّفات |
 |---|---|---|
-| 🔴 **Critical (مانع إطلاق)** | **20** (منها MON-01 · MON-03 · DB-01 ✅ مُصلحة) | CFG-01/02/03 · AUTH-01/02 · AUTHZ-01/02/03/04 · BOOK-01/02 · ~~MON-01~~/02/~~03~~/04/05 · SET-01/02 · TZ-01 · ~~DB-01~~ |
+| 🔴 **Critical (مانع إطلاق)** | **20** (منها MON-01 · MON-03 · DB-01 · BOOK-02 ✅ مُصلحة) | CFG-01/02/03 · AUTH-01/02 · AUTHZ-01/02/03/04 · BOOK-01/~~02~~ · ~~MON-01~~/02/~~03~~/04/05 · SET-01/02 · TZ-01 · ~~DB-01~~ |
 | 🟠 **High** | **19** | CFG-04/05 · AUTH-03/04 · AUTHZ-05 · BOOK-03/04/05 · MON-06/07/08/09 · DB-02/03/04 · PERF-01/02/03 · QUAL-01 |
 | 🟡 **Medium** | **21** | CFG-06/07 · AUTH-05/06/07 · BOOK-06/07/08/09/10 · MON-10 · SET-03/04 · DB-05/06 · PERF-04/05/06 · QUAL-02/03/04 |
 | 🔵 **Low** | **3** | CFG-08 · BOOK-11 · QUAL-05 |
@@ -1901,7 +1901,7 @@ private function getProviderAppointments(User $provider, Carbon $date): Collecti
 $hasConflict = Appointment::query()
     ->blocking($provider->id, $startTime->format('Y-m-d'))    // ✅ نفس القاعدة
     ->overlapping($startTime, $endTime)
-    ->lockForUpdate()                                         // انظر BOOK-02
+    ->lockForUpdate()                                         // انظر BOOK-02 — ⚠️ لا يحمي: يقفل صفر صفوف حين تكون الفتحة فارغة؛ المُنفَّذ يقفل صف الحلاق في users (BOOK-02 ✅)
     ->exists();
 ```
 
@@ -1962,10 +1962,49 @@ it('never offers a slot the booking layer would reject', function () {
 
 ---
 
-## 🔴 BOOK-02 — حجز مزدوج بسبب TOCTOU (التحقق خارج المعاملة وبلا قفل)
+## ✅ BOOK-02 — حجز مزدوج بسبب TOCTOU (التحقق خارج المعاملة وبلا قفل) — **مُصلحة 2026-10-16**
+
+> **الحالة:** ✅ **مُصلحة** — التوثيق الكامل لكل تعديل في
+> [`docs/fixes/BOOK-02_double_booking_toctou.md`](docs/fixes/BOOK-02_double_booking_toctou.md).
+>
+> **ما نُفِّذ:** كل مسار يكتب على تقويم الحلاق صار يتبع عقداً واحداً:
+> `DB::transaction` ← `BookingLockService::lockUsers()` (قفل صفوف الحلاقين
+> والعميل في `users`، مرتّبة بالـ id لمنع الـ deadlock) ← إعادة الفحص تحت
+> القفل ← الكتابة. المسارات الخمسة:
+>
+> | المسار | قبل | بعد |
+> |---|---|---|
+> | `BookingService::createBooking()` (API + StaffDashboard) | ✅ مُصلح منذ 2026-09-07 | ✅ |
+> | `StaffDashboard::updateAppointment()` | ✅ مُصلح منذ 2026-09-07 | ✅ |
+> | `addServiceToBooking()` **مع push** | 🟠 خطة الدفع تُحسب قبل القفل وتُنفَّذ بعده كما هي | ✅ إعادة قراءة الموعد + إعادة التحليل كاملاً تحت القفل |
+> | Filament `CreateAppointment` | 🔴 فحص في `beforeCreate()` خارج أي معاملة، كتابة بلا قفل | ✅ قفل + `performProfessionalValidations()` داخل `handleRecordCreation()` |
+> | Filament `EditAppointment` | 🔴 **بلا أي فحص**: نقل الموعد أو إعادة تفعيل ملغى فوق موعد آخر | ✅ قفل + فحص الحلاق والعميل حين يحجز الحفظ وقتاً جديداً؛ `force_booking` يتجاوز |
+>
+> و`AppointmentCreationService` (كود ميت، لا يُستدعى) وُسم بتعليق تحذيري.
+> 9 اختبارات جديدة في `tests/Feature/Booking/DoubleBookingRaceTest.php` تحقن
+> حجزاً منافساً **لحظة طلب القفل**، فلا ينجح إلا مسار يعيد الفحص بعد القفل.
+> وسكربت سباق حقيقي بعمليات متوازية على MySQL في
+> `tests/Concurrency/book02_mysql_race.php` (**كُتب ولم يُشغَّل بعد**).
+>
+> **ثلاثة تصحيحات لهذا القسم:**
+> 1. **الموقع خاطئ:** `BookingService.php:67-83` كان قد أُصلح قبل هذا التقرير.
+>    الثغرات الحقيقية المتبقية كانت في صفحتي Filament ومسار push، ولم يذكرها التقرير.
+> 2. **الطبقة 1 لا تحمي:** `lockForUpdate()` على استعلام التعارض يقفل **صفر
+>    صفوف** حين تكون الفتحة فارغة، وهي الحالة التي نخاف منها. لا يمكن قفل
+>    «غياب» حجز؛ الحل قفل صف موجود دائماً: صف الحلاق في `users`.
+> 3. **الطبقة 2 تكسر النظام:** الإلغاء لا يحذف الصف، بل يغيّر `status` فقط.
+>    `unique(['provider_id','start_time'])` كان سيرفض إعادة حجز **أي فتحة
+>    سبق إلغاؤها**. لم يُضَف. وهذا السبب أقوى من سبب `force_booking` المذكور
+>    في ملاحظة MON-03.
+>
+> **خطأ إضافي أُصلح أثناء العمل:** صفحة تعديل Filament كانت تحفظ الساعة وحدها
+> (`"10:00:00"`) في عمود datetime، فيفسّرها Laravel على **تاريخ اليوم**، أي أن
+> تعديل موعد يوم 20 قد ينقله إلى تاريخ اليوم، ويبقى `end_time` قديماً.
+
+### ما كانت المشكلة (للسجل)
 
 **الموقع:** [`app/Services/BookingService.php:67-83`](app/Services/BookingService.php#L67-L83)
-**الحالة:** ✅ مؤكد بالكود + **مؤكد بقاعدة البيانات** (لا يوجد قيد فريد يحمي)
+**الحالة الأصلية:** ✅ مؤكد بالكود + **مؤكد بقاعدة البيانات** (لا يوجد قيد فريد يحمي)
 
 ### الشرح
 
@@ -2433,6 +2472,8 @@ $todayBookingsCount = Appointment::where('customer_id', $customer->id)
 ```
 
 وأضِف `lockForUpdate()` داخل معاملة الحجز (`BOOK-02`) وإلا فالعدّ نفسه عرضة للسباق.
+
+> ✅ **BOOK-02 (2026-10-16):** جانب السباق محلول: `validateDailyBookingLimit()` يجري الآن داخل معاملة الحجز بعد قفل صف **العميل** في `users` (في `createBooking` وفي صفحة إنشاء Filament)، فلا يقرأ طلبان متزامنان نفس العدد. معيار العدّ نفسه (أي الحالات تُحسب) خارج نطاق BOOK-02.
 
 ---
 
@@ -3906,7 +3947,7 @@ public function up(): void
 {
     Schema::table('appointments', function (Blueprint $table) {
         $table->unique('number', 'appointments_number_unique');
-        $table->unique(['provider_id', 'start_time'], 'appointments_provider_slot_unique');   // BOOK-02
+        $table->unique(['provider_id', 'start_time'], 'appointments_provider_slot_unique');   // BOOK-02 — ❌ لم يُضَف: يكسر إعادة حجز الفتحات الملغاة (انظر BOOK-02)
     });
 
     Schema::table('invoices', function (Blueprint $table) {
@@ -4542,7 +4583,7 @@ enum PaymentStatus: int
 **المفقود — وكلها تغطي ثغرات Critical في هذا التقرير:**
 
 ```php
-// tests/Feature/Concurrency/DoubleBookingTest.php   -> BOOK-02
+// tests/Feature/Concurrency/DoubleBookingTest.php   -> BOOK-02   ✅ أُنشئ كـ tests/Feature/Booking/DoubleBookingRaceTest.php (9 اختبارات)
 it('rejects the second of two simultaneous bookings for the same slot', function () { /* ... */ });
 
 // tests/Feature/Money/TaxParityTest.php             -> MON-01
@@ -4661,7 +4702,7 @@ SANCTUM_TOKEN_PREFIX=lookup_
 | # | المعرّف | المهمة |
 |---|---|---|
 | 13 | `BOOK-01` | `Appointment::scopeBlocking()` + استخدامه في كل الطبقات |
-| 14 | `BOOK-02` | التحقق داخل `DB::transaction` + `lockForUpdate` |
+| 14 | ~~`BOOK-02`~~ | ✅ **مُصلحة 2026-10-16** — قفل صف الحلاق (`lockUsers`) + إعادة الفحص داخل `DB::transaction` في المسارات الخمسة ([التقرير](docs/fixes/BOOK-02_double_booking_toctou.md)) |
 | 15 | `MON-03` | قفل صفّي على الإنهاء + `DocumentNumberGenerator` بجدول عدّادات |
 | 16 | `AUTH-02` | `lockForUpdate` على عدّاد محاولات الـ OTP |
 | 17 | `AUTH-03` | تجزئة الـ OTP + `$hidden` |

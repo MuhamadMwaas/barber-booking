@@ -38,6 +38,9 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT'),
+        // Extra OAuth client IDs (comma separated) whose ID tokens /api/auth/google
+        // accepts, e.g. the mobile app's web client. GOOGLE_CLIENT_ID is always accepted.
+        'allowed_audiences' => env('GOOGLE_ALLOWED_AUDIENCES', ''),
     ],
 
     'google_mobile' => [

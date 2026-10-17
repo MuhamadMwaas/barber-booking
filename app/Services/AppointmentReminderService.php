@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\SendAppointmentReminderJob;
 use App\Models\Appointment;
 use App\Models\AppointmentReminder;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -78,8 +79,8 @@ class AppointmentReminderService
         Carbon $remindAt,
         array $params = [],
         array $data = [],
-        $titleKey = 'appointment_reminder.title',
-        $messageKey = 'appointment_reminder.message'
+        $titleKey = AppointmentReminder::TITLE_KEY,
+        $messageKey = AppointmentReminder::MESSAGE_KEY
     ): AppointmentReminder {
         if ($remindAt->lte(now())) {
             throw new InvalidArgumentException('Remind_at must be in the future.');
@@ -139,8 +140,8 @@ class AppointmentReminderService
         Carbon $remindAt,
         array $params = [],
         array $data = [],
-        $titleKey = 'appointment_reminder.title',
-        $messageKey = 'appointment_reminder.message'
+        $titleKey = AppointmentReminder::TITLE_KEY,
+        $messageKey = AppointmentReminder::MESSAGE_KEY
     ): AppointmentReminder {
         return DB::transaction(function () use ($appointment, $remindAt, $params, $data, $titleKey, $messageKey) {
             $this->cancelRemindersForAppointment($appointment);
@@ -177,20 +178,46 @@ class AppointmentReminderService
      *
      * Lives here so the two callers that schedule reminders — the dedicated
      * endpoint and the booking endpoint — cannot drift into building slightly
-     * different payloads for the same notification.
+     * different payloads for the same notification. The send job calls it
+     * again at delivery time, so the text reflects the appointment as it is
+     * then (moved slot, swapped provider), not as it was when booked.
+     *
+     * `number` is no longer in the current wording but stays in the payload:
+     * a reminder still carrying the legacy key renders from these same params.
      *
      * @return array{0: array<string, mixed>, 1: array<string, mixed>}
      */
     public function buildPayload(Appointment $appointment): array
     {
+        $appointment->loadMissing(['customer', 'provider']);
+        $start = $appointment->start_time;
+
         $params = [
+            'name' => [
+                'type' => 'value',
+                'value' => $this->firstName($appointment->customer),
+            ],
+            'salon' => [
+                'type' => 'value',
+                'value' => app(BookingMailService::class)->companyName(),
+            ],
+            // Resolved per reader locale — "Montag" / "الاثنين" / "Monday".
+            'weekday' => [
+                'type' => 'date',
+                'value' => $start->toDateString(),
+                'format' => 'l',
+            ],
             'date' => [
                 'type' => 'value',
-                'value' => $appointment->start_time->format('Y-m-d'),
+                'value' => $start->format('d.m.Y'),
             ],
             'time' => [
                 'type' => 'value',
-                'value' => $appointment->start_time->format('H:i'),
+                'value' => $start->format('H:i'),
+            ],
+            'provider' => [
+                'type' => 'value',
+                'value' => $this->firstName($appointment->provider),
             ],
             'number' => [
                 'type' => 'value',
@@ -204,5 +231,17 @@ class AppointmentReminderService
         ];
 
         return [$params, $data];
+    }
+
+    /**
+     * How a person is addressed in the text: first name, else full name.
+     */
+    protected function firstName(?User $user): string
+    {
+        if (! $user) {
+            return '';
+        }
+
+        return trim((string) $user->first_name) ?: $user->full_name;
     }
 }

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Enum\AppointmentStatus;
 use App\Mail\AppointmentReminderMail;
 use App\Models\AppointmentReminder;
+use App\Services\AppointmentReminderService;
 use App\Services\BookingMailService;
 use App\Services\NotificationService;
 use App\Services\Reminders\ReminderChannelResolver;
@@ -170,8 +171,13 @@ class SendAppointmentReminderJob implements ShouldQueue
     ): array {
         $user = $reminder->user;
         $locale = $reminder->locale ?? $user->locale ?? app()->getLocale();
-        $params = $reminder->params ?? [];
         $delivered = [];
+
+        // Rebuilt now rather than read from the row: the stored params are a
+        // snapshot from booking time, and the appointment may since have moved
+        // or changed provider. Also gives reminders scheduled before the current
+        // wording the values its new placeholders need.
+        [$params] = app(AppointmentReminderService::class)->buildPayload($reminder->appointment);
 
         // The short reminder text, for SMS. The email renders its own fuller
         // layout (AppointmentReminderMail) in the same locale.

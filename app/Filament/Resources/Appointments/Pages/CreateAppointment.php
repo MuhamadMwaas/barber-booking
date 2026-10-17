@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Appointments\Pages;
 use App\Filament\Resources\Appointments\AppointmentResource;
 use App\Models\Service;
 use App\Models\User;
+use App\Services\BookingLockService;
 use App\Services\BookingValidationService;
 use App\Services\TaxCalculatorService;
 use Carbon\Carbon;
@@ -25,21 +26,14 @@ class CreateAppointment extends CreateRecord
     protected function beforeCreate(): void
     {
         try {
-            // Get the raw data from Livewire component state
-            $formData = $this->data;
-
-            // Get services from Livewire state (موجودة في $this->data حتى مع ->relationship())
-            $services = $this->getServicesFromRepeater();
-
-            // Add services to formData for validation
-            $formData['services_record'] = $services;
+            $formData = $this->collectFormData();
 
             // Log data for debugging (only in development)
             if (config('app.debug')) {
                 Log::debug('CreateAppointment - beforeCreate data check', [
                     'has_services_in_data' => isset($this->data['services_record']),
-                    'services_count' => count($services),
-                    'services_data' => $services,
+                    'services_count' => count($formData['services_record']),
+                    'services_data' => $formData['services_record'],
                 ]);
             }
 
@@ -113,6 +107,33 @@ class CreateAppointment extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         return DB::transaction(function () use ($data) {
+            // 0. beforeCreate() checked the slot with no transaction and no
+            //    lock, so its "free" is only a snapshot — another booking can
+            //    land between that check and the INSERT below. Take the same
+            //    provider (+ customer, for the daily limit and the overlap
+            //    rule) lock every booking path takes, and ask again. This
+            //    second answer is the one that counts (BOOK-02).
+            $formData = $this->collectFormData();
+
+            app(BookingLockService::class)->lockUsers([
+                $formData['provider_id'] ?? null,
+                $formData['customer_id'] ?? null,
+            ]);
+
+            try {
+                $this->performProfessionalValidations($formData);
+            } catch (\InvalidArgumentException $e) {
+                // Halt unwinds through DB::transaction, which rolls back.
+                Notification::make()
+                    ->danger()
+                    ->title(__('messages.appointment.validation_error'))
+                    ->body($e->getMessage())
+                    ->persistent()
+                    ->send();
+
+                $this->halt();
+            }
+
             // 1. الحصول على بيانات الخدمات من $this->data (قبل أن يزيلها Filament)
             $servicesData = $this->getServicesFromRepeater();
 
@@ -177,6 +198,19 @@ class CreateAppointment extends CreateRecord
     }
 
     // ==================== Private Helper Methods ====================
+
+    /**
+     * The raw form state with the repeater rows put back in — the shape
+     * performProfessionalValidations() expects. Used both for the early check
+     * in beforeCreate() and for the re-check under the lock.
+     */
+    private function collectFormData(): array
+    {
+        $formData = $this->data;
+        $formData['services_record'] = $this->getServicesFromRepeater();
+
+        return $formData;
+    }
 
     /**
      * Get services data from Livewire component state

@@ -256,6 +256,7 @@ if (!$sent) { return; }               // ← وهنا يموت الإيميل و
 
 - **جديد:** `remindAtFromOffset()` و`allowedOffsetHours()` و`activeReminderFor()` و`buildPayload()`.
 - **`buildPayload()` ليش:** المسار المنفصل ومسار الحجز كلاهما ينشئ تذكيراً. لو بنى كلٌّ منهما الـparams بنفسه لانحرفا مع الوقت وأصبح نص التذكير مختلفاً حسب من أنشأه.
+- **تحديث 2026-10-16 — نص العميل الجديد:** النص الحالي في `appointment_reminder.v2.*` (المفاتيح في `AppointmentReminder::TITLE_KEY/MESSAGE_KEY`) بالمتغيرات `:name :salon :weekday :date :time :provider`. المفاتيح القديمة `appointment_reminder.title/message` **باقية عمداً**: `NotificationResource` يعيد ترجمة المفتاح المحفوظ عند كل عرض، فتعديلها كان سيُظهر `:name` حرفياً في الإشعارات القديمة. `SendAppointmentReminderJob` يستدعي `buildPayload()` **لحظة الإرسال** (لا يقرأ الـparams المحفوظة)، و`:weekday` من النوع `date` (`DateParamResolver`) فيُترجم حسب لغة القارئ. `:salon` = إعداد `company_name` وإلا `APP_NAME`. نص SMS الألماني يجب أن يبقى GSM-7 وضمن 160 حرفاً — مثبّت في `tests/Feature/Reminders/ReminderTextTest.php`.
 - **`cancelRemindersForAppointment()` — أهم سطر:** إضافة `'active_slot' => null`. تعليق الكود يشرح أنه **الجزء الحامل** لا الـstatus: هو العمود الذي بُني عليه الفهرس، فهو ما يحرّر الخانة. كتابة `status` وحدها كانت ستُبقي الصف محتلاً للخانة ويفشل التذكير التالي فوراً بخطأ مفتاح مكرر.
 - **`rescheduleReminder()`** صار كله داخل معاملة واحدة: الصف القديم يجب أن يسلّم الخانة قبل أن يطلبها الجديد، وفشل في المنتصف يجب ألا يترك الحجز بلا تذكير.
 

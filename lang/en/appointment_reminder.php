@@ -12,6 +12,19 @@
  * hard-coded in the app or shipped in an update to change.
  */
 return [
+    // Current wording (client-approved). Placeholders are filled by
+    // AppointmentReminderService::buildPayload() at send time:
+    // :name customer first name, :salon company name, :weekday localised day,
+    // :date dd.mm.yyyy, :time HH:MM, :provider staff first name.
+    // Keep the SMS body GSM-7 (no "–", no emoji) or each SMS part drops from
+    // 160 to 70 characters.
+    'v2' => [
+        'title' => ':salon – Appointment Reminder',
+        'message' => 'Hi :name, this is a reminder of your appointment at :salon on :weekday, :date at :time with :provider. We look forward to seeing you! Your :salon Team',
+    ],
+
+    // LEGACY — do not delete: stored in-app notifications reference these keys
+    // and are re-translated on every read (NotificationResource).
     'title' => 'Appointment Reminder',
     'message' => 'Reminder: your appointment #:number is at :time on :date.',
 

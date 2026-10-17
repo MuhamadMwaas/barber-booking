@@ -34,6 +34,14 @@ class Appointment extends Model
         AppointmentStatus::NO_SHOW->value,
     ];
 
+    /**
+     * Statuses in which a confirmed appointment holds its provider's time —
+     * see scopeBlocksProviderTime() for why each one is (or is not) here.
+     */
+    public const PROVIDER_BLOCKING_STATUSES = [
+        AppointmentStatus::PENDING,
+        AppointmentStatus::COMPLETED,
+    ];
 
     protected $fillable = [
         'number',
@@ -511,10 +519,21 @@ class Appointment extends Model
     public function scopeBlocksProviderTime(Builder $query): Builder
     {
         return $query->where('created_status', 1)
-            ->whereIn('status', [
-                AppointmentStatus::PENDING->value,
-                AppointmentStatus::COMPLETED->value,
-            ]);
+            ->whereIn('status', array_map(
+                fn (AppointmentStatus $status) => $status->value,
+                self::PROVIDER_BLOCKING_STATUSES,
+            ));
+    }
+
+    /**
+     * The same rule as scopeBlocksProviderTime(), asked of one in-memory model —
+     * including unsaved changes, so a write path can tell whether the state it
+     * is about to persist puts this appointment on the provider's calendar.
+     */
+    public function occupiesProviderTime(): bool
+    {
+        return (int) $this->created_status === 1
+            && in_array($this->status, self::PROVIDER_BLOCKING_STATUSES, true);
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enum\AppointmentStatus;
 use App\Enum\PaymentStatus;
 use App\Exceptions\PushRequiredException;
+use App\Exceptions\SlotUnavailableException;
 use App\Models\Appointment;
 use App\Models\AppointmentService;
 use App\Models\Service;
@@ -575,54 +576,53 @@ class BookingService
         $this->validationService->validateProviderOffersService($newProvider, $service);
 
         $sameProvider = ((int) $data['provider_id']) === ((int) $anchor->provider_id);
+        $lockedAnchorProviderId = (int) $anchor->provider_id;
 
-        // 2) Analyze gap
-        if ($sameProvider) {
-            $analysis = $placement === 'before'
-                ? $this->gapAnalysis->analyzeAddBefore($anchor, $service, $duration, $requestedStart, $allowSameDayPast)
-                : $this->gapAnalysis->analyzeAddAfter($anchor, $service, $duration, $requestedStart, $allowSameDayPast);
-        } else {
-            // Child mode — gap measured against the block the staff acted on.
-            // It used to be measured against the invoice owner (the group
-            // root), but since a booking with a gap is stored as several blocks
-            // the root may be the 09:40 block while staff are adding next to
-            // the 15:10 one — every such add failed as gap_too_large. The new
-            // child is still linked to the root in addServiceDifferentProvider().
-            $analysis = $this->gapAnalysis->analyzeChildAdd(
-                $anchor,
-                $newProvider,
-                $service,
-                $duration,
-                $placement,
-                $requestedStart,
-                $allowSameDayPast
-            );
-        }
+        // 2) Analyze gap. The answer depends on what else is on the calendar,
+        //    so it is computed twice: here, without a lock, to reject the
+        //    common case cheaply and to ask the push question before anything
+        //    is locked; and again in 4.0 under the lock — that second answer is
+        //    the only one acted on.
+        $analyse = fn (Appointment $anchor): array => $this->assertPlacementPossible(
+            $this->analyseServicePlacement(
+                $anchor, $newProvider, $service, $duration, $placement,
+                $requestedStart, $allowSameDayPast, $sameProvider
+            ),
+            $applyPush
+        );
 
-        if (! ($analysis['is_possible'] ?? false)) {
-            throw new InvalidArgumentException(
-                $this->formatAnalysisError($analysis)
-            );
-        }
-
-        // 3) Push gating — if push needed but user hasn't confirmed
-        if (($analysis['requires_push'] ?? false) && ! $applyPush) {
-            throw new PushRequiredException($analysis['push_plan'] ?? []);
-        }
+        $analyse($anchor);
 
         // 4) Apply inside a single transaction
         return DB::transaction(function () use (
             $anchor, $service, $newProvider, $sameProvider, $duration,
-            $placement, $analysis, $applyPush
+            $placement, $applyPush, $analyse, $lockedAnchorProviderId
         ) {
             // 4.0) The gap analysis above ran WITHOUT a lock, so its answer is a
-            //      snapshot: another booking may have landed in that gap while the
-            //      staff member was reading the confirmation dialog. Lock the
-            //      provider (and the anchor's, when they differ) and re-assert the
-            //      exact window the analysis picked before writing anything.
-            //      Without this the add-service path has the same TOCTOU hole
-            //      createBooking used to have (BOOK-02).
-            $this->lockService->lockUsers([$newProvider->id, $anchor->provider_id]);
+            //      snapshot: another booking may have landed in that gap — or in
+            //      the slots a push plan is about to move bookings into — since
+            //      it was taken. Lock the provider (and the anchor's, when they
+            //      differ), re-read the anchor, and analyse again. Executing the
+            //      stale plan would push a booking straight on top of one that
+            //      arrived in between (BOOK-02).
+            $this->lockService->lockUsers([$newProvider->id, $lockedAnchorProviderId]);
+
+            $anchor->refresh();
+
+            if (! $anchor->canAcceptNewService()) {
+                throw new InvalidArgumentException(
+                    'This booking does not accept new services (not pending or already paid).'
+                );
+            }
+
+            // The anchor was moved to another provider while we waited: the lock
+            // we hold is on the wrong calendar. Refuse rather than re-lock out of
+            // order; staff reload and see the booking where it now is.
+            if ((int) $anchor->provider_id !== $lockedAnchorProviderId) {
+                throw new SlotUnavailableException(__('booking.time_slot_unavailable'));
+            }
+
+            $analysis = $analyse($anchor);
 
             if (! $applyPush && ($analysis['suggested_start_time'] ?? null) && ($analysis['suggested_end_time'] ?? null)) {
                 // Only when no push is involved: with a push the surrounding
@@ -805,6 +805,65 @@ class BookingService
     }
 
     // ----------- helpers used by addServiceToBooking ------------
+
+    /**
+     * Where would the new service go, and does anything have to move for it?
+     * A pure read of the calendar — addServiceToBooking() runs it once before
+     * the lock and once under it.
+     */
+    protected function analyseServicePlacement(
+        Appointment $anchor,
+        User $newProvider,
+        Service $service,
+        int $duration,
+        string $placement,
+        ?Carbon $requestedStart,
+        bool $allowSameDayPast,
+        bool $sameProvider,
+    ): array {
+        if ($sameProvider) {
+            return $placement === 'before'
+                ? $this->gapAnalysis->analyzeAddBefore($anchor, $service, $duration, $requestedStart, $allowSameDayPast)
+                : $this->gapAnalysis->analyzeAddAfter($anchor, $service, $duration, $requestedStart, $allowSameDayPast);
+        }
+
+        // Child mode — gap measured against the block the staff acted on.
+        // It used to be measured against the invoice owner (the group
+        // root), but since a booking with a gap is stored as several blocks
+        // the root may be the 09:40 block while staff are adding next to
+        // the 15:10 one — every such add failed as gap_too_large. The new
+        // child is still linked to the root in addServiceDifferentProvider().
+        return $this->gapAnalysis->analyzeChildAdd(
+            $anchor,
+            $newProvider,
+            $service,
+            $duration,
+            $placement,
+            $requestedStart,
+            $allowSameDayPast
+        );
+    }
+
+    /**
+     * Reject an impossible placement, and a needed push the staff member has
+     * not confirmed yet (3: push gating). Returns the analysis untouched.
+     *
+     * @throws PushRequiredException
+     */
+    protected function assertPlacementPossible(array $analysis, bool $applyPush): array
+    {
+        if (! ($analysis['is_possible'] ?? false)) {
+            throw new InvalidArgumentException(
+                $this->formatAnalysisError($analysis)
+            );
+        }
+
+        if (($analysis['requires_push'] ?? false) && ! $applyPush) {
+            throw new PushRequiredException($analysis['push_plan'] ?? []);
+        }
+
+        return $analysis;
+    }
 
     protected function parseTimeOrNull(?string $time, Appointment $anchor): ?Carbon
     {

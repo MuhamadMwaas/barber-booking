@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\ProvidersController;
 use App\Http\Controllers\Api\ServicesController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SliderController;
+use App\Http\Controllers\Api\SocialApiAuthController;
 use App\Http\Controllers\Api\SocialAuthController;
 use App\Services\VonageSdkSmsService;
 use App\Http\Controllers\PrintController;
@@ -84,12 +85,12 @@ Route::prefix('auth')->group(function () {
         ->middleware('throttle:auth-social');
 
     // Google Authentication
-    Route::post('google/mobile', [SocialAuthController::class, 'googleMobile'])
+    Route::post('google/mobile', [SocialApiAuthController::class, 'googleMobile'])
         ->middleware('throttle:auth-social');
 
     // اختياري: للويب
-    Route::get('google/redirect', [SocialAuthController::class, 'googleWebRedirect']);
-    Route::get('google/callback', [SocialAuthController::class, 'googleWebCallback']);
+    Route::get('google/redirect', [SocialApiAuthController::class, 'googleWebRedirect']);
+    Route::get('google/callback', [SocialApiAuthController::class, 'googleWebCallback']);
 
 
     // verifyEmailViaOtp() delegates straight to verifyOtp(), so it is the same

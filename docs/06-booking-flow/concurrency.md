@@ -65,25 +65,36 @@ public function lockUsers(array $userIds): void {
 
 ---
 
-## 3. المسارات الثلاثة التي تكتب على تقويم المزود
+## 3. المسارات الخمسة التي تكتب على تقويم المزود
 
-| المسار | قفل | فحص تعارض |
+| المسار | قفل | فحص تعارض تحت القفل |
 |--------|-----|-----------|
-| `BookingService::createBooking()` | ✅ `lockUsers` | ✅ `assertNoConflictingAppointment` |
-| `BookingService::addServiceToBooking()` | ✅ `lockUsers([newProvider, anchor.provider])` | ✅ يعيد التأكد من النافذة |
+| `BookingService::createBooking()` (API + StaffDashboard) | ✅ `lockUsers([providers…, customer])` | ✅ `assertNoConflictingAppointment` + `assertCustomerIsFree` + الحد اليومي |
+| `BookingService::addServiceToBooking()` | ✅ `lockUsers([newProvider, anchor.provider])` | ✅ يُعيد قراءة الـ anchor و**يُعيد تحليل الفجوة وخطة الـ push كاملة** تحت القفل |
 | `StaffDashboard::updateAppointment()` | ✅ `lockUsers` | ✅ (يستثني الموعد نفسه؛ `force_booking` يتجاوز) |
+| Filament `CreateAppointment::handleRecordCreation()` | ✅ `lockUsers([provider, customer])` | ✅ يُعيد `performProfessionalValidations()` كاملة |
+| Filament `EditAppointment::handleRecordUpdate()` | ✅ `lockUsers([oldProvider, newProvider, customer])` | ✅ فقط حين يحجز الحفظ وقتاً جديداً (نقل/تمديد/إعادة تفعيل ملغى)؛ `force_booking` يتجاوز |
+
+`AppointmentCreationService` **كود ميت** فيه النمط القديم (فحص خارج المعاملة بلا قفل) — موسوم بتعليق تحذيري؛ لا تستدعِه قبل إصلاحه.
+
+> تاريخ: حتى 2026-10-16 كانت صفحتا Filament خارج العقد — الإنشاء بفحص قبل المعاملة، والتعديل **بلا أي فحص**. التفاصيل: [`docs/fixes/BOOK-02_double_booking_toctou.md`](../fixes/BOOK-02_double_booking_toctou.md).
 
 ---
 
 ## 4. العقد الذي يجب احترامه
 
-> أي كود جديد يكتب `provider_id` / `appointment_date` / `start_time` / `end_time`:
+> أي كود جديد يكتب `provider_id` / `appointment_date` / `start_time` / `end_time` — **أو يعيد موعداً ملغى إلى حالة تحجز الوقت** (`status` / `created_status`):
 
 1. داخل `DB::transaction()`
 2. `lockUsers()` **أولًا**
 3. `assertNoConflictingAppointment()` **بعد** القفل
+4. أي **خطة** حُسبت قبل القفل (تحليل فجوة، خطة push) **تُحسب من جديد** بعده — لا تُنفَّذ الخطة القديمة
 
 الفحص خارج الـ transaction مسموح كـ **رفض سريع فقط**، ليس كضمان.
+
+**لماذا لا قيد `UNIQUE(provider_id, start_time)`؟** الإلغاء لا يحذف الصف — يغيّر `status` فقط. القيد كان سيمنع إعادة حجز أي فتحة سبق إلغاؤها. ويمنع أيضاً نقل `force_booking` المتعمد إلى نفس الدقيقة. القفل هو الضمان الوحيد.
+
+**الاختبارات:** `tests/Feature/Booking/DoubleBookingRaceTest.php` (منطق القفل، على SQLite) + `tests/Concurrency/book02_mysql_race.php` (سباق حقيقي بعمليات منفصلة على MySQL).
 
 ---
 

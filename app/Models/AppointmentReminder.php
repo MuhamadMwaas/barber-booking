@@ -31,6 +31,14 @@ class AppointmentReminder extends Model
     public const STATUS_SENT = 'sent';
     public const STATUS_CANCELLED = 'cancelled';
 
+    /**
+     * Translation keys for new reminders. Versioned rather than edited in place:
+     * stored notifications keep their key and are re-translated on every read,
+     * so rewording the old key with new placeholders would break them.
+     */
+    public const TITLE_KEY = 'appointment_reminder.v2.title';
+    public const MESSAGE_KEY = 'appointment_reminder.v2.message';
+
     protected $fillable = [
         'appointment_id',
         'user_id',

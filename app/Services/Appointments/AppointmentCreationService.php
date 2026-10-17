@@ -11,6 +11,21 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * DEAD CODE — nothing in app/, routes/ or tests/ calls this class (checked
+ * 2026-10-16). The Filament admin creates appointments through
+ * CreateAppointment, the API and StaffDashboard through BookingService.
+ *
+ * Kept, but NOT safe to wire up as it stands: create() runs validate() — the
+ * slot-conflict, customer-overlap and daily-limit checks — BEFORE its
+ * transaction and without BookingLockService::lockUsers(). Two concurrent
+ * calls can both be told "free" and both insert: the exact double-booking race
+ * fixed everywhere else (BOOK-02, see docs/fixes/BOOK-02_double_booking_toctou.md).
+ *
+ * Before giving it a caller: inside the transaction, lock the provider and
+ * customer with lockUsers() first, then re-run performProfessionalValidations(),
+ * then write — the way CreateAppointment::handleRecordCreation() does.
+ */
 class AppointmentCreationService
 {
     public function create(array $formData): Appointment
