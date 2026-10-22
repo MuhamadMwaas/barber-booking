@@ -220,13 +220,15 @@ class StaffDashboard extends Component
         $this->calendarMonth = (int) $date->format('n');
     }
 
+    /**
+     * Show/hide one provider's column. Off-duty providers (not scheduled, or on
+     * a full-day leave) can be toggled too — they just start hidden.
+     */
     public function toggleProvider(int $providerId)
     {
-        $selectableProviderIds = $this->getSelectableProviderIdsFromProviders(
-            $this->allProviders
-        );
+        $knownProviderIds = $this->allProviders->pluck('id')->map(fn ($id) => (int) $id)->all();
 
-        if (! in_array($providerId, $selectableProviderIds, true)) {
+        if (! in_array($providerId, $knownProviderIds, true)) {
             return;
         }
 
@@ -235,6 +237,29 @@ class StaffDashboard extends Component
         } else {
             $this->selectedProviderIds[] = $providerId;
         }
+    }
+
+    /**
+     * Show all off-duty providers at once, or hide them all again if every one
+     * of them is already shown.
+     */
+    public function toggleUnavailableProviders(): void
+    {
+        $unavailableIds = $this->allProviders
+            ->reject(fn ($provider) => $this->isProviderSelectableForTimeline($provider))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if ($unavailableIds === []) {
+            return;
+        }
+
+        $allShown = array_diff($unavailableIds, $this->selectedProviderIds) === [];
+
+        $this->selectedProviderIds = $allShown
+            ? array_values(array_diff($this->selectedProviderIds, $unavailableIds))
+            : array_values(array_unique(array_merge($this->selectedProviderIds, $unavailableIds)));
     }
 
     public function openBookingModal(?int $providerId = null, ?string $startTime = null)
@@ -1537,9 +1562,13 @@ class StaffDashboard extends Component
         $startTime = substr($salonSchedule->open_time, 0, 5);
         $endTime = substr($salonSchedule->close_time, 0, 5);
 
+        // Off-duty providers are hidden by default (see syncSelectedProvidersForSelectedDate)
+        // but appear here once ticked; the view hatches their column.
         $providers = $allProviders
-            ->filter(fn ($provider) => $this->isProviderSelectableForTimeline($provider))
             ->filter(fn ($provider) => in_array($provider['id'], $this->selectedProviderIds, true))
+            ->map(fn ($provider) => $provider + [
+                'is_available' => $this->isProviderSelectableForTimeline($provider),
+            ])
             ->values();
 
         // Provider scoping (single enforcement point — cannot be bypassed from
@@ -1961,7 +1990,7 @@ class StaffDashboard extends Component
         $allProviders = $this->allProviders;
         $this->selectedProviderIds = array_values(array_intersect(
             $this->selectedProviderIds,
-            $this->getSelectableProviderIdsFromProviders($allProviders)
+            $allProviders->pluck('id')->map(fn ($id) => (int) $id)->all()
         ));
         $timelineData = $this->getTimelineDataFromProviders($allProviders);
         $calendarCounts = $this->getCalendarData();

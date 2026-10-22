@@ -333,7 +333,8 @@ it('sends one confirmation email that lists every block', function () {
 
         return str_contains($html, '10:00 AM - 11:00 AM')
             && str_contains($html, '02:00 PM - 03:00 PM')
-            && str_contains($html, '150.00');
+            // No prices in any email (salon's request), not even the group total.
+            && ! str_contains($html, '150.00');
     });
 });
 

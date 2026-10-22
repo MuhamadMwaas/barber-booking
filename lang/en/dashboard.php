@@ -19,6 +19,8 @@ return [
     'loading' => 'Loading',
     'on_leave' => 'On Leave',
     'not_working' => 'Not Working',
+    'show_unavailable' => 'Show off-duty',
+    'hide_unavailable' => 'Hide off-duty',
     'day_off' => 'Day Off',
     'bookings' => 'Bookings',
     'no_bookings' => 'No bookings for this day',

@@ -106,7 +106,7 @@ class SalonSettingSeeder extends Seeder
             ],
             [
                 'key' => 'company_name',
-                'value' => '',
+                'value' => 'Look up',
                 'type' => 'string',
                 'description' => 'Company name',
                 'setting_group' => 'company',

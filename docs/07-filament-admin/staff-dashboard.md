@@ -13,6 +13,7 @@
 | الميزة | الوصف |
 |--------|-------|
 | **Timeline يومي** | كل مزود له خط زمني يُظهر المواعيد + الفجوات |
+| **العمال غير المتاحين** | غير المداوم / في إجازة يوم كامل: مخفي افتراضياً، يُظهَر ويُخفى من checkbox الفريق أو زر "إظهار غير المتاحين" (`toggleProvider` / `toggleUnavailableProviders`)؛ عموده مخطّط + شارة السبب. الاختيار يرجع للافتراضي عند تغيير التاريخ |
 | **Drag & Drop** | سحب موعد لنقله — `updateAppointment()` مع `lockUsers` + `assertNoConflictingAppointment` |
 | **إضافة خدمة** | `addServiceToBooking()` — same_provider / child_created + `GapAnalysis` + `Push` |
 | **معالجة الدفع** | `InvoiceFinalizationService::finalizeAppointmentPayment()` — cash/card + `DocumentNumberGenerator` |

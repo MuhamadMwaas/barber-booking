@@ -186,43 +186,6 @@
                 </button>
             </div>
 
-            {{-- Providers --}}
-            <div class="p-3 border-b border-gray-100 flex-1 overflow-y-auto">
-                <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                    {{ __('dashboard.team') }}</h3>
-                <div class="space-y-1">
-                    @foreach ($allProviders as $provider)
-                        @php
-                            $isProviderSelectable = $provider['is_work_day'] && !$provider['has_day_off'];
-                            $isProviderSelected = in_array($provider['id'], $selectedProviderIds, true);
-                        @endphp
-                        <label
-                            class="provider-check flex items-center space-x-2 px-2 py-1.5 rounded-md {{ $isProviderSelectable ? 'cursor-pointer hover:bg-gray-50' : 'cursor-not-allowed bg-gray-50 opacity-60' }} {{ $isProviderSelectable && !$isProviderSelected ? 'opacity-50' : '' }}"
-                            @if (!$isProviderSelectable)
-                                style="background-image: repeating-linear-gradient(-45deg, rgba(156, 163, 175, 0.14), rgba(156, 163, 175, 0.14) 8px, transparent 8px, transparent 16px);"
-                            @endif>
-                            <input type="checkbox" @if ($isProviderSelectable) wire:click="toggleProvider({{ $provider['id'] }})" @endif
-                                {{ $isProviderSelected ? 'checked' : '' }} {{ $isProviderSelectable ? '' : 'disabled' }}
-                                class="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500">
-                            <div class="flex-1 min-w-0">
-                                <span
-                                    class="block truncate text-sm {{ $isProviderSelectable ? 'text-gray-700' : 'text-gray-400 line-through decoration-gray-300' }}">{{ $provider['name'] }}</span>
-                                @if ($provider['has_day_off'])
-                                    <span
-                                        class="text-[10px] text-red-500 font-medium">{{ __('dashboard.on_leave') }}</span>
-                                @elseif(!$provider['is_work_day'])
-                                    <span
-                                        class="text-[10px] text-gray-400 font-medium">{{ __('dashboard.not_working') }}</span>
-                                @else
-                                    <span class="text-[10px] text-gray-400">{{ $provider['booking_count'] }}
-                                        {{ __('dashboard.bookings') }}</span>
-                                @endif
-                            </div>
-                        </label>
-                    @endforeach
-                </div>
-            </div>
-
             {{-- Bulletin Board (messages) --}}
             <div class="p-3 border-b border-gray-100 flex-shrink-0 bg-amber-50/40"
                 x-data="{
@@ -327,6 +290,71 @@
                     </div>
                 </div>
                 @endif
+                </div>
+            </div>
+
+            {{-- Providers --}}
+            <div class="p-3 border-b border-gray-100 flex-1 overflow-y-auto">
+                @php
+                    $unavailableProviderIds = collect($allProviders)
+                        ->reject(fn ($p) => $p['is_work_day'] && !$p['has_day_off'])
+                        ->pluck('id')
+                        ->all();
+                    $allUnavailableShown = $unavailableProviderIds !== []
+                        && array_diff($unavailableProviderIds, $selectedProviderIds) === [];
+                @endphp
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                        {{ __('dashboard.team') }}</h3>
+                    @if ($unavailableProviderIds !== [])
+                        <button type="button" wire:click="toggleUnavailableProviders"
+                            class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-amber-600 hover:bg-amber-50 hover:text-amber-700">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                @if ($allUnavailableShown)
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M3 3l18 18M10.58 10.58a2 2 0 002.83 2.83M9.88 5.09A9.77 9.77 0 0112 5c4.48 0 8.27 2.94 9.54 7a9.97 9.97 0 01-4.13 5.37M6.61 6.61A9.96 9.96 0 002.46 12c1.27 4.06 5.06 7 9.54 7 1.66 0 3.22-.4 4.6-1.12"></path>
+                                @else
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M2.46 12C3.73 7.94 7.52 5 12 5s8.27 2.94 9.54 7c-1.27 4.06-5.06 7-9.54 7s-8.27-2.94-9.54-7z"></path>
+                                @endif
+                            </svg>
+                            {{ $allUnavailableShown ? __('dashboard.hide_unavailable') : __('dashboard.show_unavailable') }}
+                        </button>
+                    @endif
+                </div>
+                <div class="space-y-1">
+                    @foreach ($allProviders as $provider)
+                        @php
+                            $isProviderAvailable = $provider['is_work_day'] && !$provider['has_day_off'];
+                            $isProviderSelected = in_array($provider['id'], $selectedProviderIds, true);
+                        @endphp
+                        {{-- Off-duty providers stay toggleable: hatched + hidden by default, shown on demand. --}}
+                        <label
+                            class="provider-check flex items-center space-x-2 px-2 py-1.5 rounded-md cursor-pointer hover:bg-gray-50 {{ $isProviderAvailable ? '' : 'bg-gray-50' }} {{ !$isProviderSelected ? 'opacity-50' : '' }}"
+                            @if (!$isProviderAvailable)
+                                style="background-image: repeating-linear-gradient(-45deg, rgba(156, 163, 175, 0.14), rgba(156, 163, 175, 0.14) 8px, transparent 8px, transparent 16px);"
+                            @endif>
+                            <input type="checkbox" wire:click="toggleProvider({{ $provider['id'] }})"
+                                {{ $isProviderSelected ? 'checked' : '' }}
+                                class="w-4 h-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500">
+                            <div class="flex-1 min-w-0">
+                                <span
+                                    class="block truncate text-sm {{ $isProviderAvailable ? 'text-gray-700' : 'text-gray-500' }}">{{ $provider['name'] }}</span>
+                                @if ($provider['has_day_off'])
+                                    <span
+                                        class="text-[10px] text-red-500 font-medium">{{ __('dashboard.on_leave') }}</span>
+                                @elseif(!$provider['is_work_day'])
+                                    <span
+                                        class="text-[10px] text-gray-400 font-medium">{{ __('dashboard.not_working') }}</span>
+                                @else
+                                    <span class="text-[10px] text-gray-400">{{ $provider['booking_count'] }}
+                                        {{ __('dashboard.bookings') }}</span>
+                                @endif
+                            </div>
+                        </label>
+                    @endforeach
                 </div>
             </div>
 
@@ -519,12 +547,19 @@
                         {{-- Provider Columns --}}
                         <div class="flex flex-1">
                             @foreach ($timelineData['providers'] as $pIndex => $provider)
+                                @php $isColumnAvailable = $provider['is_available'] ?? true; @endphp
                                 <div class="relative flex min-w-[180px] flex-1 flex-col border-r-2 border-gray-200 last:border-r-0">
                                     {{-- Provider Header --}}
                                     <div
-                                        class="sticky top-0 z-10 flex h-10 flex-shrink-0 items-center justify-center border-b border-gray-200 bg-white px-2">
+                                        class="sticky top-0 z-10 flex h-10 flex-shrink-0 items-center justify-center gap-1.5 border-b border-gray-200 bg-white px-2">
                                         <span
-                                            class="text-xs font-semibold text-gray-700 truncate">{{ $provider['name'] }}</span>
+                                            class="text-xs font-semibold truncate {{ $isColumnAvailable ? 'text-gray-700' : 'text-gray-400' }}">{{ $provider['name'] }}</span>
+                                        @if (!$isColumnAvailable)
+                                            <span
+                                                class="flex-shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium {{ $provider['has_day_off'] ? 'bg-red-50 text-red-500' : 'bg-gray-100 text-gray-500' }}">
+                                                {{ $provider['has_day_off'] ? __('dashboard.on_leave') : __('dashboard.not_working') }}
+                                            </span>
+                                        @endif
                                     </div>
 
                                     {{-- Timeline Grid --}}
@@ -534,6 +569,14 @@
                                         data-provider-id="{{ $provider['id'] }}"
                                         @mousedown="startDrag($event, {{ $provider['id'] }})"
                                     >
+                                        {{-- Off-duty hatching: its own layer, because the :style binding
+                                             above replaces the grid's whole style attribute. --}}
+                                        @if (!$isColumnAvailable)
+                                            <div class="pointer-events-none absolute inset-0 bg-gray-50"
+                                                style="background-image: repeating-linear-gradient(-45deg, rgba(156, 163, 175, 0.14), rgba(156, 163, 175, 0.14) 8px, transparent 8px, transparent 16px);">
+                                            </div>
+                                        @endif
+
                                         {{-- Grid Lines --}}
                                         <template x-for="minute in timelineGridMinutes({{ $totalMinutes }})"
                                             :key="'p{{ $provider['id'] }}-grid-' + minute">

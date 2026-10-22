@@ -41,6 +41,9 @@ return [
         // Extra OAuth client IDs (comma separated) whose ID tokens /api/auth/google
         // accepts, e.g. the mobile app's web client. GOOGLE_CLIENT_ID is always accepted.
         'allowed_audiences' => env('GOOGLE_ALLOWED_AUDIENCES', ''),
+        // Firebase project whose ID tokens (from a Google sign-in) are also accepted.
+        // Empty = Firebase tokens are rejected.
+        'firebase_project_id' => env('GOOGLE_FIREBASE_PROJECT_ID', ''),
     ],
 
     'google_mobile' => [

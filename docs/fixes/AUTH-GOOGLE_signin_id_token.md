@@ -148,3 +148,52 @@ php artisan test tests/Feature/Auth/GoogleSignInTest.php
 ```
 
 بتغطي: توكن صحيح بينشئ مستخدم، audience إضافي مقبول، تطبيق تاني مرفوض، إيميل مش مأكَّد مرفوض، توقيع غلط مرفوض، ربط حساب موجود بالإيميل، ومسار `/mobile` شغّال.
+
+---
+
+## 9. تحديث 2026-10-23: التوافق مع كود تطبيق MAUI
+
+مطوّر التطبيق شارك الكود (.NET MAUI مع مكتبة `FirebaseAuthentication.net` 4.1.0) ورقم Client ID جديد.
+
+### كيف بيشتغل التطبيق
+
+1. `FirebaseAuthClient.SignInWithRedirectAsync(Google)` بيفتح صفحة جوجل جوّا WebView، عن طريق `app-test-2c25c.firebaseapp.com`.
+2. بعدها بيختار التوكن بهالترتيب (أول واحد مش فاضي):
+   1. `id_token` من رابط الـ redirect
+   2. `credential.AuthCredential` (توكن جوجل)
+   3. **`credential.User.GetIdTokenAsync()` (توكن Firebase)**، كاحتياط
+3. بيبعت `POST https://lookupfriseur.com/api/auth/google` ومعه `token` و `id_token` و `user_id` و `email` و `display_name`. السيرفر بيقرأ `token` بس، والباقي بيتجاهله.
+
+### شو تغيّر بالسيرفر
+
+| | |
+|---|---|
+| `GOOGLE_ALLOWED_AUDIENCES` | انضاف `710582652316-i98i7o68srv3smf6v1c49lr42g0qtid2...`، وهو الـ Web client اللي بيستعمله Firebase مع جوجل |
+| `GOOGLE_FIREBASE_PROJECT_ID=app-test-2c25c` (جديد) | السيرفر صار يقبل **توكن Firebase كمان** (الاحتياط رقم 3)، بس بشروط (تحت) |
+| شكل الرد | صار نفس شكل تسجيل الدخول العادي: `user` (UserResource)، `access_token`، `access_expires_at`، `refresh_token`، `refresh_expires_at`، `token_type`. ⚠️ `user.name` صار اسمه `user.full_name` |
+
+### شروط قبول توكن Firebase (`verifyFirebaseIdToken`)
+
+- التوقيع: بمفاتيح جوجل العامة `securetoken@system.gserviceaccount.com`، وبتنحفظ بالكاش ساعة. إذا الكاش معطّل، السيرفر بيجيبها مباشرة.
+- `iss` = `https://securetoken.google.com/app-test-2c25c` و `aud` = `app-test-2c25c`.
+- `firebase.sign_in_provider` = `google.com`. يعني حساب Firebase بإيميل وكلمة سر **ما بيفوت**.
+- `email_verified` = true.
+- `google_id` بيتاخد من `firebase.identities["google.com"][0]`، مش من Firebase uid. هيك نفس المستخدم بيوصل لنفس الحساب، أي نوع توكن بعت.
+- إذا `GOOGLE_FIREBASE_PROJECT_ID` فاضي، توكنات Firebase بتترفض كلها.
+
+### السيرفر الحقيقي، لازم ينضاف بالـ `.env`
+
+```env
+GOOGLE_ALLOWED_AUDIENCES=710582652316-jka04ehvmrm0ecmcje436fvs7f2a3klh.apps.googleusercontent.com,710582652316-i98i7o68srv3smf6v1c49lr42g0qtid2.apps.googleusercontent.com
+GOOGLE_FIREBASE_PROJECT_ID=app-test-2c25c
+```
+
+وبعدين `php artisan config:clear`.
+
+### ملاحظات لمطوّر التطبيق
+
+- `loukupm/Model/AuthtoctionWithGoogle.cs` قديم وما حدا بيستعمله، وكل قيمه placeholders. الأفضل يتحذف حتى ما يلخبط.
+- `user.name` صار `user.full_name`، و`first_name` و`last_name` موجودين كمان.
+- رسائل اللوغ الجديدة: `Firebase ID token verification failed` (توقيع غلط أو منتهي الصلاحية)، و`Firebase ID token rejected` (مشروع غلط، أو الحساب مش من جوجل، أو الإيميل مش مأكَّد).
+
+التستات صاروا 12، كلهم ناجحين.

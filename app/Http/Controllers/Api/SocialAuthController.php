@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers\Api;
 
+use App\Http\Resources\UserResource;
 use App\Services\Auth\GoogleSignInService;
 use App\Services\AuthTokenService;
 use Illuminate\Http\Request;
@@ -26,17 +27,14 @@ class SocialAuthController
         $access = $tokenService->createAccessToken($user, $device);
         $refresh = $tokenService->createRefreshToken($user, $device, $request->ip());
 
+        // Same shape as a password login (AuthController), so the app parses one format.
         return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->full_name,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'email' => $user->email,
-                'avatar_url' => $user->avatar_url,
-            ],
+            'user' => new UserResource($user),
             'access_token' => $access['access_token'],
+            'access_expires_at' => $access['expires_at'],
             'refresh_token' => $refresh['refresh_token'],
+            'refresh_expires_at' => $refresh['expires_at'],
+            'token_type' => 'bearer',
         ]);
     }
 }

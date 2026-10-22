@@ -19,6 +19,8 @@ return [
     'loading' => 'Laden',
     'on_leave' => 'Im Urlaub',
     'not_working' => 'Nicht im Dienst',
+    'show_unavailable' => 'Abwesende zeigen',
+    'hide_unavailable' => 'Abwesende ausblenden',
     'day_off' => 'Frei',
     'bookings' => 'Termine',
     'no_bookings' => 'Keine Termine für diesen Tag',

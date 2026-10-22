@@ -64,10 +64,12 @@ it('renders the German confirmation with the requested wording', function () {
         ->toContain('Hinweise')
         ->toContain('Ihre Leistungen')
         ->toContain('Leistung')
-        ->toContain('Preis')
-        ->toContain('Zahlungsübersicht')
-        ->toContain('Zwischensumme')
-        ->toContain('Gesamtpreis')
+        // The salon asked for no duration and no prices in any email.
+        ->not->toContain('Dauer')
+        ->not->toContain('Preis')
+        ->not->toContain('Zahlungsübersicht')
+        ->not->toContain('Zwischensumme')
+        ->not->toContain('€')
         ->toContain('Vielen Dank, dass Sie sich für LookUp entschieden haben! Wir freuen uns auf Ihren Besuch.')
         ->toContain('Dies ist eine automatisch versendete E-Mail. Bitte antworten Sie nicht direkt auf diese Nachricht.')
         ->not->toContain('>cash<');
@@ -86,8 +88,9 @@ it('renders the Arabic confirmation right-to-left with the requested wording', f
         ->toContain('نقداً')
         ->toContain('الملاحظات')
         ->toContain('الخدمات التي اخترتها')
-        ->toContain('ملخص الدفع')
-        ->toContain('السعر الإجمالي')
+        ->not->toContain('المدة')
+        ->not->toContain('السعر')
+        ->not->toContain('ملخص الدفع')
         ->toContain('شكراً لاختيارك LookUp! نتطلع إلى زيارتك.')
         ->toContain('هذه رسالة بريد إلكتروني مرسلة تلقائياً. يرجى عدم الرد مباشرةً على هذه الرسالة.');
 });
@@ -99,7 +102,9 @@ it('keeps customer-facing headings out of the salon notification', function () {
         ->toContain('Leistungen')
         ->not->toContain('Ihre Buchungsdetails')
         ->not->toContain('Ihre Leistungen')
-        ->not->toContain('Zahlungsübersicht');
+        ->not->toContain('Zahlungsübersicht')
+        ->not->toContain('Dauer')
+        ->not->toContain('€');
 });
 
 it('picks the customer email language from the request, falling back to German', function () {
@@ -162,7 +167,9 @@ it('sends the reminder email in the confirmation layout and the reminder languag
             && str_contains($html, 'Terminerinnerung — ' . test()->appointment->number)
             && str_contains($html, 'Wir möchten Sie an Ihren bevorstehenden Termin bei LookUp erinnern.')
             && str_contains($html, 'Ihre Buchungsdetails')
-            && str_contains($html, 'Zahlungsübersicht')
+            && ! str_contains($html, 'Zahlungsübersicht')
+            && ! str_contains($html, 'Dauer')
+            && ! str_contains($html, '€')
             && str_contains($html, 'Wir freuen uns auf Ihren Besuch bei LookUp!')
             && str_contains($html, 'Dies ist eine automatisch versendete E-Mail.');
     });

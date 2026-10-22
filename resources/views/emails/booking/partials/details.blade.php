@@ -1,4 +1,5 @@
-{{-- Shared booking details block (services table + totals + meta) --}}
+{{-- Shared booking details block (services list + meta) --}}
+{{-- No duration and no prices in any email: the salon asked for both to be left out. --}}
 {{-- Expects: $appointment, $currency --}}
 @php
     // A booking split into several blocks (BOOKING-GAP-01) lists every block;
@@ -51,10 +52,6 @@
         <td style="padding: 6px 0; font-weight: 600; text-align: end;"><span dir="ltr">{{ $emailTime($appointment) }}</span></td>
     </tr>
     <tr>
-        <td style="padding: 6px 0; color: #6b7280;">{{ __('booking_email.duration') }}</td>
-        <td style="padding: 6px 0; font-weight: 600; text-align: end;">{{ $appointment->formatted_duration }}</td>
-    </tr>
-    <tr>
         <td style="padding: 6px 0; color: #6b7280;">{{ __('booking_email.provider') }}</td>
         <td style="padding: 6px 0; font-weight: 600; text-align: end;">{{ $providerName }}</td>
     </tr>
@@ -75,36 +72,15 @@
     <thead>
         <tr style="background-color: #f3f4f6;">
             <th align="start" style="padding: 10px 12px; text-align: start; font-weight: 600; border-bottom: 1px solid #e5e7eb;">{{ __('booking_email.service') }}</th>
-            <th style="padding: 10px 12px; text-align: center; font-weight: 600; border-bottom: 1px solid #e5e7eb;">{{ __('booking_email.duration') }}</th>
-            <th align="end" style="padding: 10px 12px; text-align: end; font-weight: 600; border-bottom: 1px solid #e5e7eb;">{{ __('booking_email.price') }}</th>
         </tr>
     </thead>
     <tbody>
         @foreach($servicesRecords as $item)
         <tr>
             <td style="padding: 10px 12px; border-bottom: 1px solid #f1f1f1;">{{ $item->service_name }}</td>
-            <td style="padding: 10px 12px; text-align: center; border-bottom: 1px solid #f1f1f1;">{{ $item->formatted_duration }}</td>
-            <td style="padding: 10px 12px; text-align: end; border-bottom: 1px solid #f1f1f1;">{{ $currency }} {{ $item->formatted_price }}</td>
         </tr>
         @endforeach
     </tbody>
 </table>
 
-@if($isCustomer)
-<h3 style="margin: 24px 0 0; font-size: 15px; color: #111827;">{{ __('booking_email.payment_summary') }}</h3>
-@endif
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0 0; font-size: 14px; color: #1f2937;">
-    <tr>
-        <td style="padding: 4px 12px; color: #6b7280; text-align: end;">{{ __('booking_email.subtotal') }}</td>
-        <td style="padding: 4px 12px; text-align: end; width: 120px;">{{ $currency }} {{ number_format((float) $appointment->subtotal, 2) }}</td>
-    </tr>
-    <tr>
-        <td style="padding: 4px 12px; color: #6b7280; text-align: end;">{{ __('booking_email.tax') }}</td>
-        <td style="padding: 4px 12px; text-align: end;">{{ $currency }} {{ number_format((float) $appointment->tax_amount, 2) }}</td>
-    </tr>
-    <tr>
-        <td style="padding: 8px 12px; font-weight: 700; font-size: 16px; text-align: end; border-top: 2px solid #e5e7eb;">{{ __('booking_email.total') }}</td>
-        <td style="padding: 8px 12px; font-weight: 700; font-size: 16px; text-align: end; border-top: 2px solid #e5e7eb;">{{ $currency }} {{ number_format((float) $appointment->total_amount, 2) }}</td>
-    </tr>
-</table>
 @endif

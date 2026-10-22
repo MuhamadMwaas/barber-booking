@@ -19,6 +19,8 @@ return [
     'loading' => 'جاري التحميل',
     'on_leave' => 'في إجازة',
     'not_working' => 'غير مداوم',
+    'show_unavailable' => 'إظهار غير المتاحين',
+    'hide_unavailable' => 'إخفاء غير المتاحين',
     'day_off' => 'يوم إجازة',
     'bookings' => 'حجوزات',
     'no_bookings' => 'لا توجد حجوزات لهذا اليوم',
