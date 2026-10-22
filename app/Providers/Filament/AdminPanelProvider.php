@@ -79,6 +79,10 @@ class AdminPanelProvider extends PanelProvider {
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
+            // Persistent: FileUpload asks for its file URLs in a Livewire request.
+            ->middleware([
+                \App\Http\Middleware\ServePanelStorageFromCurrentHost::class,
+            ], isPersistent: true)
             ->plugins([
                 FilamentLanguageSwitcherPlugin::make()
                     ->locales([

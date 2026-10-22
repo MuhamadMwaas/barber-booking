@@ -31,6 +31,8 @@ php artisan queue:restart
 sudo supervisorctl restart all  # أو systemd
 ```
 
+> **لوحة `/admin` على أكثر من دومين:** روابط ملفات `public` تُبنى من `APP_URL`، لكن اللوحة تُفتح أيضاً على `dashboard.` subdomain. حقل الصورة في Filament (FilePond) يجلب الصورة الموجودة بـ `fetch()`، فلو بقي الرابط على الدومين الآخر يصير الطلب cross-origin بلا CORS، فيعلق الحقل على "Waiting for size". لهذا الـ middleware `App\Http\Middleware\ServePanelStorageFromCurrentHost` (persistent على اللوحة) يبني الروابط على نفس الدومين المفتوح. لا تحذفه، ولا تضع `/admin` خلف دومين لا يخدم نفس `/storage`.
+
 ## 3. Queue & Schedule
 
 ```bash
