@@ -11,6 +11,7 @@
 
 use App\Jobs\SendAppointmentReminderJob;
 use App\Models\AppointmentReminder;
+use App\Models\UserDevice;
 use App\Models\UserSetting;
 use App\Services\AppointmentReminderService;
 use App\Services\NotificationService;
@@ -18,6 +19,7 @@ use App\Services\SmsService;
 use Database\Seeders\AppSettingSeeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Tests\Support\SalonFixture;
@@ -130,6 +132,32 @@ it('keeps the German SMS in GSM-7 so it is billed at 160 chars per part', functi
     // German umlauts. A single "–" or emoji would switch the whole SMS to UCS-2.
     expect(preg_match('/^[A-Za-z0-9 .,:!?\'"()\-\/&%+@#ÄÖÜäöüß\n]*$/u', $text))->toBe(1)
         ->and(mb_strlen($text))->toBeLessThanOrEqual(160);
+});
+
+it('sends the push in the reminder\'s language, not the phone\'s', function () {
+    // OneSignal picks the content slot by the phone's SYSTEM language. An Arabic
+    // app on an English phone used to show the English slot, so every slot must
+    // carry the reminder's language — including `en`, which OneSignal requires.
+    Http::fake(['*onesignal.com/*' => Http::response(['id' => 'n-1'])]);
+    UserDevice::create([
+        'user_id' => $this->salon->customer->id,
+        'device_id' => '6f1c2f3e-8a4b-4c5d-9e0f-1a2b3c4d5e6f',
+        'is_active' => true,
+    ]);
+    UserSetting::where('user_id', $this->salon->customer->id)
+        ->where('key', 'reminder_push_enabled')->update(['value' => true]);
+
+    sentSms('ar');
+
+    $arabic = app(NotificationService::class)->translateKey(
+        AppointmentReminder::MESSAGE_KEY,
+        app(AppointmentReminderService::class)->buildPayload($this->appointment)[0],
+        'ar'
+    );
+
+    Http::assertSent(fn ($request) => $request['include_player_ids'] === ['6f1c2f3e-8a4b-4c5d-9e0f-1a2b3c4d5e6f']
+        && $request['contents'] === ['en' => $arabic, 'ar' => $arabic]
+        && str_contains($request['contents']['en'], 'الأربعاء'));
 });
 
 it('renders the weekday in each reader\'s language from one params array', function () {

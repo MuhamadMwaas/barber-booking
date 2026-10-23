@@ -18,12 +18,19 @@ class NotificationService
     ) {
     }
 
+    /**
+     * @param  string|null  $locale  The reader's language, when it is known (a
+     *         reminder carries the app language captured at booking). Without it
+     *         the push carries en/ar/de and OneSignal picks by the PHONE's system
+     *         language — so an Arabic app on an English phone got English text.
+     */
     public function sendNotificationToUser(
         Collection|array|User $users,
         string $titleKey,
         string $messageKey,
         array $params = [],
-        array $data = []
+        array $data = [],
+        ?string $locale = null
     ) {
 
         if (empty($users)) {
@@ -48,8 +55,8 @@ class NotificationService
         ]);
 
 
-        $translatedTitle = $this->translateForPushLocales($titleKey, $params);
-        $translatedMessage = $this->translateForPushLocales($messageKey, $params);
+        $translatedTitle = $this->translateForPush($titleKey, $params, $locale);
+        $translatedMessage = $this->translateForPush($messageKey, $params, $locale);
 
         if (!empty($deviceIds)) {
             $this->sendToDeviceIds($deviceIds, $translatedTitle, $translatedMessage, $data);
@@ -90,6 +97,25 @@ class NotificationService
                 'device_ids_count' => count($deviceIds),
             ]);
         }
+    }
+
+    /**
+     * Push text keyed by OneSignal language code.
+     *
+     * With a locale, every language slot gets that locale's text, so the reader
+     * sees their app language whatever their phone is set to. The `en` slot is
+     * kept because OneSignal rejects a notification without English content and
+     * falls back to it for any device language not listed.
+     */
+    public function translateForPush(string $key, array $params = [], ?string $locale = null): array
+    {
+        if (blank($locale)) {
+            return $this->translateForPushLocales($key, $params);
+        }
+
+        $text = $this->translateKey($key, $params, $locale);
+
+        return array_fill_keys(array_unique(['en', $locale]), $text);
     }
 
     public function translateForPushLocales(string $key, array $params = []): array

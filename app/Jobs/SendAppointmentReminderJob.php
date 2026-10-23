@@ -191,7 +191,8 @@ class SendAppointmentReminderJob implements ShouldQueue
                     $reminder->title_key,
                     $reminder->message_key,
                     $params,
-                    $reminder->data ?? []
+                    $reminder->data ?? [],
+                    $locale
                 );
                 $delivered[] = ReminderChannelResolver::CHANNEL_PUSH;
             } catch (\Throwable $e) {
