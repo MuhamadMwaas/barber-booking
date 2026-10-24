@@ -11,6 +11,9 @@ use App\Mail\AppointmentReminderMail;
 use App\Mail\BookingConfirmationMail;
 use App\Mail\BookingNotificationMail;
 use App\Models\AppointmentReminder;
+use App\Models\AppointmentService;
+use App\Models\LandingSection;
+use App\Models\Language;
 use App\Models\UserSetting;
 use App\Services\AppointmentReminderService;
 use App\Services\BookingMailService;
@@ -137,7 +140,127 @@ it('stores the request language on a newly scheduled reminder', function () {
     expect($reminder->locale)->toBe('ar');
 });
 
-it('sends the reminder email in the confirmation layout and the reminder language', function () {
+/**
+ * Gives the fixture appointment a "Hair Cut" line with a German and an Arabic
+ * name, so the reminder can be checked for the email-language service name.
+ */
+function withTranslatedHaircut(): void
+{
+    $salon = test()->salon;
+    foreach (['de' => 'Deutsch', 'ar' => 'العربية'] as $code => $name) {
+        Language::firstOrCreate(['code' => $code], ['name' => $name, 'native_name' => $name, 'is_active' => true, 'is_default' => false]);
+    }
+    $salon->service->translate('de', ['name' => 'Haarschnitt', 'language_code' => 'de']);
+    $salon->service->translate('ar', ['name' => 'قص الشعر', 'language_code' => 'ar']);
+
+    AppointmentService::create([
+        'appointment_id' => test()->appointment->id,
+        'service_id' => $salon->service->id,
+        'service_name' => 'Hair Cut',
+        'duration_minutes' => 60,
+        'price' => 100,
+        'sequence_order' => 1,
+    ]);
+}
+
+function reminderIn(string $locale): string
+{
+    return (new AppointmentReminderMail(test()->appointment->fresh(), 'Look up', $locale))->render();
+}
+
+it('renders the German reminder with the salon-approved wording and five detail lines', function () {
+    withTranslatedHaircut();
+    test()->salon->setSetting('company_address', 'Landshut');
+    $html = reminderIn('de');
+    $name = test()->appointment->customer_name;
+
+    expect($html)
+        ->toContain('Look up – Erinnerung an Deinen Termin')
+        ->toContain("Hallo {$name},")
+        ->toContain('Wir möchten Dich daran erinnern, dass Du einen Termin bei Look up hast.')
+        ->toContain('Hier sind die Details zu Deinem Termin:')
+        ->toContain('Datum:')
+        ->toContain('Mittwoch, 9. September 2026')
+        ->toContain('Uhrzeit:')
+        ->toContain('<span dir="ltr">10:00</span> Uhr')
+        ->toContain('Friseur:')
+        ->toContain('>Available<')                    // provider's first name only
+        ->not->toContain('Available Provider')
+        ->toContain('Service:')
+        ->toContain('Haarschnitt')                    // service name in the email's language
+        ->toContain('Salon:')
+        ->toContain('Look up, Landshut')
+        ->toContain('Wir freuen uns auf Deinen Besuch!')
+        ->toContain('Dein Look up Team')
+        ->toContain("Mehr als ein Haarschnitt.<br />\nDein Look. Unser Ziel.")
+        ->toContain('data:image/png;base64')          // embedded, not linked to APP_URL
+        // The salon asked for exactly these lines — nothing else from the booking.
+        ->not->toContain(test()->appointment->number)
+        ->not->toContain('Barzahlung')
+        ->not->toContain('Bitte kurz')
+        ->not->toContain('Dauer')
+        ->not->toContain('€')
+        ->not->toContain('automatisch versendete');
+});
+
+it('renders the Arabic reminder right-to-left with the salon-approved wording', function () {
+    withTranslatedHaircut();
+    $html = reminderIn('ar');
+
+    expect($html)
+        ->toContain('dir="rtl"')
+        ->toContain('Look up – تذكير بموعدك')
+        ->toContain('نود تذكيرك بأن لديك موعدًا لدى Look up.')
+        ->toContain('فيما يلي تفاصيل موعدك:')
+        ->toContain('الأربعاء، 9 سبتمبر 2026')
+        ->toContain('الساعة <span dir="ltr">10:00</span>')
+        ->toContain('الحلاق:')
+        ->toContain('قص الشعر')
+        ->toContain('الصالون:')
+        ->toContain('نتطلع إلى زيارتك!')
+        ->toContain('فريق Look up')
+        ->toContain("أكثر من مجرد قصة شعر.<br />\nمظهرك. هدفنا.")
+        ->not->toContain(test()->appointment->number)
+        ->not->toContain('نقداً');
+});
+
+it('shows the salon name alone when no address is set', function () {
+    expect(reminderIn('de'))->toContain('>Look up<');
+});
+
+it('renders one card per block of a split booking', function () {
+    $second = $this->salon->bookSlot($this->salon->hourlyLeave, SalonFixture::DATE, '15:00', '16:00');
+    $second->update(['parent_appointment_id' => $this->appointment->id, 'customer_id' => $this->salon->customer->id]);
+
+    $mail = new AppointmentReminderMail($this->appointment->fresh()->load('children'), 'Look up', 'de');
+    $html = $mail->render();
+
+    expect(substr_count($html, 'Uhrzeit:'))->toBe(2)
+        ->and($html)->toContain('<span dir="ltr">10:00</span> Uhr')
+        ->and($html)->toContain('<span dir="ltr">15:00</span> Uhr')
+        ->and($html)->toContain('>Available<')
+        ->and($html)->toContain('>HourlyLeave<');
+});
+
+it('links only the social platforms the landing page has a URL for', function () {
+    LandingSection::create([
+        'key' => LandingSection::INFO,
+        'is_active' => true,
+        'sort_order' => 1,
+        'content' => ['social_links' => [
+            ['platform' => 'instagram', 'url' => 'https://instagram.com/lookup.landshut'],
+            ['platform' => 'facebook', 'url' => ''],
+            ['platform' => 'whatsapp', 'url' => 'https://wa.me/49123'],
+        ]],
+    ]);
+
+    expect(reminderIn('de'))
+        ->toContain('href="https://instagram.com/lookup.landshut"')
+        ->not->toContain('alt="Facebook"')
+        ->not->toContain('wa.me');
+});
+
+it('sends the reminder email in the reminder language', function () {
     $this->seed(AppSettingSeeder::class);
     Mail::fake();
     Notification::fake();
@@ -164,13 +287,8 @@ it('sends the reminder email in the confirmation layout and the reminder languag
         $html = $mail->render();
 
         return $mail->locale === 'de'
-            && str_contains($html, 'Terminerinnerung — ' . test()->appointment->number)
-            && str_contains($html, 'Wir möchten Sie an Ihren bevorstehenden Termin bei LookUp erinnern.')
-            && str_contains($html, 'Ihre Buchungsdetails')
-            && ! str_contains($html, 'Zahlungsübersicht')
-            && ! str_contains($html, 'Dauer')
-            && ! str_contains($html, '€')
-            && str_contains($html, 'Wir freuen uns auf Ihren Besuch bei LookUp!')
-            && str_contains($html, 'Dies ist eine automatisch versendete E-Mail.');
+            && str_contains($html, 'Erinnerung an Deinen Termin')
+            && str_contains($html, 'Wir freuen uns auf Deinen Besuch!')
+            && ! str_contains($html, test()->appointment->number);
     });
 });

@@ -1115,6 +1115,8 @@ GET {{base_url}}/api/services/{{service_id}}
 | `GET /availability/service` | **60** / دقيقة | استعلام ليوم واحد |
 | `GET /availability/provider` | **60** / دقيقة | استعلام لمزوّد واحد ويوم واحد |
 | `GET /availability/calendar` | **30** / دقيقة | الأثقل — يضرب تكلفة اليوم الواحد بعدد أيام النطاق (حتى 31) |
+| `GET /availability/days` | **30** / دقيقة | شهر كامل لمزوّد واحد |
+| `GET /availability/days/providers` | **30** / دقيقة | شهر كامل لكل مزوّدي الخدمة |
 
 **الحدود مستقلة لكل مسار** — استهلاك حد التقويم لا يؤثر على المسارين الآخرين.
 
@@ -1312,6 +1314,7 @@ GET {{base_url}}/api/availability/provider?service_id={{service_id}}&provider_id
 | -------------------------- | ------------------------------------------------------------- | ------------ |
 | `available`                | المزود متاح وهناك أوقات شاغرة                                  | ✅            |
 | `on_leave`                 | المزود في **إجازة يوم كامل** في هذا التاريخ                    | ❌            |
+| `salon_closed`             | الصالون (فرع المزوّد) **مغلق** في هذا اليوم من الأسبوع — `salon_schedules.is_open = false` | ❌ |
 | `not_working_day`          | لا يوجد جدول عمل للمزود في هذا اليوم من الأسبوع                | ❌            |
 | `fully_booked`             | يوم عمل عادي لكن كل الأوقات محجوزة أو مغطاة بإجازة ساعية         | ❌            |
 | `outside_booking_window`   | التاريخ أبعد من `max_booking_days` — **لا يمكن حجزه أصلاً**     | ❌            |
@@ -1418,6 +1421,176 @@ GET {{base_url}}/api/availability/calendar?service_id={{service_id}}&provider_id
   "message": "Date range cannot exceed 31 days"
 }
 ```
+
+> 💡 للشاشات الجديدة استخدم `/availability/days` و `/availability/days/providers` أدناه: نفس الفكرة بشهر تقويمي كامل، مع التنقل بين الأشهر، وبكلفة ثابتة على السيرفر.
+
+---
+
+> 📱 **مطوّر Flutter:** الدليل التطبيقي الكامل (نماذج Dart، التقويم، الأخطاء، الرحلة حتى الحجز) في [`docs/API/AVAILABILITY_MONTH_DAYS_FLUTTER_GUIDE.md`](docs/API/AVAILABILITY_MONTH_DAYS_FLUTTER_GUIDE.md).
+
+### 4. Availability - Provider Month Days (أيام توفر مزوّد خلال شهر)
+
+```
+GET /api/availability/days
+```
+
+**الوصف:** تعطيه **خدمة + مزوّد + شهر** فيرجّع لك أيام الشهر التي ما زال فيها **وقت شاغر واحد على الأقل** عند هذا المزوّد لهذه الخدمة. أيام العطلة الأسبوعية والإجازات وإغلاق الصالون والأيام الممتلئة كلها **غير متوفرة**.
+
+**Authentication:** ❌ لا يتطلب
+
+**Query Parameters:**
+
+| Parameter     | Type    | Required | Description |
+| ------------- | ------- | -------- | ----------- |
+| `service_id`  | integer | ✅        | معرف خدمة **نشطة** |
+| `provider_id` | integer | ✅        | معرف المزوّد |
+| `month`       | string  | ❌        | الشهر بصيغة `Y-m` (مثال `2026-11`). الافتراضي: الشهر الحالي |
+
+**Example Request:**
+```
+GET {{base_url}}/api/availability/days?service_id=2&provider_id=3&month=2026-11
+```
+
+**Success Response — 200:**
+```json
+{
+  "success": true,
+  "message": "Availability days retrieved successfully",
+  "data": {
+    "service": { "id": 2, "name": "Beard Trim & Shape", "duration_minutes": 20, "formatted_duration": "20m" },
+    "provider": { "id": 3, "name": "Sarah Johnson", "avatar": null, "branch": { "id": 1, "name": "Main Branch" } },
+    "pricing": { "original_price": 18, "effective_price": 18, "has_discount": false, "currency": "EUR", "formatted_price": "18.00 EUR" },
+    "month": "2026-11",
+    "month_name": "November 2026",
+    "previous_month": "2026-10",
+    "next_month": "2026-12",
+    "last_bookable_date": "2026-12-23",
+    "available_dates": ["2026-11-02", "2026-11-03"],
+    "days": [
+      {
+        "date": "2026-11-01",
+        "day_name": "Sun",
+        "day_number": 1,
+        "is_today": false,
+        "is_available": false,
+        "reason_code": "not_working_day",
+        "available_slots_count": 0,
+        "first_available_slot": null
+      },
+      {
+        "date": "2026-11-02",
+        "day_name": "Mon",
+        "day_number": 2,
+        "is_today": false,
+        "is_available": true,
+        "reason_code": "available",
+        "available_slots_count": 24,
+        "first_available_slot": "09:00"
+      }
+    ]
+  }
+}
+```
+
+**الحقول:**
+
+| الحقل | المعنى |
+| --- | --- |
+| `available_dates` | قائمة مختصرة بالأيام المتوفرة فقط — جاهزة لتلوين التقويم |
+| `days` | **كل** أيام الشهر بالترتيب، كل يوم مع `is_available` و `reason_code` |
+| `previous_month` / `next_month` | الشهر السابق/التالي **القابل للطلب**، أو `null` — استخدمهما لتفعيل/تعطيل أزرار التنقل |
+| `last_bookable_date` | آخر تاريخ يقبله الحجز (`today + max_booking_days`) |
+| `first_available_slot` | أول وقت شاغر في اليوم (`H:i`)، يصلح مباشرة كـ `start_time` في `POST /bookings` |
+
+**قيم `reason_code` لليوم:** نفس قيم [Provider Slots](#2-availability---provider-slots) (`available`, `on_leave`, `not_working_day`, `salon_closed`, `fully_booked`, `outside_booking_window`) + `past` للأيام التي مضت من الشهر الحالي.
+
+> عند الضغط على يوم متوفر اجلب أوقاته من `GET /availability/provider?service_id=..&provider_id=..&date=..`.
+
+**Error Response — 422:**
+
+| السبب | الرسالة |
+| --- | --- |
+| المزوّد غير موجود / غير نشط / ليس مزوّداً / لا يقدّم الخدمة | رسالة **واحدة** للجميع: `The selected provider is unavailable for this service.` |
+| الشهر قبل الشهر الحالي أو بعد شهر `last_bookable_date` | `This month cannot be booked.` |
+| خدمة غير نشطة أو محذوفة، أو `month` بصيغة خاطئة | خطأ validation عادي في `errors` |
+
+```json
+{
+  "success": false,
+  "message": "This month cannot be booked."
+}
+```
+
+---
+
+### 5. Availability - Service Month Days (أيام توفر خدمة ومن يقدّمها كل يوم)
+
+```
+GET /api/availability/days/providers
+```
+
+**الوصف:** تعطيه **خدمة + شهر** فيرجّع لك أيام الشهر التي يوجد فيها **مزوّد واحد على الأقل** متاح لهذه الخدمة، ومع كل يوم **قائمة المزوّدين المتاحين** فيه.
+
+**Authentication:** ❌ لا يتطلب
+
+**Query Parameters:**
+
+| Parameter    | Type    | Required | Description |
+| ------------ | ------- | -------- | ----------- |
+| `service_id` | integer | ✅        | معرف خدمة **نشطة** |
+| `month`      | string  | ❌        | `Y-m` — الافتراضي الشهر الحالي |
+| `branch_id`  | integer | ❌        | حصر المزوّدين بفرع واحد |
+
+**Example Request:**
+```
+GET {{base_url}}/api/availability/days/providers?service_id=2&month=2026-11
+```
+
+**Success Response — 200:**
+```json
+{
+  "success": true,
+  "message": "Availability days retrieved successfully",
+  "data": {
+    "service": { "id": 2, "name": "Beard Trim & Shape", "duration_minutes": 20, "formatted_duration": "20m" },
+    "branch_id": null,
+    "month": "2026-11",
+    "month_name": "November 2026",
+    "previous_month": "2026-10",
+    "next_month": "2026-12",
+    "last_bookable_date": "2026-12-23",
+    "available_dates": ["2026-11-01", "2026-11-02"],
+    "days": [
+      {
+        "date": "2026-11-01",
+        "day_name": "Sun",
+        "day_number": 1,
+        "is_today": false,
+        "is_available": true,
+        "reason_code": "available",
+        "providers_count": 2,
+        "providers": [
+          {
+            "provider_id": 3,
+            "provider_name": "Sarah Johnson",
+            "provider_avatar": null,
+            "service_pricing": { "original_price": 18, "effective_price": 18, "has_discount": false, "currency": "EUR", "formatted_price": "18.00 EUR" },
+            "available_slots_count": 27,
+            "first_available_slot": "09:00"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**سلوك مهم:**
+
+- المزوّدون في `providers` **متاحون فعلاً** في ذلك اليوم فقط — من في إجازة أو لا يعمل أو ممتلئ لا يظهر.
+- **لا تُرسل الأوقات التفصيلية** لتخفيف الرد. عند اختيار يوم اجلب أوقاته من `GET /availability/service?service_id=..&date=..` (كل المزوّدين) أو `/availability/provider` (مزوّد واحد).
+- `reason_code` لليوم: `available` / `past` / `outside_booking_window` / `salon_closed` (الصالون مغلق **لكل** المزوّدين المعنيين) / `no_availability` (لا أحد متاح لأي سبب آخر).
+- حقول التنقل والأخطاء مثل [Provider Month Days](#4-availability---provider-month-days-أيام-توفر-مزوّد-خلال-شهر).
 
 ---
 

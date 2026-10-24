@@ -5,7 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\ServiceAvailabilityService;
+use Closure;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Exists;
 class AvailabilityController extends Controller
 {
 
@@ -104,6 +108,92 @@ class AvailabilityController extends Controller
                 'success' => false,
                 'message' => 'Failed to retrieve provider availability',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * The days of a month on which one provider still has a free slot for a service.
+     *
+     * provider_id is deliberately not `exists:users`: whether the id is unknown,
+     * not a provider, inactive, or simply does not offer the service, the answer
+     * is the same 422 — the endpoint must not tell users apart (see
+     * BookingValidationService::rejectProviderServicePair()).
+     */
+    public function getProviderMonthDays(Request $request): JsonResponse
+    {
+        // Outside the try — see the note in getServiceAvailability().
+        $request->validate([
+            'service_id'  => ['required', 'integer', $this->activeServiceRule()],
+            'provider_id' => 'required|integer',
+            'month'       => 'nullable|date_format:Y-m',
+        ]);
+
+        return $this->monthResponse(fn () => $this->availabilityService->getProviderMonthAvailability(
+            (int) $request->get('service_id'),
+            (int) $request->get('provider_id'),
+            $request->get('month'),
+        ));
+    }
+
+    /**
+     * The days of a month on which anybody can take a service, and who.
+     */
+    public function getServiceMonthDays(Request $request): JsonResponse
+    {
+        // Outside the try — see the note in getServiceAvailability().
+        $request->validate([
+            'service_id' => ['required', 'integer', $this->activeServiceRule()],
+            'month'      => 'nullable|date_format:Y-m',
+            'branch_id'  => 'nullable|integer|exists:branchs,id',
+        ]);
+
+        return $this->monthResponse(fn () => $this->availabilityService->getServiceMonthAvailability(
+            (int) $request->get('service_id'),
+            $request->get('month'),
+            $request->filled('branch_id') ? (int) $request->get('branch_id') : null,
+        ));
+    }
+
+    /**
+     * A bookable service: `exists:` alone queries the table raw, so it matches
+     * soft-deleted rows that Service::findOrFail() then cannot see (BOOK-09), and
+     * it accepts a service the booking call refuses as inactive.
+     */
+    private function activeServiceRule(): Exists
+    {
+        return Rule::exists('services', 'id')
+            ->whereNull('deleted_at')
+            ->where('is_active', true);
+    }
+
+    /**
+     * Shared envelope for the month endpoints. A rejection (provider cannot take
+     * the service, month outside the booking window) is the caller's input and
+     * answers 422; anything else is logged by class and answers a bare 500.
+     */
+    private function monthResponse(Closure $resolve): JsonResponse
+    {
+        try {
+            return response()->json([
+                'success' => true,
+                'data' => $resolve(),
+                'message' => 'Availability days retrieved successfully',
+            ], 200);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('Month availability failed.', [
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve availability days',
             ], 500);
         }
     }

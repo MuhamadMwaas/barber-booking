@@ -8,6 +8,8 @@ return [
     'only_pending_can_be_cancelled' => 'Only a pending, unpaid booking can be cancelled.',
     'outside_working_hours' => 'The provider is not available at this time: outside working hours (:start - :end).',
     'provider_time_off' => 'The provider is on leave at this time.',
+    'salon_closed' => 'The salon is closed on the requested date.',
+    'month_outside_booking_window' => 'This month cannot be booked.',
     'slot_in_past' => 'This time has already passed.',
     'min_advance' => 'Bookings must be made at least :minutes minutes in advance.',
     'services_overlap' => 'Service :position starts at :start, before the previous service ends at :end. Services must not overlap.',

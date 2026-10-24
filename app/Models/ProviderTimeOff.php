@@ -85,9 +85,23 @@ class ProviderTimeOff extends Model
      */
     public function scopeCoveringDate(Builder $query, string $date): Builder
     {
+        return $query->touchingRange($date, $date);
+    }
+
+    /**
+     * Leaves covering at least one day of [$from, $to] — the range form of
+     * scopeCoveringDate(), so a month of availability loads its leaves in one
+     * query under the same null-end_date rule. Which slice of each day a row
+     * takes is still decided per day by blockedWindowOn().
+     *
+     * Not scopeOverlapping() above: that one compares end_date directly, and a
+     * NULL end_date fails every comparison, so single-day leaves vanish.
+     */
+    public function scopeTouchingRange(Builder $query, string $from, string $to): Builder
+    {
         return $query
-            ->whereDate('start_date', '<=', $date)
-            ->whereRaw('COALESCE(end_date, start_date) >= ?', [$date]);
+            ->whereDate('start_date', '<=', $to)
+            ->whereRaw('COALESCE(end_date, start_date) >= ?', [$from]);
     }
 
     /**

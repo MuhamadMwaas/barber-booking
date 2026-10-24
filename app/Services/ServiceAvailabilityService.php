@@ -7,10 +7,12 @@ use App\Models\User;
 use App\Models\Appointment;
 use App\Models\ProviderScheduledWork;
 use App\Models\ProviderTimeOff;
+use App\Models\SalonSchedule;
 use Carbon\Carbon;
+use Closure;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class ServiceAvailabilityService
@@ -27,6 +29,11 @@ class ServiceAvailabilityService
     public const REASON_ON_LEAVE = 'on_leave';
     public const REASON_FULLY_BOOKED = 'fully_booked';
     public const REASON_OUTSIDE_BOOKING_WINDOW = 'outside_booking_window';
+    public const REASON_SALON_CLOSED = 'salon_closed';
+
+    // Day-level reasons used only by the month views.
+    public const REASON_PAST = 'past';
+    public const REASON_NO_AVAILABILITY = 'no_availability';
 
     /**
      * The two booking limits this service has to honour so that it never offers a
@@ -80,18 +87,19 @@ class ServiceAvailabilityService
             }
 
             //   get active provider foth this service
-            $providers = $this->getServiceProviders($service, $branchId);
+            $providers = $this->bookableProviders($service, $branchId);
+            $calendar = $this->loadCalendarData($providers, $carbonDate, $carbonDate);
 
             // get free times for each providers
-            $providersWithSlots = $providers->map(function ($provider) use ($service, $carbonDate) {
-                $availability = $this->getProviderDayAvailability($provider, $service, $carbonDate);
+            $providersWithSlots = $providers->map(function ($provider) use ($service, $carbonDate, $calendar) {
+                $availability = $this->getProviderDayAvailability($provider, $service, $carbonDate, $calendar);
 
                 return [
                     'provider_id' => $provider->id,
                     'provider_name' => $provider->full_name,
                     'provider_avatar' => $provider->avatar,
                     'branch' => $this->formatBranchData($provider->branch),
-                    'service_pricing' => $this->getProviderServicePricing($provider, $service),
+                    'service_pricing' => $this->servicePricing($service, $provider->pivot->custom_price),
                     'is_available' => $availability['is_available'],
                     'reason_code' => $availability['reason_code'],
                     'available_slots' => $availability['available_slots'],
@@ -102,12 +110,7 @@ class ServiceAvailabilityService
             })->values();
 
             return [
-                'service' => [
-                    'id' => $service->id,
-                    'name' => $service->name,
-                    'duration_minutes' => $service->duration_minutes,
-                    'formatted_duration' => $this->formatDuration($service->duration_minutes),
-                ],
+                'service' => $this->formatService($service),
                 'date' => $carbonDate->format('Y-m-d'),
                 'day_name' => $carbonDate->format('l'),
                 'formatted_date' => $carbonDate->format('l, F d, Y'),
@@ -115,7 +118,7 @@ class ServiceAvailabilityService
                 'is_tomorrow' => $carbonDate->isTomorrow(),
                 // Surfaced so the app can grey out dates the booking call would
                 // refuse instead of discovering the limit only on submit.
-                'last_bookable_date' => $this->lastBookableDate()->format('Y-m-d'),
+                'last_bookable_date' => $calendar['last_bookable_date']->format('Y-m-d'),
                 'total_providers' => $providersWithSlots->count(),
                 'providers' => $providersWithSlots,
             ];
@@ -135,7 +138,7 @@ class ServiceAvailabilityService
 
         return Cache::remember($cacheKey, self::CACHE_DURATION, function () use ($serviceId, $providerId, $date) {
             $service = Service::findOrFail($serviceId);
-            $provider = User::findOrFail($providerId);
+            User::findOrFail($providerId);
             $carbonDate = Carbon::parse($date);
 
             // Validate date
@@ -143,8 +146,11 @@ class ServiceAvailabilityService
                 throw new \InvalidArgumentException('Cannot get availability for past dates');
             }
 
-            // Validate provider offers this service
-            if (!$this->providerOffersService($provider, $service)) {
+            // Validate provider offers this service — and is someone the booking
+            // call would accept at all (active provider, active service).
+            $provider = $this->bookableProviders($service, providerId: $providerId)->first();
+
+            if (! $provider) {
                 throw new \InvalidArgumentException('Provider does not offer this service');
             }
 
@@ -170,7 +176,7 @@ class ServiceAvailabilityService
                     'duration_minutes' => $this->getEffectiveDuration($provider, $service),
                     'formatted_duration' => $this->formatDuration($this->getEffectiveDuration($provider, $service)),
                 ],
-                'pricing' => $this->getProviderServicePricing($provider, $service),
+                'pricing' => $this->servicePricing($service, $provider->pivot->custom_price),
                 'date' => $carbonDate->format('Y-m-d'),
                 'day_name' => $carbonDate->format('l'),
                 'formatted_date' => $carbonDate->format('l, F d, Y'),
@@ -178,6 +184,131 @@ class ServiceAvailabilityService
                 'available_slots' => $slots,
             ];
         });
+    }
+
+    /**
+     * One provider's month: which days of it still have at least one bookable
+     * slot for this service.
+     *
+     * @param string|null $month `Y-m`; null means the current month
+     *
+     * @throws InvalidArgumentException when the provider cannot take this service
+     *                                  or the month is outside the booking window
+     */
+    public function getProviderMonthAvailability(int $serviceId, int $providerId, ?string $month = null): array
+    {
+        $service = Service::findOrFail($serviceId);
+        $provider = $this->bookableProviders($service, providerId: $providerId)->first();
+
+        if (! $provider) {
+            // One message for "no such user", "not a provider", "inactive" and
+            // "does not offer it" — the same non-enumerable rule the booking call
+            // applies in BookingValidationService::rejectProviderServicePair().
+            throw new InvalidArgumentException(__('booking.provider_unavailable_for_service'));
+        }
+
+        $window = $this->monthWindow($month);
+        $calendar = $this->loadCalendarData(collect([$provider]), $window['from'], $window['to']);
+
+        $days = $this->eachMonthDay(
+            $window,
+            function (Carbon $date) use ($provider, $service, $calendar) {
+                $availability = $this->getProviderDayAvailability($provider, $service, $date, $calendar);
+                $slots = $availability['available_slots'];
+
+                return [
+                    'is_available' => $availability['is_available'],
+                    'reason_code' => $availability['reason_code'],
+                    'available_slots_count' => count($slots),
+                    'first_available_slot' => $slots[0]['start_time'] ?? null,
+                ];
+            },
+            ['available_slots_count' => 0, 'first_available_slot' => null],
+        );
+
+        return [
+            'service' => $this->formatService($service),
+            'provider' => [
+                'id' => $provider->id,
+                'name' => $provider->full_name,
+                'avatar' => $provider->avatar,
+                'branch' => $this->formatBranchData($provider->branch),
+            ],
+            'pricing' => $this->servicePricing($service, $provider->pivot->custom_price),
+            ...$this->monthSummary($window, $days),
+        ];
+    }
+
+    /**
+     * A service's month: which days have at least one provider with a bookable
+     * slot, and who those providers are. Slots themselves are not listed — the
+     * app fetches them for the day the customer taps via getAvailableSlotsByDate().
+     *
+     * @param string|null $month `Y-m`; null means the current month
+     *
+     * @throws InvalidArgumentException when the month is outside the booking window
+     */
+    public function getServiceMonthAvailability(int $serviceId, ?string $month = null, ?int $branchId = null): array
+    {
+        $service = Service::findOrFail($serviceId);
+        $window = $this->monthWindow($month);
+        $providers = $this->bookableProviders($service, $branchId);
+        $calendar = $this->loadCalendarData($providers, $window['from'], $window['to']);
+
+        // Per provider, not per day: the price does not change from one day to the next.
+        $pricing = $providers->mapWithKeys(fn (User $provider) => [
+            $provider->id => $this->servicePricing($service, $provider->pivot->custom_price),
+        ]);
+
+        $days = $this->eachMonthDay(
+            $window,
+            function (Carbon $date) use ($providers, $service, $calendar, $pricing) {
+                $available = [];
+                $reasons = [];
+
+                foreach ($providers as $provider) {
+                    $availability = $this->getProviderDayAvailability($provider, $service, $date, $calendar);
+                    $reasons[] = $availability['reason_code'];
+
+                    if (! $availability['is_available']) {
+                        continue;
+                    }
+
+                    $available[] = [
+                        'provider_id' => $provider->id,
+                        'provider_name' => $provider->full_name,
+                        'provider_avatar' => $provider->avatar,
+                        'service_pricing' => $pricing[$provider->id],
+                        'available_slots_count' => count($availability['available_slots']),
+                        'first_available_slot' => $availability['available_slots'][0]['start_time'],
+                    ];
+                }
+
+                // The per-provider reasons collapse into one day-level code. Only
+                // "the salon is closed" is worth naming on its own: it is the one
+                // reason that applies to everybody and that the customer can act on
+                // ("come another day"). Anything else is simply no availability.
+                $allClosed = $reasons !== [] && array_unique($reasons) === [self::REASON_SALON_CLOSED];
+
+                return [
+                    'is_available' => $available !== [],
+                    'reason_code' => match (true) {
+                        $available !== [] => self::REASON_AVAILABLE,
+                        $allClosed => self::REASON_SALON_CLOSED,
+                        default => self::REASON_NO_AVAILABILITY,
+                    },
+                    'providers_count' => count($available),
+                    'providers' => $available,
+                ];
+            },
+            ['providers_count' => 0, 'providers' => []],
+        );
+
+        return [
+            'service' => $this->formatService($service),
+            'branch_id' => $branchId,
+            ...$this->monthSummary($window, $days),
+        ];
     }
 
     /**
@@ -265,16 +396,23 @@ class ServiceAvailabilityService
      * provider is unavailable so the app can hide providers that are on leave
      * instead of treating an empty slot list as a bookable provider.
      *
+     * $calendar is what loadCalendarData() returns. The single-day endpoints load
+     * one day for one provider; the month views load the whole month for every
+     * provider at once and call this for each day — both run the identical rules.
+     *
      * @param User $provider
      * @param Service $service
      * @param Carbon $date
+     * @param array|null $calendar
      * @return array{is_available: bool, reason_code: string, reason: string|null, available_slots: array}
      */
-    private function getProviderDayAvailability(User $provider, Service $service, Carbon $date): array
+    private function getProviderDayAvailability(User $provider, Service $service, Carbon $date, ?array $calendar = null): array
     {
+        $calendar ??= $this->loadCalendarData(collect([$provider]), $date, $date);
+
         // Checked before the work schedule: a date past the booking window can
         // never be booked no matter how free the provider looks on it.
-        $lastBookableDate = $this->lastBookableDate();
+        $lastBookableDate = $calendar['last_bookable_date'];
 
         if ($date->gt($lastBookableDate)) {
             return $this->unavailable(
@@ -286,11 +424,16 @@ class ServiceAvailabilityService
 
         $dayOfWeek = $date->dayOfWeek;
 
-        $workSchedule = ProviderScheduledWork::where('user_id', $provider->id)
-            ->where('day_of_week', $dayOfWeek)
-            ->where('is_work_day', true)
-            ->where('is_active', true)
-            ->first();
+        // Same rule, same order as BookingValidationService::validateProviderScheduleWindow().
+        if (SalonSchedule::isClosedFor($provider->branch_id, $dayOfWeek, $calendar['salon_schedules'])) {
+            return $this->unavailable(
+                self::REASON_SALON_CLOSED,
+                'The salon is closed on ' . $date->format('l')
+            );
+        }
+
+        $workSchedule = $calendar['schedules']->get($provider->id, collect())
+            ->firstWhere('day_of_week', $dayOfWeek);
 
         if (!$workSchedule) {
             return $this->unavailable(
@@ -299,7 +442,12 @@ class ServiceAvailabilityService
             );
         }
 
-        $fullDayTimeOff = $this->getFullDayTimeOff($provider, $date);
+        // blockedWindowOn() is the per-day half of scopeCoveringDate(): the rows
+        // were loaded for the whole range, this keeps the ones touching $date.
+        $leaves = $calendar['time_offs']->get($provider->id, collect())
+            ->filter(fn (ProviderTimeOff $timeOff) => $timeOff->blockedWindowOn($date) !== null);
+
+        $fullDayTimeOff = $leaves->first(fn (ProviderTimeOff $timeOff) => $timeOff->isFullDay());
 
         if ($fullDayTimeOff) {
             return $this->unavailable(
@@ -317,10 +465,12 @@ class ServiceAvailabilityService
 
         // Generate time slots
         $slots = $this->generateTimeSlots(
-            $provider,
             $date,
             $workSchedule,
-            $serviceDuration
+            $serviceDuration,
+            $calendar['appointments']->get($provider->id . '|' . $date->format('Y-m-d'), collect()),
+            $leaves->filter(fn (ProviderTimeOff $timeOff) => $timeOff->isHourly()),
+            $calendar['earliest_start']
         );
 
         if (empty($slots)) {
@@ -335,6 +485,167 @@ class ServiceAvailabilityService
             'reason_code' => self::REASON_AVAILABLE,
             'reason' => null,
             'available_slots' => $slots,
+        ];
+    }
+
+    /**
+     * Everything getProviderDayAvailability() reads, for $providers over
+     * [$from, $to], in a fixed handful of queries.
+     *
+     * Asking day by day used to cost ~4 queries per provider per day — about a
+     * thousand for one month of a busy service. Loading the range once and
+     * deciding per day in memory keeps the rules in one place AND the cost flat.
+     *
+     * The two settings are snapshotted here too: get_setting() is a query, and a
+     * month of days would otherwise re-read them for every provider and day.
+     */
+    private function loadCalendarData(Collection $providers, Carbon $from, Carbon $to): array
+    {
+        $providerIds = $providers->pluck('id')->all();
+
+        return [
+            'last_bookable_date' => $this->lastBookableDate(),
+            'earliest_start' => $this->earliestBookableTime(),
+            // Ordered by id so a duplicate (provider, weekday) row resolves the
+            // way the single-row `->first()` lookup in the booking layer does.
+            'schedules' => ProviderScheduledWork::whereIn('user_id', $providerIds)
+                ->where('is_work_day', true)
+                ->where('is_active', true)
+                ->orderBy('id')
+                ->get()
+                ->groupBy('user_id'),
+            'time_offs' => ProviderTimeOff::whereIn('user_id', $providerIds)
+                ->touchingRange($from->format('Y-m-d'), $to->format('Y-m-d'))
+                ->get()
+                ->groupBy('user_id'),
+            // Delegates to Appointment::scopeBlocksProviderTime() — the same scope
+            // the booking layer enforces — so a slot is never shown as free and
+            // then rejected on submit, and never hidden with nothing real behind it.
+            'appointments' => Appointment::whereIn('provider_id', $providerIds)
+                ->whereDate('appointment_date', '>=', $from)
+                ->whereDate('appointment_date', '<=', $to)
+                ->blocksProviderTime()
+                ->select('provider_id', 'appointment_date', 'start_time', 'end_time')
+                ->get()
+                ->groupBy(fn (Appointment $appointment) => $appointment->provider_id . '|' . $appointment->appointment_date->format('Y-m-d')),
+            'salon_schedules' => SalonSchedule::all(),
+        ];
+    }
+
+    /**
+     * Providers the booking call would accept for this service: an active user
+     * with the provider role, an active link to the service, an active service.
+     *
+     * The same conditions as BookingValidationService::validateProviderOffersService().
+     * The role and the service's own flag used to be missing here, so availability
+     * could offer a provider or service that booking then refused.
+     *
+     * `activeProviders()` joins `provider_service`, and BOTH that pivot and the
+     * `users` table carry an `is_active` column — so every column added here has
+     * to be table-qualified or MySQL rejects the query as ambiguous.
+     */
+    private function bookableProviders(Service $service, ?int $branchId = null, ?int $providerId = null): Collection
+    {
+        if (! $service->is_active) {
+            return collect();
+        }
+
+        return $service->activeProviders()
+            ->whereHas('roles', fn ($query) => $query->where('roles.name', 'provider'))
+            ->when($branchId, fn ($query) => $query->where('users.branch_id', $branchId))
+            ->when($providerId, fn ($query) => $query->where('users.id', $providerId))
+            ->with('branch')
+            ->get();
+    }
+
+    /**
+     * The month asked for, clipped to what can actually be booked.
+     *
+     *  - `start` / `end`  the calendar month, every day of which is returned;
+     *  - `from` / `to`    the bookable part of it (today .. last bookable date),
+     *                     the only days whose data is loaded and evaluated.
+     *
+     * A month entirely before today or entirely past the booking window is
+     * refused rather than returned as thirty greyed-out days: the app gets
+     * `previous_month` / `next_month` and never has a reason to ask for one.
+     */
+    private function monthWindow(?string $month): array
+    {
+        $today = Carbon::today();
+        $lastBookableDate = $this->lastBookableDate();
+
+        $start = $month === null
+            ? $today->copy()->startOfMonth()
+            : Carbon::createFromFormat('!Y-m', $month);
+
+        if ($start->lt($today->copy()->startOfMonth()) || $start->gt($lastBookableDate->copy()->startOfMonth())) {
+            throw new InvalidArgumentException(__('booking.month_outside_booking_window'));
+        }
+
+        $end = $start->copy()->endOfMonth()->startOfDay();
+
+        return [
+            'start' => $start,
+            'end' => $end,
+            'from' => ($start->lt($today) ? $today : $start)->copy(),
+            'to' => ($end->gt($lastBookableDate) ? $lastBookableDate : $end)->copy(),
+            'today' => $today,
+            'last_bookable_date' => $lastBookableDate,
+        ];
+    }
+
+    /**
+     * One entry per day of the month. Days outside the bookable part are filled
+     * in without asking $resolve: before today → `past`, after the last bookable
+     * date → `outside_booking_window`, each with $emptyDay's fields.
+     */
+    private function eachMonthDay(array $window, Closure $resolve, array $emptyDay): array
+    {
+        $days = [];
+
+        for ($date = $window['start']->copy(); $date->lte($window['end']); $date->addDay()) {
+            $day = [
+                'date' => $date->format('Y-m-d'),
+                'day_name' => $date->format('D'),
+                'day_number' => $date->day,
+                'is_today' => $date->isToday(),
+            ];
+
+            $resolved = match (true) {
+                $date->lt($window['from']) => ['is_available' => false, 'reason_code' => self::REASON_PAST] + $emptyDay,
+                $date->gt($window['to']) => ['is_available' => false, 'reason_code' => self::REASON_OUTSIDE_BOOKING_WINDOW] + $emptyDay,
+                default => $resolve($date->copy()),
+            };
+
+            $days[] = $day + $resolved;
+        }
+
+        return $days;
+    }
+
+    /**
+     * Fields every month response shares: where the month sits in the booking
+     * window, the compact list of open dates, and the full day-by-day list.
+     */
+    private function monthSummary(array $window, array $days): array
+    {
+        $start = $window['start'];
+
+        return [
+            'month' => $start->format('Y-m'),
+            'month_name' => $start->format('F Y'),
+            'previous_month' => $start->gt($window['today']->copy()->startOfMonth())
+                ? $start->copy()->subMonth()->format('Y-m')
+                : null,
+            'next_month' => $start->lt($window['last_bookable_date']->copy()->startOfMonth())
+                ? $start->copy()->addMonth()->format('Y-m')
+                : null,
+            'last_bookable_date' => $window['last_bookable_date']->format('Y-m-d'),
+            'available_dates' => array_values(array_column(
+                array_filter($days, fn (array $day) => $day['is_available']),
+                'date'
+            )),
+            'days' => $days,
         ];
     }
 
@@ -354,17 +665,21 @@ class ServiceAvailabilityService
     /**
      * Generate available time slots
      *
-     * @param User $provider
      * @param Carbon $date
      * @param ProviderScheduledWork $workSchedule
      * @param int $serviceDuration
+     * @param Collection $existingAppointments appointments blocking the provider that day
+     * @param Collection $hourlyTimeOffs hourly leaves touching that day
+     * @param Carbon $earliestStart now + book_buffer
      * @return array
      */
     private function generateTimeSlots(
-        User $provider,
         Carbon $date,
         ProviderScheduledWork $workSchedule,
-        int $serviceDuration
+        int $serviceDuration,
+        Collection $existingAppointments,
+        Collection $hourlyTimeOffs,
+        Carbon $earliestStart
     ): array {
         $slots = [];
 
@@ -389,15 +704,7 @@ class ServiceAvailabilityService
         // customer a slot the booking call is guaranteed to refuse. A buffer large
         // enough to reach into tomorrow trims tomorrow too, which is why this is
         // not limited to `isToday()`.
-        $earliestStart = $this->earliestBookableTime();
-
         $currentTime = $startTime->copy();
-
-        // Get existing appointments
-        $existingAppointments = $this->getProviderAppointments($provider, $date);
-
-        // Get hourly time offs
-        $hourlyTimeOffs = $this->getProviderHourlyTimeOffs($provider, $date);
 
         while ($currentTime->copy()->addMinutes($serviceDuration)->lte($endTime)) {
             $slotEnd = $currentTime->copy()->addMinutes($serviceDuration);
@@ -430,48 +737,6 @@ class ServiceAvailabilityService
         }
 
         return $slots;
-    }
-
-    /**
-     * Get the full day time off covering this date, if any.
-     * A missing end_date is treated as a single day leave.
-     */
-    private function getFullDayTimeOff(User $provider, Carbon $date): ?ProviderTimeOff
-    {
-        return ProviderTimeOff::where('user_id', $provider->id)
-            ->where('type', ProviderTimeOff::TYPE_FULL_DAY)
-            ->coveringDate($date->format('Y-m-d'))
-            ->first();
-    }
-
-    /**
-     * Appointments that occupy this provider's time on $date.
-     *
-     * Delegates to Appointment::scopeBlocksProviderTime() — the same scope the
-     * booking layer enforces — so a slot is never shown as free and then
-     * rejected on submit, and never hidden with nothing real behind it.
-     */
-    private function getProviderAppointments(User $provider, Carbon $date): Collection
-    {
-        return Appointment::where('provider_id', $provider->id)
-            ->whereDate('appointment_date', $date)
-            ->blocksProviderTime()
-            ->select('start_time', 'end_time')
-            ->get();
-    }
-
-    /**
-     * Get provider's hourly time offs for a specific date
-     */
-    private function getProviderHourlyTimeOffs(User $provider, Carbon $date): Collection
-    {
-        // The dates are selected too: blocksWindow() needs them to tell a start
-        // day from a middle day of a multi-day leave.
-        return ProviderTimeOff::where('user_id', $provider->id)
-            ->where('type', ProviderTimeOff::TYPE_HOURLY)
-            ->coveringDate($date->format('Y-m-d'))
-            ->select('type', 'start_date', 'end_date', 'start_time', 'end_time')
-            ->get();
     }
 
     /**
@@ -551,38 +816,6 @@ class ServiceAvailabilityService
         return $start->copy()->addMinutes($halfPoint);
     }
 
-
-    /**
-     * `activeProviders()` joins `provider_service`, and BOTH that pivot and the
-     * `users` table carry an `is_active` column — so every column added here has
-     * to be table-qualified or MySQL rejects the query as ambiguous. The active
-     * filter itself is already applied by the relationship (pivot + user), which
-     * is why only the branch filter remains.
-     */
-    private function getServiceProviders(Service $service, ?int $branchId = null): Collection
-    {
-        $query = $service->activeProviders()
-            ->with('branch');
-
-        if ($branchId) {
-            $query->where('users.branch_id', $branchId);
-        }
-
-        return $query->get();
-    }
-
-    /**
-     * Check if provider offers service
-     */
-    private function providerOffersService(User $provider, Service $service): bool
-    {
-        return DB::table('provider_service')
-            ->where('provider_id', $provider->id)
-            ->where('service_id', $service->id)
-            ->where('is_active', true)
-            ->exists();
-    }
-
     /**
      * Get effective duration (custom or default)
      */
@@ -597,30 +830,25 @@ class ServiceAvailabilityService
         return $pivot->custom_duration ?? $service->duration_minutes;
     }
 
-
-    private function getProviderServicePricing(User $provider, Service $service): array
+    /**
+     * The price the booking will actually charge, quoted up front.
+     *
+     * $customPrice comes from the provider's pivot row as loaded by
+     * bookableProviders(), which only joins ACTIVE rows — matching
+     * BookingService::getEffectivePrice() exactly. An inactive pivot row used to
+     * set the QUOTED price while the booking layer ignored that row and CHARGED
+     * the base price, so the customer saw one number in the app and was asked for
+     * another at the counter. `(provider_id, service_id)` is UNIQUE (MON-03 /
+     * DB-01), so there is exactly one row to take it from.
+     */
+    private function servicePricing(Service $service, $customPrice): array
     {
-        // `is_active` is part of the lookup so this matches
-        // BookingService::getEffectivePrice() exactly. It was missing here, so
-        // an INACTIVE pivot row could set the QUOTED price while the booking
-        // layer ignored that row and CHARGED the base price — the customer sees
-        // one number in the app and is asked for another at the counter.
-        //
-        // `(provider_id, service_id)` is now UNIQUE (MON-03 / DB-01) too: with
-        // two rows for one pair, `->first()` returns whichever the database
-        // feels like, and the two layers could each pick a different one.
-        $pivot = DB::table('provider_service')
-            ->where('provider_id', $provider->id)
-            ->where('service_id', $service->id)
-            ->where('is_active', true)
-            ->first();
-
         // `$service->effective_price` does not exist — neither a column nor an
         // accessor — so this used to resolve to null for every provider without a
         // `custom_price`, reporting the service as free with a 100% discount. The
         // resolution order mirrors BookingService::resolveServicePrice() so the
         // quoted price matches what the booking will actually charge.
-        $effectivePrice = (float) ($pivot?->custom_price ?? $service->price);
+        $effectivePrice = (float) ($customPrice ?? $service->price);
 
         if ($service->discount_price && $service->discount_price < $effectivePrice) {
             $effectivePrice = (float) $service->discount_price;
@@ -639,6 +867,16 @@ class ServiceAvailabilityService
                 : 0,
             'currency' => 'EUR',
             'formatted_price' => number_format($effectivePrice, 2) . ' EUR',
+        ];
+    }
+
+    private function formatService(Service $service): array
+    {
+        return [
+            'id' => $service->id,
+            'name' => $service->name,
+            'duration_minutes' => $service->duration_minutes,
+            'formatted_duration' => $this->formatDuration($service->duration_minutes),
         ];
     }
 

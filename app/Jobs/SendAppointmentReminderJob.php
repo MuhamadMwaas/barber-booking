@@ -213,16 +213,13 @@ class SendAppointmentReminderJob implements ShouldQueue
                 ]);
             } else {
                 try {
-                    $mailer = app(BookingMailService::class);
-                    $appointment = $reminder->appointment->loadMissing([
-                        'services_record', 'provider',
-                        'children.services_record', 'children.provider',
-                    ]);
+                    // Children = the other blocks of a split booking; the
+                    // email shows one card per block.
+                    $appointment = $reminder->appointment->loadMissing(['provider', 'children.provider']);
 
                     Mail::to($user->email)->send(new AppointmentReminderMail(
                         appointment: $appointment,
-                        companyName: $mailer->companyName(),
-                        currency: $mailer->currency(),
+                        companyName: app(BookingMailService::class)->companyName(),
                         locale: BookingMailService::customerLocale($locale),
                     ));
                     $delivered[] = ReminderChannelResolver::CHANNEL_EMAIL;

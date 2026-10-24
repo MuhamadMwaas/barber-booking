@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class ProviderAvailabilityLeaveTest extends TestCase
@@ -39,7 +40,11 @@ class ProviderAvailabilityLeaveTest extends TestCase
 
         $this->date = Carbon::today()->next(Carbon::TUESDAY)->format('Y-m-d');
 
+        // The role matters: availability offers only providers the booking call
+        // would accept, and that call requires the provider role.
+        Role::findOrCreate('provider', 'web');
         $this->provider = User::factory()->create(['is_active' => true]);
+        $this->provider->assignRole('provider');
 
         $category = ServiceCategory::create([
             'name' => 'Hair',

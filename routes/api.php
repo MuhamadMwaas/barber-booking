@@ -215,6 +215,15 @@ Route::get('/availability/provider', [AvailabilityController::class, 'getProvide
 Route::get('/availability/calendar', [AvailabilityController::class, 'getAvailabilityCalendar'])
     ->middleware('throttle:30,1')
     ->name('api.availability.calendar');
+// Month views: one provider's open days, and a service's open days with who is
+// free on each. A whole month is loaded in a fixed handful of queries, but the
+// payload still covers a month, so they share the calendar's allowance.
+Route::get('/availability/days', [AvailabilityController::class, 'getProviderMonthDays'])
+    ->middleware('throttle:30,1')
+    ->name('api.availability.days');
+Route::get('/availability/days/providers', [AvailabilityController::class, 'getServiceMonthDays'])
+    ->middleware('throttle:30,1')
+    ->name('api.availability.days.providers');
 
 // Services Routes
 Route::prefix('services')->name('services.')->group(function () {

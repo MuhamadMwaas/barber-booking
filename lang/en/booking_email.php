@@ -49,10 +49,23 @@ return [
         'online' => 'Online',
     ],
 
-    // Appointment reminder email
-    'reminder_subject' => 'Appointment reminder — :number',
-    'reminder_intro'   => 'This is a reminder of your upcoming appointment at :company.',
-    'reminder_thanks'  => 'We look forward to seeing you at :company!',
+    // Appointment reminder email (own layout, salon-approved wording)
+    'reminder' => [
+        'subject'      => ':company – Reminder of your appointment',
+        'greeting'     => 'Hello :name,',
+        'intro'        => 'We would like to remind you that you have an appointment at :company.',
+        'details_lead' => 'Here are the details of your appointment:',
+        'date'         => 'Date',
+        'time'         => 'Time',
+        'provider'     => 'Barber',
+        'service'      => 'Service',
+        'salon'        => 'Salon',
+        'date_format'  => 'l, j F Y',
+        'time_value'   => ':time',
+        'closing'      => 'We look forward to your visit!',
+        'signoff'      => 'Your :company Team',
+        'tagline'      => "More than a haircut.\nYour look. Our goal.",
+    ],
 
     // Footer
     'thanks'   => 'Thank you for choosing :company! We look forward to your visit.',

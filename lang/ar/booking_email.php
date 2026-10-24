@@ -49,10 +49,23 @@ return [
         'online' => 'أونلاين',
     ],
 
-    // تذكير الموعد عبر البريد
-    'reminder_subject' => 'تذكير بالموعد — :number',
-    'reminder_intro'   => 'نودّ تذكيرك بموعدك القادم لدى :company.',
-    'reminder_thanks'  => 'نتطلع إلى زيارتك لدى :company!',
+    // تذكير الموعد عبر البريد (تصميم خاص، نص معتمد من الصالون)
+    'reminder' => [
+        'subject'      => ':company – تذكير بموعدك',
+        'greeting'     => 'مرحبًا :name،',
+        'intro'        => 'نود تذكيرك بأن لديك موعدًا لدى :company.',
+        'details_lead' => 'فيما يلي تفاصيل موعدك:',
+        'date'         => 'التاريخ',
+        'time'         => 'الوقت',
+        'provider'     => 'الحلاق',
+        'service'      => 'الخدمة',
+        'salon'        => 'الصالون',
+        'date_format'  => 'l، j F Y',
+        'time_value'   => 'الساعة :time',
+        'closing'      => 'نتطلع إلى زيارتك!',
+        'signoff'      => 'فريق :company',
+        'tagline'      => "أكثر من مجرد قصة شعر.\nمظهرك. هدفنا.",
+    ],
 
     // Footer
     'thanks'   => 'شكراً لاختيارك :company! نتطلع إلى زيارتك.',

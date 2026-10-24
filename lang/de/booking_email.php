@@ -49,10 +49,23 @@ return [
         'online' => 'Online',
     ],
 
-    // Terminerinnerung per E-Mail
-    'reminder_subject' => 'Terminerinnerung — :number',
-    'reminder_intro'   => 'Wir möchten Sie an Ihren bevorstehenden Termin bei :company erinnern.',
-    'reminder_thanks'  => 'Wir freuen uns auf Ihren Besuch bei :company!',
+    // Terminerinnerung per E-Mail (eigenes Layout, vom Salon freigegebener Text)
+    'reminder' => [
+        'subject'      => ':company – Erinnerung an Deinen Termin',
+        'greeting'     => 'Hallo :name,',
+        'intro'        => 'Wir möchten Dich daran erinnern, dass Du einen Termin bei :company hast.',
+        'details_lead' => 'Hier sind die Details zu Deinem Termin:',
+        'date'         => 'Datum',
+        'time'         => 'Uhrzeit',
+        'provider'     => 'Friseur',
+        'service'      => 'Service',
+        'salon'        => 'Salon',
+        'date_format'  => 'l, j. F Y',
+        'time_value'   => ':time Uhr',
+        'closing'      => 'Wir freuen uns auf Deinen Besuch!',
+        'signoff'      => 'Dein :company Team',
+        'tagline'      => "Mehr als ein Haarschnitt.\nDein Look. Unser Ziel.",
+    ],
 
     // Footer
     'thanks'   => 'Vielen Dank, dass Sie sich für :company entschieden haben! Wir freuen uns auf Ihren Besuch.',

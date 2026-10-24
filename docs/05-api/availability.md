@@ -49,13 +49,47 @@ GET /api/availability/calendar?service_id=3&provider_id=7&start_date=2026-09-01&
 
 - الحد 31 يوم — `400` إن تجاوز.
 - Throttle `30/min` (الأثقل — يضرب per-day cost × 31).
+- **قديم، باقٍ للتوافق.** الشاشات الجديدة تستخدم `/availability/days*` أدناه.
 
-## 4. ضمانات الاتساق مع الحجز
+## 4. `GET /api/availability/days` — أيام توفر مزوّد خلال شهر
+
+```
+GET /api/availability/days?service_id=3&provider_id=7&month=2026-11
+→ 200 { service, provider, pricing, month, month_name, previous_month, next_month,
+        last_bookable_date, available_dates:[…],
+        days:[{date, day_name, day_number, is_today, is_available, reason_code,
+               available_slots_count, first_available_slot}] }
+```
+
+- `month` اختياري (`Y-m`)، الافتراضي الشهر الحالي. `days` = **كل** أيام الشهر.
+- أيام قبل اليوم → `past`؛ بعد `last_bookable_date` → `outside_booking_window`؛ البقية تُحسب.
+- `422` برسالة **واحدة** لكل مزوّد غير قابل للحجز (غير موجود/غير نشط/بلا دور provider/لا يقدّم الخدمة) — منع التعداد كما في `rejectProviderServicePair()`.
+- `422` `booking.month_outside_booking_window` لشهر ماضٍ أو بعد شهر `last_bookable_date`.
+- `service_id` يجب أن يكون خدمة **نشطة غير محذوفة** (`Rule::exists` + `whereNull('deleted_at')` — فخ BOOK-09).
+
+## 5. `GET /api/availability/days/providers` — أيام توفر خدمة + من المتاح كل يوم
+
+```
+GET /api/availability/days/providers?service_id=3&month=2026-11&branch_id=1
+→ 200 { service, branch_id, month, …, available_dates,
+        days:[{…, providers_count, providers:[{provider_id, provider_name, provider_avatar,
+               service_pricing, available_slots_count, first_available_slot}]}] }
+```
+
+- لا تُرسل الفتحات — التطبيق يجلبها لليوم المختار من `/availability/service`.
+- سبب اليوم: `available` / `past` / `outside_booking_window` / `salon_closed` (مغلق لكل المزوّدين المعنيين) / `no_availability`.
+
+### الكلفة
+المساران الشهريان يحمّلان الشهر **دفعة واحدة** (`loadCalendarData()`): جداول العمل، الإجازات (`touchingRange`)، الحجوزات (`blocksProviderTime`)، `salon_schedules`، والإعدادان — ~10 استعلامات **ثابتة** مهما كان عدد المزوّدين والأيام (اختبار `MonthAvailabilityTest` يثبت ذلك). `/calendar` القديم ≈ 4 استعلامات × مزوّد × يوم.
+
+## 6. ضمانات الاتساق مع الحجز
 
 | المحدد | التوفر | الحجز |
 |--------|--------|-------|
 | `book_buffer` | يحذف slots قبل `now+buffer` | يرفض `start ≤ now+buffer` |
 | `max_booking_days` | `outside_booking_window` | `422` |
+| `salon_schedules.is_open` | `salon_closed` | `422` `booking.salon_closed` (يتجاوزه `force_booking`) |
+| مزوّد قابل للحجز | `bookableProviders()`: user نشط + دور `provider` + pivot نشط + خدمة نشطة | `validateProviderOffersService()` نفس الشروط |
 
 الشبكة `shift_start + k×duration` ثابتة كل الأيام.
 

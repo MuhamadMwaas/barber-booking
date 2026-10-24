@@ -8,6 +8,8 @@ return [
     'only_pending_can_be_cancelled' => 'Nur ein offener, unbezahlter Termin kann storniert werden.',
     'outside_working_hours' => 'Der Mitarbeiter ist zu dieser Zeit nicht verfügbar: außerhalb der Arbeitszeit (:start - :end).',
     'provider_time_off' => 'Der Mitarbeiter ist zu dieser Zeit abwesend.',
+    'salon_closed' => 'Der Salon ist am gewünschten Datum geschlossen.',
+    'month_outside_booking_window' => 'Für diesen Monat sind keine Buchungen möglich.',
     'slot_in_past' => 'Diese Uhrzeit liegt bereits in der Vergangenheit.',
     'min_advance' => 'Termine müssen mindestens :minutes Minuten im Voraus gebucht werden.',
     'services_overlap' => 'Dienstleistung :position beginnt um :start, bevor die vorherige um :end endet. Dienstleistungen dürfen sich nicht überschneiden.',

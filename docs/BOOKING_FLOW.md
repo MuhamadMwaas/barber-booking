@@ -652,9 +652,14 @@ start_time للخدمة الحالية >= end_time للخدمة السابقة
 
 ### 4. validateTimeSlotAvailability() — الأهم
 
-تتحقق من **7 شروط بالترتيب:**
+تتحقق من **8 شروط بالترتيب:**
 
 ```
+0. الصالون ليس مغلقاً ذلك اليوم من الأسبوع
+   (SalonSchedule::isClosedFor(provider.branch_id, day_of_week):
+    صف الفرع، ثم الصف العام branch_id=NULL، وغياب الصفوف = لا قيد؛
+    is_open فقط — يتجاوزه force_booking مثل الشروط 1-4)
+
 1. المزود لديه جدول عمل في ذلك اليوم من الأسبوع
    (provider_scheduled_works: day_of_week, is_work_day=true, is_active=true)
 

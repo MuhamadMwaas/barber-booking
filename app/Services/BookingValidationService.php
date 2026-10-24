@@ -6,6 +6,7 @@ use App\Enum\AppointmentStatus;
 use App\Exceptions\SlotUnavailableException;
 use App\Models\Appointment;
 use App\Models\ProviderTimeOff;
+use App\Models\SalonSchedule;
 use App\Models\Service;
 use App\Models\User;
 use App\Support\PhoneNumber;
@@ -232,6 +233,13 @@ class BookingValidationService
     ): void {
         $date = $startTime->format('Y-m-d');
         $dayOfWeek = $startTime->dayOfWeek;
+
+        // 0. The salon itself is closed that weekday (salon_schedules.is_open).
+        //    Inside this window on purpose: force booking may open a closed day
+        //    exactly as it may override a leave.
+        if (SalonSchedule::isClosedFor($provider->branch_id, $dayOfWeek)) {
+            throw new InvalidArgumentException(__('booking.salon_closed'));
+        }
 
         // 1. Check provider's work schedule
         $schedule = DB::table('provider_scheduled_works')
