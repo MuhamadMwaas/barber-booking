@@ -550,8 +550,7 @@ class ServiceAvailabilityService
             return collect();
         }
 
-        return $service->activeProviders()
-            ->whereHas('roles', fn ($query) => $query->where('roles.name', 'provider'))
+        return $service->bookableProviders()
             ->when($branchId, fn ($query) => $query->where('users.branch_id', $branchId))
             ->when($providerId, fn ($query) => $query->where('users.id', $providerId))
             ->with('branch')

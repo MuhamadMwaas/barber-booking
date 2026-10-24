@@ -19,8 +19,12 @@ class ProviderService
      */
     public function getProvidersWithServices(array $filters = [], int $perPage = 15)
     {
-        $query = User::with(['services.translations', 'services', 'branch'])
-            ->whereHas('services')
+        // Bookable links only, same rule as Service::bookableProviders(): a
+        // provider whose every link is switched off is not listed at all, and one
+        // switched off for `service_id` is not listed for that service.
+        $query = User::with(['bookableServices.translations', 'branch'])
+            ->whereHas('bookableServices')
+            ->whereHas('roles', fn ($q) => $q->where('roles.name', 'provider'))
             ->where('is_active', true);
 
         if (!empty($filters['search'])) {
@@ -37,7 +41,7 @@ class ProviderService
         }
 
         if (!empty($filters['service_id'])) {
-            $query->whereHas('services', function ($q) use ($filters) {
+            $query->whereHas('bookableServices', function ($q) use ($filters) {
                 $q->where('services.id', $filters['service_id']);
             });
         }
@@ -65,15 +69,15 @@ class ProviderService
         }
 
         $provider = User::with([
-                'services.translations',
-                'services.category.translations',
-                'services.reviews',
+                'bookableServices.translations',
+                'bookableServices.category.translations',
+                'bookableServices.reviews',
                 'branch'
             ])
             ->where('is_active', true)
             ->findOrFail($providerId);
 
-        $enhancedServices = $provider->services->map(function ($service) use ($providerId, $language) {
+        $enhancedServices = $provider->bookableServices->map(function ($service) use ($providerId, $language) {
             $bookingCount = Appointment::where('provider_id', $providerId)
                 ->whereHas('services', function ($query) use ($service) {
                     $query->where('services.id', $service->id);
@@ -131,10 +135,10 @@ class ProviderService
      * @param mixed $translations
      * @param int $languageId
      * @param string $field
-     * @param string $defaultValue
-     * @return string
+     * @param string|null $defaultValue  nullable: a category's description is optional
+     * @return string|null
      */
-    private function getTranslatedValue($translations, int $languageId, string $field, string $defaultValue): string
+    private function getTranslatedValue($translations, int $languageId, string $field, ?string $defaultValue): ?string
     {
         if (!$translations) {
             return $defaultValue;

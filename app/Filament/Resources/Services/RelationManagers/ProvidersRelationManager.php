@@ -5,7 +5,6 @@ namespace App\Filament\Resources\Services\RelationManagers;
 use App\Enum\AppointmentStatus;
 use App\Filament\Resources\Providers\ProviderResource;
 use App\Models\User;
-use Filament\Actions\AttachAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DetachAction;
 use Filament\Actions\DetachBulkAction;
@@ -228,34 +227,6 @@ class ProvidersRelationManager extends RelationManager
                         true: fn (Builder $query) => $query->wherePivot('is_active', true),
                         false: fn (Builder $query) => $query->wherePivot('is_active', false),
                     ),
-            ])
-            ->headerActions([
-                AttachAction::make()
-                    ->label(__('resources.service.assign_provider'))
-                    ->form([
-                        Checkbox::make('is_active')
-                            ->label(__('resources.service.active_status'))
-                            ->default(true)
-                            ->helperText(__('resources.service.provider_active_desc')),
-
-                        TextInput::make('custom_price')
-                            ->label(__('resources.service.custom_price'))
-                            ->numeric()
-                            ->prefix('EUR')
-                            ->helperText(__('resources.service.custom_price_desc')),
-
-                        TextInput::make('custom_duration')
-                            ->label(__('resources.service.custom_duration'))
-                            ->numeric()
-                            ->suffix(__('resources.minutes'))
-                            ->helperText(__('resources.service.custom_duration_desc')),
-
-                        Textarea::make('notes')
-                            ->label(__('resources.notes'))
-                            ->rows(3)
-                            ->maxLength(500),
-                    ])
-                    ->preloadRecordSelect(),
             ])
             ->recordActions([
                 EditAction::make()

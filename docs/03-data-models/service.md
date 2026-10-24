@@ -37,6 +37,7 @@ category()        → BelongsTo(ServiceCategory)
 providers()       → BelongsToMany(User, 'provider_service')
                      withPivot(['is_active','custom_price','custom_duration','notes'])
 activeProviders() → providers()->wherePivot('is_active',true)->where('users.is_active',true)
+bookableProviders() → activeProviders() + دور provider   // كل قوائم المزودين في الـ API
 translations()    → HasMany(ServiceTranslation)
 reviews()         → HasMany(ServiceReview)
 appointmentServices() → HasMany(AppointmentService)
@@ -50,10 +51,28 @@ invoiceItems()    → MorphMany(InvoiceItem)
 |--------|-------|
 | `provider_id` | FK → users |
 | `service_id` | FK → services |
-| `is_active` | هل يقدم المزود هذه الخدمة حاليًا؟ |
+| `is_active` | هل يقدم المزود هذه الخدمة حاليًا؟ — `0` يُخفي المزود من كل قوائم التطبيق لهذه الخدمة (انظر أدناه) |
 | `custom_price` | سعر مخصص لهذا المزود (nullable) |
 | `custom_duration` | مدة مخصصة (nullable — غير مستخدم حاليًا بسبب dead code في BookingService) |
 | `notes` | ملاحظات |
+
+### المزود القابل للحجز — قاعدة واحدة
+
+مزود قابل للحجز لخدمة = user نشط + دور `provider` + رابط `provider_service.is_active = 1` + خدمة نشطة —
+نفس شروط `BookingValidationService::validateProviderOffersService()`.
+
+| الجهة | المصدر |
+|-------|--------|
+| `GET /api/services` → `providers` | `Service::bookableProviders()` |
+| `GET /api/services/{id}` → `providers` + `statistics.provider_count` | `Service::bookableProviders()` |
+| `GET /api/providers` (و `?service_id=`) | `User::bookableServices()` |
+| `GET /api/providers/{id}` → `services` | `User::bookableServices()` |
+| `/availability/*` | `ServiceAvailabilityService::bookableProviders()` → `Service::bookableProviders()` |
+
+> **لماذا؟** كانت قوائم المزودين تُبنى من `providers()` / `services()` الخام، فالمزود الذي عُطّل
+> ربطه بالخدمة من لوحة الإدارة بقي قابلاً للاختيار في التطبيق — لكن بلا أي موعد، لأن الـ
+> availability كانت تتخطاه أصلاً. لا تبنِ قائمة مزودين للتطبيق من `providers()` مباشرة.
+> الاختبار: `tests/Feature/Booking/ProviderListBookableTest.php`.
 
 ---
 

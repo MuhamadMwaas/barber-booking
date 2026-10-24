@@ -39,7 +39,7 @@ class ServiceResource extends JsonResource
             // relationships
             'category' => new MinCategoryResource($this->whenLoaded('category')),
             // 'branch' => new BranchResource($this->whenLoaded('branch')),
-            'providers' => MinProviderResource::collection($this->providers),
+            'providers' => MinProviderResource::collection($this->bookableProviders),
             // 'reviews' => MinServiceReviewResource::collection($this->whenLoaded('reviews')),
 
             'has_discount' => $this->discount_price !== null,

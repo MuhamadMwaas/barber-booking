@@ -90,6 +90,21 @@ class Service extends Model
             ->where('users.is_active', true);
     }
 
+    /**
+     * Providers a customer can actually book for this service: an active user
+     * with the provider role and an active provider_service link — the same
+     * conditions as BookingValidationService::validateProviderOffersService().
+     *
+     * Everything the app lists as "providers of this service" must come from
+     * here, not from providers(): a link switched off in the dashboard used to
+     * keep the provider selectable in the app with no slots behind it.
+     */
+    public function bookableProviders()
+    {
+        return $this->activeProviders()
+            ->whereHas('roles', fn ($query) => $query->where('roles.name', 'provider'));
+    }
+
     // accessors
 
     public function getDisplayPriceAttribute(): mixed

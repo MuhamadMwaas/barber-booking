@@ -48,13 +48,13 @@ class SingleServiceResource extends JsonResource
                     fn () => $this->reviews->count()
                 ),
                 'provider_count' => $this->when(
-                    $this->relationLoaded('providers'),
-                    fn () => $this->providers->count()
+                    $this->relationLoaded('bookableProviders'),
+                    fn () => $this->bookableProviders->count()
                 ),
             ],
 
             'category' => new ServiceCategoryResource($this->whenLoaded('category')),
-            'providers' => ProviderResource::collection($this->whenLoaded('providers')),
+            'providers' => ProviderResource::collection($this->whenLoaded('bookableProviders')),
             'reviews' => ServiceReviewResource::collection($this->whenLoaded('reviews')),
         ];
     }

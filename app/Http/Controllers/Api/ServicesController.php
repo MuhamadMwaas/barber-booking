@@ -16,7 +16,9 @@ class ServicesController extends Controller
     {
         try {
             $query = Service::with(['translations', 'category:id,name', 'category.translations', 'image',
-                'providers' => function ($query) {
+                // Bookable providers only: a provider whose link to this service
+                // is switched off must not be offered as a choice in the app.
+                'bookableProviders' => function ($query) {
                     $query->select('users.id', 'users.first_name', 'users.last_name')
                         ->with('profile_image');
                 },
@@ -75,7 +77,7 @@ class ServicesController extends Controller
     public function show($id): JsonResponse
     {
         try {
-            $service = Service::with(['translations', 'category.translations', 'providers', 'reviews.user'])
+            $service = Service::with(['translations', 'category.translations', 'bookableProviders.bookableServices', 'reviews.user'])
                 ->active()
                 ->findOrFail($id);
 

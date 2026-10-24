@@ -15,6 +15,13 @@ class ProviderResource extends JsonResource
      */
     public function toArray($request)
     {
+        // Only services this provider can be booked for. ProvidersController::show
+        // puts a decorated list (counts, translations) in the `services` attribute;
+        // everywhere else the list comes from bookableServices, never from the
+        // services() relation, which also returns links switched off in the dashboard.
+        $services = array_key_exists('services', $this->resource->getAttributes())
+            ? $this->resource->getAttribute('services')
+            : $this->bookableServices;
 
         return [
             'id' => $this->id,
@@ -32,8 +39,8 @@ class ProviderResource extends JsonResource
 
             'total_booking_count' => $this->appointmentsFinshedAsProvider()->count() ?? 0,
 
-            'services' => $this->when(isset($this->services), function () {
-                return $this->services->map(function ($service) {
+            'services' => $this->when(isset($services), function () use ($services) {
+                return $services->map(function ($service) {
                     return [
                         'id' => $service->id,
                         'name' => $service->translated_name,

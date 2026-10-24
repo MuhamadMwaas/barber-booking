@@ -870,6 +870,8 @@ GET /api/providers
 
 **الوصف:** جلب قائمة جميع مقدمي الخدمات النشطين مع pagination.
 
+> المزود يظهر فقط لخدمة يقدّمها فعلاً: الرابط المعطّل من لوحة الإدارة (`provider_service.is_active = 0`) يُخفي المزود من `?service_id=` لتلك الخدمة، ويُخفي الخدمة من مصفوفة `services` تبعه. مزود كل روابطه معطّلة لا يظهر أصلاً. نفس القاعدة في `GET /api/services` و `GET /api/services/{id}` (مصفوفة `providers` و `provider_count`) و `GET /api/providers/{id}`.
+
 **Authentication:** ❌ لا يتطلب
 
 **Query Parameters:**

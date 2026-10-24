@@ -238,6 +238,17 @@ class User extends Authenticatable implements FilamentUser, HasName
             ->withTimestamps();
     }
 
+    /**
+     * Services this provider can be booked for: an active provider_service link
+     * to an active service. The service-side twin is Service::bookableProviders().
+     */
+    public function bookableServices(): BelongsToMany
+    {
+        return $this->services()
+            ->wherePivot('is_active', true)
+            ->where('services.is_active', true);
+    }
+
     public function getFullNameAttribute(): string
     {
         return trim("{$this->first_name} {$this->last_name}");
