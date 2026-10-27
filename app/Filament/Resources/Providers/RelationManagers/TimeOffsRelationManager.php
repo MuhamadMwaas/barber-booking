@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\Providers\RelationManagers;
 
+use App\Filament\Concerns\GrantsLeaveWithReassignment;
 use App\Models\ProviderTimeOff;
+use App\Models\User;
 use App\Traits\ChecksPermissions;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Table;
@@ -27,6 +29,12 @@ use Illuminate\Database\Eloquent\Model;
 class TimeOffsRelationManager extends RelationManager
 {
     use ChecksPermissions;
+    use GrantsLeaveWithReassignment;
+
+    protected function leaveOwner(): User
+    {
+        return $this->getOwnerRecord();
+    }
 
     protected static string $relationship = 'timeOffs';
 
@@ -233,7 +241,10 @@ class TimeOffsRelationManager extends RelationManager
                     ->form(self::getLeaveForm())
                     // Relation managers never run the page-level mutateFormData*
                     // hooks, so the derived columns are computed here instead.
-                    ->mutateDataUsing(fn (array $data): array => self::mutateLeaveData($data)),
+                    ->mutateDataUsing(fn (array $data): array => self::mutateLeaveData($data))
+                    // Through LeaveReassignmentService: a leave over open
+                    // bookings opens the conflict modals instead of saving.
+                    ->using(fn (array $data, CreateAction $action) => $this->grantLeaveOrResolve($data, null, $action)),
             ])
             ->recordActions([
                 ViewAction::make()
@@ -243,7 +254,13 @@ class TimeOffsRelationManager extends RelationManager
                     ->modalHeading(__('resources.provider_resource.edit_leave'))
                     ->modalWidth('xl')
                     ->form(self::getLeaveForm())
-                    ->mutateDataUsing(fn (array $data): array => self::mutateLeaveData($data)),
+                    ->mutateDataUsing(fn (array $data): array => self::mutateLeaveData($data))
+                    // Moving or stretching a leave can land it on bookings too.
+                    ->using(fn (ProviderTimeOff $record, array $data, EditAction $action) => $this->grantLeaveOrResolve(
+                        $data,
+                        $record,
+                        $action,
+                    )),
                 DeleteAction::make()
                     ->visible(fn (): bool => static::allowed('delete')),
             ])

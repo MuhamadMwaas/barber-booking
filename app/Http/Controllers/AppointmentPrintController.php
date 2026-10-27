@@ -56,9 +56,6 @@ class AppointmentPrintController extends Controller
             'email'   => SettingsService::get('company_email', ''),
         ];
 
-        // Aggregate totals across all appointments in the group.
-        $grandTotal = $appointments->sum(fn ($apt) => (float) $apt->total_amount);
-
         // Group-level payment status: paid if any successful payment exists on any appointment.
         $isPaid = $appointments->contains(
             fn ($apt) => $apt->payment_status?->isSuccessful() === true
@@ -86,7 +83,6 @@ class AppointmentPrintController extends Controller
             'root'         => $root,
             'appointments' => $appointments,
             'company'      => $company,
-            'grandTotal'   => $grandTotal,
             'isPaid'       => $isPaid,
             'countdown'    => $countdown,
             'printedAt'    => $now,

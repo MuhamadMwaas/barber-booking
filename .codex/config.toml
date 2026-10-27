@@ -1,0 +1,8 @@
+
+[mcp_servers.laravel_boost]
+command = "php"
+args = ["artisan", "boost:mcp"]
+cwd = 'D:\Coding\BarberBooking'
+enabled = true
+startup_timeout_sec = 30
+tool_timeout_sec = 60

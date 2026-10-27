@@ -365,6 +365,7 @@ class DashboardService {
             'services_record',
             'customer',
             'provider',
+            'reassignedFrom',
             'invoice',
             'invoice.items',
             'parent',

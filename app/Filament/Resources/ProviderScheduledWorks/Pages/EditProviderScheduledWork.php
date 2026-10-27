@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ProviderScheduledWorks\Pages;
 use App\Filament\Resources\ProviderScheduledWorks\ProviderScheduledWorkResource;
 use App\Filament\Resources\ProviderScheduledWorks\Schemas\ProviderScheduledWorkForm;
 use App\Models\ProviderScheduledWork;
+use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
@@ -12,6 +13,7 @@ use Filament\Schemas\Concerns\InteractsWithSchemas;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
 use Illuminate\Contracts\Support\Htmlable;
+use Livewire\Attributes\Locked;
 
 class EditProviderScheduledWork extends EditRecord implements HasSchemas
 {
@@ -20,8 +22,11 @@ class EditProviderScheduledWork extends EditRecord implements HasSchemas
     protected static string $resource = ProviderScheduledWorkResource::class;
 
     /**
-     * User ID for the provider
+     * User ID for the provider — the single source of the provider's identity
+     * for loading, saving and the title. Never read $this->record->user_id:
+     * an unsaved record comes back from Livewire without its attributes.
      */
+    #[Locked]
     public int $userId;
 
     /**
@@ -34,27 +39,47 @@ class EditProviderScheduledWork extends EditRecord implements HasSchemas
      */
     public function mount(int | string $record): void
     {
+        // The list table is a table of providers, so the route key is always a user id.
+        $provider = User::query()
+            ->whereKey($record)
+            ->whereHas('roles', fn ($query) => $query->where('name', 'provider'))
+            ->first();
+
+        abort_unless($provider, 404);
+
+        $this->userId = $provider->id;
+
         parent::mount($record);
 
-        // Prefer the resolved record's user_id; fallback to the route param as user id.
-        $this->userId = $record ?? (int) $record;
         $this->data = ProviderScheduledWorkForm::loadScheduleData($this->userId);
         // Hydrate the schema-backed form state
         $this->form->fill($this->data);
     }
 
     /**
-     * Resolve record: try schedule ID first; if not found, treat param as provider user_id.
+     * Resolve record by provider user_id only. Never by schedule id: a schedule
+     * row whose id equals this user id belongs to a different provider.
      */
     protected function resolveRecord(int|string $key): ProviderScheduledWork
     {
-        $byId = ProviderScheduledWork::find($key);
-        if ($byId) {
-            return $byId;
-        }
-
         return ProviderScheduledWork::where('user_id', $key)->first()
             ?? new ProviderScheduledWork(['user_id' => $key]);
+    }
+
+    /**
+     * A provider without shifts yet has an unsaved record. The parent nulls it
+     * after every action (e.g. repeater add/delete), and Livewire skips restoring
+     * null into the typed $record, leaving it uninitialized on the next request.
+     * Keep the unsaved record instead; this page has no Create/Edit actions whose
+     * events the parent chain would dispatch.
+     */
+    protected function afterActionCalled(Action $action): void
+    {
+        if (! $this->getRecord()->exists) {
+            return;
+        }
+
+        parent::afterActionCalled($action);
     }
 
     /**
@@ -71,7 +96,7 @@ class EditProviderScheduledWork extends EditRecord implements HasSchemas
      */
     public function getTitle(): string|Htmlable
     {
-        $user = \App\Models\User::find($this->userId);
+        $user = User::find($this->userId);
         return __('resources.provider_scheduled_work.edit_schedule_for', [
             'name' => $user?->full_name ?? __('resources.provider_scheduled_work.provider')
         ]);
@@ -148,7 +173,7 @@ class EditProviderScheduledWork extends EditRecord implements HasSchemas
 
         try {
             // Save the schedule
-            ProviderScheduledWorkForm::saveScheduleData($this->record->user_id, $this->data);
+            ProviderScheduledWorkForm::saveScheduleData($this->userId, $this->data);
 
             // Success notification
             Notification::make()

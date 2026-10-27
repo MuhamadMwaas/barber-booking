@@ -67,6 +67,13 @@ return [
         'tagline'      => "Mehr als ein Haarschnitt.\nDein Look. Unser Ziel.",
     ],
 
+    // Storniert, weil der/die Mitarbeiter/in abwesend ist und niemand übernehmen konnte
+    'cancelled_provider_unavailable' => [
+        'subject' => 'Termin storniert — :number',
+        'intro'   => 'leider müssen wir Ihren Termin bei :company stornieren: Ihr/e Mitarbeiter/in ist zu dieser Zeit nicht verfügbar, und es konnte niemand anderes übernehmen. Wir entschuldigen uns für die Unannehmlichkeiten.',
+        'rebook'  => 'Gerne können Sie jederzeit einen neuen Termin buchen.',
+    ],
+
     // Footer
     'thanks'   => 'Vielen Dank, dass Sie sich für :company entschieden haben! Wir freuen uns auf Ihren Besuch.',
     'footer'   => 'Dies ist eine automatisch versendete E-Mail. Bitte antworten Sie nicht direkt auf diese Nachricht.',

@@ -4,6 +4,8 @@ namespace App\Filament\Resources\ProviderScheduledWorks\Schemas;
 
 use App\Models\ProviderScheduledWork;
 use App\Models\User;
+use App\Services\BookingLockService;
+use Illuminate\Support\Facades\DB;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
@@ -235,32 +237,42 @@ class ProviderScheduledWorkForm
 
     /**
      * Save the weekly schedule using the repeater structure.
+     *
+     * One transaction: the old rows are deleted before the new ones are
+     * written, so a failure half-way must not leave the provider with no
+     * schedule at all. It takes the provider's calendar lock, like every other
+     * writer the booking and leave checks read from — otherwise a leave could
+     * hand a booking to a colleague whose shift is being removed at that moment.
      */
     public static function saveScheduleData(int $userId, array $data): void
     {
-        ProviderScheduledWork::where('user_id', $userId)->delete();
+        DB::transaction(function () use ($userId, $data) {
+            app(BookingLockService::class)->lockUsers([$userId]);
 
-        $days = $data['days'] ?? [];
+            ProviderScheduledWork::where('user_id', $userId)->delete();
 
-        foreach ($days as $dayNumber => $dayData) {
-            foreach ($dayData['shifts'] ?? [] as $shift) {
-                $isWorkDay = (bool) ($shift['is_work_day'] ?? false);
+            $days = $data['days'] ?? [];
 
-                if (!$isWorkDay) {
-                    continue;
+            foreach ($days as $dayNumber => $dayData) {
+                foreach ($dayData['shifts'] ?? [] as $shift) {
+                    $isWorkDay = (bool) ($shift['is_work_day'] ?? false);
+
+                    if (!$isWorkDay) {
+                        continue;
+                    }
+
+                    ProviderScheduledWork::create([
+                        'user_id' => $userId,
+                        'day_of_week' => $dayNumber,
+                        'is_work_day' => $isWorkDay,
+                        'start_time' => $shift['start_time'] ?? null,
+                        'end_time' => $shift['end_time'] ?? null,
+                        'break_minutes' => $shift['break_minutes'] ?? 0,
+                        'is_active' => $shift['is_active'] ?? true,
+                    ]);
                 }
-
-                ProviderScheduledWork::create([
-                    'user_id' => $userId,
-                    'day_of_week' => $dayNumber,
-                    'is_work_day' => $isWorkDay,
-                    'start_time' => $shift['start_time'] ?? null,
-                    'end_time' => $shift['end_time'] ?? null,
-                    'break_minutes' => $shift['break_minutes'] ?? 0,
-                    'is_active' => $shift['is_active'] ?? true,
-                ]);
             }
-        }
+        });
     }
 
     /**

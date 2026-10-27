@@ -14,6 +14,7 @@
 |--------|-------|
 | **Timeline يومي** | كل مزود له خط زمني يُظهر المواعيد + الفجوات |
 | **العمال غير المتاحين** | غير المداوم / في إجازة يوم كامل: مخفي افتراضياً، يُظهَر ويُخفى من checkbox الفريق أو زر "إظهار غير المتاحين" (`toggleProvider` / `toggleUnavailableProviders`)؛ عموده مخطّط + شارة السبب. الاختيار يرجع للافتراضي عند تغيير التاريخ |
+| **إضافة إجازة** | `saveTimeOffFromAlpine()` → إن وُجدت حجوزات مفتوحة يعيد خطة بدل الحفظ؛ المودال: حجوزات ← "محاولة الترحيل" ← جدول الخطة ← `confirmTimeOffReassignment()`. الإلغاء يتطلب `cancel_appointment`. التفاصيل: [`time-off-logic.md` §5](../06-booking-flow/time-off-logic.md) |
 | **Drag & Drop** | سحب موعد لنقله — `updateAppointment()` مع `lockUsers` + `assertNoConflictingAppointment` |
 | **إضافة خدمة** | `addServiceToBooking()` — same_provider / child_created + `GapAnalysis` + `Push` |
 | **معالجة الدفع** | `InvoiceFinalizationService::finalizeAppointmentPayment()` — cash/card + `DocumentNumberGenerator` |

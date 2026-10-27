@@ -11,4 +11,7 @@ return [
     'repeat_cancellation_title' => 'إلغاءات متكررة: :customer',
     'repeat_cancellation_body' => 'ألغى :customer عدد :count حجوزات خلال آخر :days أيام. آخرها: #:number.',
     'repeat_cancellation_view_customer' => 'عرض العميل',
+    // يُرسل عند إلغاء حجز لأن العامل في إجازة ولم يتمكن أحد من استلامه.
+    'booking_cancelled_provider_unavailable_title' => 'تم إلغاء حجزك',
+    'booking_cancelled_provider_unavailable_body' => 'تم إلغاء حجزك رقم #:number بتاريخ :date الساعة :time لأن العامل أصبح غير متوفر. يرجى حجز موعد جديد.',
 ];

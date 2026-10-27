@@ -19,14 +19,19 @@
 | **متطلبات قانونية؟** | نعم (TSE / Fiskaly / تسلسل أرقام) | لا — ورقة عمل داخلية |
 | **القالب** | قابل للتخصيص من Filament | قالب ثابت بسيط |
 
+> **قرار الصالون (2026-10-27): البطاقة لا تُظهر أي سعر أو إجمالي أو مدة.**
+> سطر الوقت يعرض **وقت البداية فقط** لأن وقت النهاية يكشف المدة ضمنيًا، والخدمات تُعرض بأسمائها فقط.
+> شارة Paid/Unpaid تبقى لأنها لا تحمل مبلغًا. الاختبار `tests/Feature/Booking/AppointmentTicketPrintTest.php` يتحقق من غياب هذه القيم.
+> الفاتورة (`/invoice/{id}/print`) غير مشمولة بهذا القرار — يجب أن تحمل الأسعار قانونيًا.
+
 ### الغرض التشغيلي
 
 البطاقة تُمنح لمقدم الخدمة قبل بدء التنفيذ، وتحتوي على:
 - رقم الدور
 - بيانات العميل
 - مصدر الحجز (Online / In-Person)
-- الخدمات المطلوبة + الأسعار
-- إجمالي السعر + حالة الدفع
+- الخدمات المطلوبة (أسماء فقط)
+- حالة الدفع (مدفوع / غير مدفوع)
 - الألوان المستخدمة (إن وجدت)
 - ملاحظات العميل العامة
 - ملاحظات الموظف الخاصة (provider_notes)
@@ -80,7 +85,6 @@ flowchart TD
 - يحلّ تلقائياً إلى الـ parent إذا كان appointment هو child
 - يحمّل العلاقات بـ eager loading لتجنّب N+1
 - يحسب countdown (`upcoming` / `in_progress` / `ended` / `unknown`) بناءً على `start_time` و `end_time` و `now()`
-- يحسب `grandTotal` لكل المجموعة (parent + children)
 - يحدد `isPaid` (true إذا أي appointment في المجموعة لديه دفعة ناجحة)
 - يمنع الطباعة للحجوزات الملغاة (`abort(403)`)
 - يحدد اتجاه RTL تلقائياً من `app()->getLocale()`
@@ -97,12 +101,12 @@ flowchart TD
   - Header: اسم العمل + العنوان + الهاتف + الإيميل
   - Order Number كبير الحجم
   - شارة Linked Group إذا كانت مجموعة (Parent + Children)
-  - Date / Time + Countdown
+  - Date + وقت البداية فقط (بلا وقت نهاية ولا مدة)
   - بيانات العميل (اسم، هاتف، Registered/Guest)
   - Source (Online / In-Person) مع أيقونة emoji
   - قسم Provider لكل appointment في المجموعة
-  - جدول Services + Prices لكل appointment
-  - Grand Total + Paid/Unpaid badge
+  - جدول Services (أسماء فقط — بلا سعر ولا مدة) لكل appointment
+  - Paid/Unpaid badge (بلا أي مبلغ)
   - قسم Colors Used (مجمّع من كل المجموعة) — swatch بصري + اسم + brand + كمية
   - قسم Customer Notes (deduplicated)
   - قسم Staff Notes (`provider_notes`) — مع اسم الموظف إذا كانت مجموعة
@@ -222,8 +226,6 @@ $appointments = [parent, ...children]
    ↓
 $company = SettingsService::get(company_name, address, phone, email)
    ↓
-$grandTotal = sum(all appointments total_amount)
-   ↓
 $isPaid = any appointment payment_status->isSuccessful()
    ↓
 $countdown = buildCountdown(earliestStart, latestEnd, now)
@@ -242,7 +244,7 @@ Render order number large
    ↓
 If group: show "Linked group · N bookings"
    ↓
-Render date + time + countdown
+Render date + start time (no end time, no duration)
    ↓
 Render customer info
    ↓
@@ -250,9 +252,9 @@ Render source (Online / In-Person)
    ↓
 Foreach appointment in group:
    ├── Show provider name + booking# (if group)
-   └── Show services table with prices
+   └── Show services table (names only — no price, no duration)
    ↓
-Render Grand Total + Paid/Unpaid badge
+Render Paid/Unpaid badge (no amount)
    ↓
 If any colors: render colors section (swatch + name + brand + qty)
    ↓
@@ -305,7 +307,6 @@ Render footer: printed_at + thank you
   - اسم مقدم الخدمة
   - رقم الحجز الفرعي (لتمييز children)
   - جدول الخدمات الخاص به
-- **Grand Total:** مجموع كل appointments في المجموعة
 - **Colors:** مجمّعة من كل المجموعة في قسم واحد
 - **Customer Notes:** unique deduplicated من كل المجموعة
 - **Provider Notes:** لكل مقدم خدمة على حدة (مع اسمه فوق ملاحظته)
@@ -337,7 +338,7 @@ Render footer: printed_at + thank you
 |---|---|---|
 | اسم العمل + العنوان + الهاتف + الإيميل | `SettingsService::get('company_*')` | جدول `salon_settings` |
 | رقم الحجز | `Appointment.number` | يولَّد عبر `BookingService::generateAppointmentNumber()` |
-| التاريخ والوقت | `Appointment.appointment_date / start_time / end_time` | datetime casts |
+| التاريخ والوقت | `Appointment.appointment_date / start_time` | `end_time` و `duration_minutes` لا يُطبعان عمدًا |
 | العميل | `Appointment.customer_name` accessor | يدعم Registered و Guest تلقائياً |
 | مصدر الحجز | `Appointment.booking_source` (BookingSource enum) | label + htmlIcon |
 | مقدم الخدمة | `Appointment.provider->full_name` | User model |
@@ -345,7 +346,6 @@ Render footer: printed_at + thank you
 | الألوان | `Appointment.colorRecords->color` | pivot AppointmentColor |
 | ملاحظات العميل | `Appointment.notes` | حقل عادي |
 | ملاحظات الموظف | `Appointment.provider_notes` | حقل منفصل عن notes |
-| الإجمالي | `sum(appointments.total_amount)` | يُحسب في Controller |
 | حالة الدفع | `Appointment.payment_status->isSuccessful()` | PaymentStatus enum |
 
 ---
@@ -394,12 +394,12 @@ Render footer: printed_at + thank you
 تحقق من:
 - ✅ Header العمل (اسم + عنوان + هاتف)
 - ✅ رقم الحجز كبير
-- ✅ Date + Time + Countdown يظهر النص الصحيح
+- ✅ Date + وقت البداية فقط
 - ✅ بيانات العميل (Registered vs Guest)
 - ✅ Source (Online / In-Person) مع emoji
 - ✅ Provider name
-- ✅ جدول الخدمات + الأسعار
-- ✅ Grand Total
+- ✅ جدول الخدمات بالأسماء فقط
+- ❌ لا سعر، لا إجمالي، لا مدة، لا وقت نهاية
 - ✅ Paid/Unpaid badge بالحالة الصحيحة
 - ✅ الألوان (إذا أُضيفت للحجز)
 - ✅ Customer Notes (إذا موجودة)
@@ -422,7 +422,6 @@ Render footer: printed_at + thank you
 4. تأكد أن:
    - "Linked group · 3 bookings" تظهر
    - كل provider يظهر مع خدماته
-   - Grand Total = مجموع الكل
    - Provider Notes منفصلة لكل provider
 
 ### E. اختبار حالات الحجز

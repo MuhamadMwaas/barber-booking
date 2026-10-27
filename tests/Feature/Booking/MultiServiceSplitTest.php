@@ -331,10 +331,14 @@ it('sends one confirmation email that lists every block', function () {
     Mail::assertQueued(BookingConfirmationMail::class, function (BookingConfirmationMail $mail) {
         $html = $mail->render();
 
-        return str_contains($html, '10:00 AM - 11:00 AM')
-            && str_contains($html, '02:00 PM - 03:00 PM')
-            // No prices in any email (salon's request), not even the group total.
-            && ! str_contains($html, '150.00');
+        // Start times only: an end time would reveal the duration (salon's request).
+        return str_contains($html, '<span dir="ltr">10:00 AM</span>')
+            && str_contains($html, '<span dir="ltr">02:00 PM</span>')
+            && ! str_contains($html, '11:00 AM')
+            && ! str_contains($html, '03:00 PM')
+            // No prices and no payment method in any email, not even the group total.
+            && ! str_contains($html, '150.00')
+            && ! str_contains($html, __('booking_email.payment_method', [], $mail->locale));
     });
 });
 

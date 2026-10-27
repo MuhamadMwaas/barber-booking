@@ -11,4 +11,7 @@ return [
     'repeat_cancellation_title' => 'Wiederholte Stornierungen: :customer',
     'repeat_cancellation_body' => ':customer hat in den letzten :days Tagen :count Buchungen storniert. Zuletzt: #:number.',
     'repeat_cancellation_view_customer' => 'Kunde ansehen',
+    // Wird gesendet, wenn ein Termin storniert wurde, weil der/die Mitarbeiter/in abwesend ist und niemand übernehmen konnte.
+    'booking_cancelled_provider_unavailable_title' => 'Termin storniert',
+    'booking_cancelled_provider_unavailable_body' => 'Ihr Termin #:number am :date um :time wurde storniert, weil Ihr/e Mitarbeiter/in nicht verfügbar ist. Bitte buchen Sie einen neuen Termin.',
 ];

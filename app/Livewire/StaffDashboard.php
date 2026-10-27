@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Enum\AppointmentStatus;
 use App\Exceptions\AppointmentNotDeletableException;
 use App\Exceptions\InvoiceAlreadyFinalizedException;
+use App\Exceptions\LeaveReassignmentRequiredException;
 use App\Exceptions\PushRequiredException;
 use App\Livewire\Concerns\InteractsWithDashboardPermissions;
 use App\Livewire\Concerns\ProvidesDashboardChrome;
@@ -25,7 +26,9 @@ use App\Services\DashboardService;
 use App\Services\GapAnalysisService;
 use App\Services\AppointmentCancellationService;
 use App\Services\InvoiceFinalizationService;
+use App\Services\LeaveReassignmentService;
 use Carbon\Carbon;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -1098,9 +1101,9 @@ class StaffDashboard extends Component
      * availability and booking layers, where a half-filled time pair or an
      * inverted range has no sensible meaning (BOOK-04).
      *
-     * Times that run backwards are rejected rather than interpreted as crossing
-     * midnight: the salon does not trade through midnight, so 22:00 → 02:00 is
-     * far more likely a typo than a real overnight absence.
+     * The rules themselves live in LeaveReassignmentService::validationError(),
+     * which grant() enforces again on every path — this early call only gives
+     * the modal its message before anything else runs.
      *
      * @return string|null the error message, or null when the leave is valid.
      */
@@ -1111,27 +1114,7 @@ class StaffDashboard extends Component
         ?string $startTime,
         ?string $endTime,
     ): ?string {
-        if (empty($startDate)) {
-            return __('dashboard.time_off_modal.start_date_required');
-        }
-
-        if (! empty($endDate) && $endDate < $startDate) {
-            return __('dashboard.time_off_modal.end_date_before_start');
-        }
-
-        if ($type !== ProviderTimeOff::TYPE_HOURLY) {
-            return null;
-        }
-
-        if (empty($startTime) || empty($endTime)) {
-            return __('dashboard.time_off_modal.times_required');
-        }
-
-        if ($endTime <= $startTime) {
-            return __('dashboard.time_off_modal.end_time_after_start');
-        }
-
-        return null;
+        return LeaveReassignmentService::validationError($type, $startDate, $endDate, $startTime, $endTime);
     }
 
     public function saveTimeOff()
@@ -1171,34 +1154,105 @@ class StaffDashboard extends Component
             return;
         }
 
-        try {
-            $data = [
-                'user_id' => $this->timeOffProviderId,
-                'type' => (int) $this->timeOffType,
-                'start_date' => $this->timeOffStartDate,
-                'end_date' => $this->timeOffEndDate ?: $this->timeOffStartDate,
-                'reason_id' => $this->timeOffReasonId,
-            ];
+        $data = [
+            'user_id' => $this->timeOffProviderId,
+            'type' => (int) $this->timeOffType,
+            'start_date' => $this->timeOffStartDate,
+            'end_date' => $this->timeOffEndDate ?: $this->timeOffStartDate,
+            'reason_id' => $this->timeOffReasonId,
+        ];
 
-            if ((int) $this->timeOffType === ProviderTimeOff::TYPE_HOURLY) {
-                $data['start_time'] = $this->timeOffStartTime;
-                $data['end_time'] = $this->timeOffEndTime;
-            }
+        if ((int) $this->timeOffType === ProviderTimeOff::TYPE_HOURLY) {
+            $data['start_time'] = $this->timeOffStartTime;
+            $data['end_time'] = $this->timeOffEndTime;
+        }
 
-            ProviderTimeOff::create($data);
+        // This legacy modal has no room for the reassignment step, so a leave
+        // over open bookings is refused here with a pointer to the count.
+        $result = $this->grantLeave(new ProviderTimeOff($data), null);
 
+        if ($result['status'] === 'conflicts') {
+            $this->dispatch('notify', type: 'error', message: __('dashboard.leave_conflicts.has_bookings', [
+                'count' => count($result['plan']['rows']),
+            ]));
+
+            return;
+        }
+
+        if ($result['status'] === 'saved') {
             $this->closeTimeOffModal();
-            $this->dispatch('notify', type: 'success', message: 'Time off added');
             $this->dispatch('refreshTimeline');
-        } catch (\Exception $e) {
-            $this->dispatch('notify', type: 'error', message: $e->getMessage());
         }
     }
 
-    public function saveTimeOffFromAlpine(array $data)
+    /**
+     * Save a leave from the dashboard modal.
+     *
+     * @return array{status: string, plan?: array, changed?: bool} 'conflicts'
+     *         carries the reassignment plan the modal shows next; the leave is
+     *         then saved by confirmTimeOffReassignment().
+     */
+    public function saveTimeOffFromAlpine(array $data): array
+    {
+        $leave = $this->leaveFromAlpine($data);
+
+        if ($leave === null) {
+            return ['status' => 'invalid'];
+        }
+
+        return $this->grantLeave($leave, null);
+    }
+
+    /**
+     * "Try reassigning": a fresh plan for the modal, built when the user asks
+     * for it rather than reused from the first save attempt.
+     *
+     * @return array{status: string, plan?: array}
+     */
+    public function planTimeOffReassignment(array $data): array
+    {
+        $leave = $this->leaveFromAlpine($data);
+
+        if ($leave === null) {
+            return ['status' => 'invalid'];
+        }
+
+        try {
+            return ['status' => 'plan', 'plan' => app(LeaveReassignmentService::class)->plan($leave)];
+        } catch (\InvalidArgumentException $e) {
+            $this->dispatch('notify', type: 'error', message: $e->getMessage());
+
+            return ['status' => 'error'];
+        }
+    }
+
+    /**
+     * The user agreed to the plan shown in the modal: move/cancel the bookings
+     * and save the leave — if the calendar still matches $signature.
+     *
+     * Cancelling a customer's booking is its own permission. It is judged by
+     * the service against the plan rebuilt under the locks, not against
+     * anything the browser sent.
+     */
+    public function confirmTimeOffReassignment(array $data, string $signature): array
+    {
+        $leave = $this->leaveFromAlpine($data);
+
+        if ($leave === null) {
+            return ['status' => 'invalid'];
+        }
+
+        return $this->grantLeave($leave, $signature, $this->dashCan('cancel_appointment'));
+    }
+
+    /**
+     * The unsaved leave the modal describes, or null (with the reason already
+     * shown to the user) when it may not or cannot be saved.
+     */
+    private function leaveFromAlpine(array $data): ?ProviderTimeOff
     {
         if ($this->dashDeny('manage_timeoff')) {
-            return;
+            return null;
         }
 
         // Providers may only add time off for themselves.
@@ -1207,15 +1261,15 @@ class StaffDashboard extends Component
             : ($data['providerId'] ?? null);
 
         if (! $providerId) {
-            $this->dispatch('notify', type: 'error', message: 'Please select a provider');
+            $this->dispatch('notify', type: 'error', message: __('dashboard.time_off_modal.provider_required'));
 
-            return;
+            return null;
         }
 
         if (empty($data['reasonId'])) {
             $this->dispatch('notify', type: 'error', message: __('dashboard.time_off_modal.reason_required'));
 
-            return;
+            return null;
         }
 
         $error = $this->timeOffValidationError(
@@ -1229,30 +1283,51 @@ class StaffDashboard extends Component
         if ($error !== null) {
             $this->dispatch('notify', type: 'error', message: $error);
 
-            return;
+            return null;
         }
 
+        $timeOffData = [
+            'user_id' => (int) $providerId,
+            'type' => (int) ($data['type'] ?? 1),
+            'start_date' => $data['startDate'] ?? now()->format('Y-m-d'),
+            'end_date' => ! empty($data['endDate']) ? $data['endDate'] : ($data['startDate'] ?? now()->format('Y-m-d')),
+            'reason_id' => (int) $data['reasonId'],
+        ];
+
+        if ((int) ($data['type'] ?? 1) === ProviderTimeOff::TYPE_HOURLY) {
+            $timeOffData['start_time'] = $data['startTime'] ?? '';
+            $timeOffData['end_time'] = $data['endTime'] ?? '';
+        }
+
+        return new ProviderTimeOff($timeOffData);
+    }
+
+    /**
+     * Both dashboard save paths end here: the leave is only written by
+     * LeaveReassignmentService, which refuses it while it covers open bookings.
+     */
+    private function grantLeave(ProviderTimeOff $leave, ?string $signature, bool $mayCancel = false): array
+    {
         try {
-            $timeOffData = [
-                'user_id' => (int) $providerId,
-                'type' => (int) ($data['type'] ?? 1),
-                'start_date' => $data['startDate'] ?? now()->format('Y-m-d'),
-                'end_date' => ! empty($data['endDate']) ? $data['endDate'] : ($data['startDate'] ?? now()->format('Y-m-d')),
-                'reason_id' => (int) $data['reasonId'],
-            ];
+            $result = app(LeaveReassignmentService::class)->grant($leave, $signature, $mayCancel);
+        } catch (LeaveReassignmentRequiredException $e) {
+            return ['status' => 'conflicts', 'plan' => $e->plan, 'changed' => $e->changed];
+        } catch (AuthorizationException) {
+            $this->dispatch('notify', type: 'error', message: __('dashboard.permission_denied'));
 
-            if ((int) ($data['type'] ?? 1) === ProviderTimeOff::TYPE_HOURLY) {
-                $timeOffData['start_time'] = $data['startTime'] ?? '';
-                $timeOffData['end_time'] = $data['endTime'] ?? '';
-            }
-
-            ProviderTimeOff::create($timeOffData);
-
-            $this->dispatch('timeoff-saved');
-            $this->dispatch('notify', type: 'success', message: 'Time off added');
+            return ['status' => 'denied'];
         } catch (\Exception $e) {
             $this->dispatch('notify', type: 'error', message: $e->getMessage());
+
+            return ['status' => 'error'];
         }
+
+        $this->dispatch('timeoff-saved');
+        $this->dispatch('notify', type: 'success', message: $result['moved'] + $result['cancelled'] > 0
+            ? __('dashboard.leave_conflicts.granted', ['moved' => $result['moved'], 'cancelled' => $result['cancelled']])
+            : 'Time off added');
+
+        return ['status' => 'saved'];
     }
 
     // ================================================================

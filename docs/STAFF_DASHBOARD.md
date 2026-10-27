@@ -1155,28 +1155,19 @@ openTimeOffModal()
 
 ### 20.2 Saving
 
-```php
-saveTimeOff()
-```
+> **لا يوجد `ProviderTimeOff::create()` في الداشبورد بعد الآن.** كل كتابة إجازة تمر عبر
+> `LeaveReassignmentService::grant()` — التفاصيل في [`06-booking-flow/time-off-logic.md` §5](06-booking-flow/time-off-logic.md).
 
-يبني payload فيه:
+المودال (Alpine) يستدعي ثلاث دوال، كلها تبني `ProviderTimeOff` غير محفوظ عبر `leaveFromAlpine()`
+(صلاحية `manage_timeoff` + `user_id` + `type` + `start_date` + `end_date` + `reason_id`، و `start_time`/`end_time` للساعية):
 
-- `user_id`
-- `type`
-- `start_date`
-- `end_date`
-- `reason_id`
+| الدالة | متى | النتيجة |
+|--------|-----|---------|
+| `saveTimeOffFromAlpine($data)` | "حفظ" | لا حجوزات مفتوحة → تُحفظ الإجازة. توجد → `['status' => 'conflicts', 'plan' => …]` والمودال ينتقل لخطوة التحذير |
+| `planTimeOffReassignment($data)` | "محاولة الترحيل" | خطة **جديدة** من الخادم `['status' => 'plan', 'plan' => …]` |
+| `confirmTimeOffReassignment($data, $signature)` | "موافق" | `grant($leave, $signature, mayCancel: dashCan('cancel_appointment'))` — ترحيل/إلغاء ثم حفظ، أو خطة محدّثة إذا تغيّر الجدول |
 
-وإذا كان النوع ساعي يضيف:
-
-- `start_time`
-- `end_time`
-
-ثم ينفذ:
-
-```php
-ProviderTimeOff::create($data)
-```
+`saveTimeOff()` القديم (غير مستدعى من الواجهة) يمر بنفس الخدمة، ويرفض الإجازة برسالة إذا وُجدت حجوزات.
 
 ### 20.3 Time Off Types
 

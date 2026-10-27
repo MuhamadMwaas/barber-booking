@@ -47,6 +47,7 @@ class Appointment extends Model
         'number',
         'customer_id',
         'provider_id',
+        'reassigned_from_provider_id',
         'parent_appointment_id',
         'customer_name',
         'customer_email',
@@ -171,6 +172,15 @@ class Appointment extends Model
     public function provider(): BelongsTo
     {
         return $this->belongsTo(User::class, 'provider_id');
+    }
+
+    /**
+     * The provider this booking belonged to before a leave handed it to the
+     * current one (LeaveReassignmentService). Null when it never moved.
+     */
+    public function reassignedFrom(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reassigned_from_provider_id');
     }
 
     public function services()

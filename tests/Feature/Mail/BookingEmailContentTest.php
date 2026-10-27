@@ -60,10 +60,12 @@ it('renders the German confirmation with the requested wording', function () {
         ->toContain('Buchungsnummer')
         ->toContain('Uhrzeit')
         ->toContain('09/09/2026')                       // German date, not "Sep 09, 2026"
-        ->toContain('<span dir="ltr">10:00 - 11:00</span>') // 24h clock
+        ->toContain('<span dir="ltr">10:00</span>')   // 24h clock, start only
+        ->not->toContain('11:00')                       // the end time would reveal the duration
         ->toContain('Mitarbeiter/in')
-        ->toContain('Zahlungsmethode')
-        ->toContain('Barzahlung')
+        // The salon asked for no payment method in any email.
+        ->not->toContain('Zahlungsmethode')
+        ->not->toContain('Barzahlung')
         ->toContain('Hinweise')
         ->toContain('Ihre Leistungen')
         ->toContain('Leistung')
@@ -88,7 +90,8 @@ it('renders the Arabic confirmation right-to-left with the requested wording', f
         ->toContain('تفاصيل حجزك')
         ->toContain('رقم الحجز')
         ->toContain('مقدم الخدمة')
-        ->toContain('نقداً')
+        ->not->toContain('طريقة الدفع')
+        ->not->toContain('نقداً')
         ->toContain('الملاحظات')
         ->toContain('الخدمات التي اخترتها')
         ->not->toContain('المدة')
@@ -97,6 +100,22 @@ it('renders the Arabic confirmation right-to-left with the requested wording', f
         ->toContain('شكراً لاختيارك LookUp! نتطلع إلى زيارتك.')
         ->toContain('هذه رسالة بريد إلكتروني مرسلة تلقائياً. يرجى عدم الرد مباشرةً على هذه الرسالة.');
 });
+
+// The booking runs 10:00–11:00; only the start may appear, in the email's own clock.
+it('leaves the payment method and the duration out of the confirmation', function (string $locale, string $start, string $end) {
+    $html = confirmationIn($locale);
+
+    expect($html)
+        ->toContain('<span dir="ltr">' . $start . '</span>')
+        ->not->toContain($end)
+        ->not->toContain(__('booking_email.payment_method', [], $locale))
+        ->not->toContain(__('booking_email.payment_methods.cash', [], $locale))
+        ->not->toContain(__('booking_email.duration', [], $locale));
+})->with([
+    'de' => ['de', '10:00', '11:00'],
+    'en' => ['en', '10:00 AM', '11:00 AM'],
+    'ar' => ['ar', '10:00 AM', '11:00 AM'],
+]);
 
 it('keeps customer-facing headings out of the salon notification', function () {
     $html = (new BookingNotificationMail($this->appointment, 'LookUp', '€', 'de'))->render();
@@ -107,9 +126,12 @@ it('keeps customer-facing headings out of the salon notification', function () {
         ->not->toContain('Ihre Leistungen')
         ->not->toContain('Zahlungsübersicht')
         ->not->toContain('Dauer')
-        ->not->toContain('€');
+        ->not->toContain('€')
+        ->not->toContain('Zahlungsmethode')
+        ->not->toContain('Barzahlung')
+        ->toContain('<span dir="ltr">10:00</span>')
+        ->not->toContain('11:00');
 });
-
 it('picks the customer email language from the request, falling back to German', function () {
     expect(BookingMailService::customerLocale('ar'))->toBe('ar')
         ->and(BookingMailService::customerLocale('en'))->toBe('en')

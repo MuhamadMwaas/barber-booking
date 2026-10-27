@@ -130,14 +130,6 @@
         .col-num   { width: 6%;  text-align: center; }
         .col-name  { width: 94%; }
 
-        .total-row {
-            margin-top: 4px;
-            font-size: 13px;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-        }
-
         .badge {
             display: inline-block;
             padding: 1px 6px;
@@ -227,10 +219,8 @@
         </div>
         <div class="kv">
             <span class="k">{{ $tr('time') }}:</span>
-            <span>
-                {{ $root->start_time?->format('H:i') }} - {{ $root->end_time?->format('H:i') }}
-                ({{ $root->duration_minutes }}m)
-            </span>
+            {{-- Start time only: the end time would reveal the duration (salon request). --}}
+            <span>{{ $root->start_time?->format('H:i') }}</span>
         </div>
 
         <hr class="hr-single">
@@ -286,10 +276,7 @@
                     @foreach ($apt->services_record as $i => $s)
                         <tr>
                             <td class="col-num">{{ $i + 1 }}</td>
-                            <td class="col-name">
-                                {{ $s->service_name }}
-                                <div style="font-size: 9px;">{{ $s->duration_minutes }}m</div>
-                            </td>
+                            <td class="col-name">{{ $s->service_name }}</td>
                         </tr>
                     @endforeach
                 </tbody>

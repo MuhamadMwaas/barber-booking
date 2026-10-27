@@ -1,22 +1,15 @@
 {{-- Booking details for a booking split into several blocks (BOOKING-GAP-01) --}}
-{{-- No duration and no prices in any email: the salon asked for both to be left out. --}}
+{{-- No duration, no prices and no payment method in any email: the salon asked for all three to be left out. --}}
+{{-- Each block shows its start time only — an end time would reveal the duration. --}}
 {{-- Expects: $appointment (the group root), $blocks (active blocks, time order), $currency --}}
 @php
-    // Stored as a machine value ("cash", "online"); shown translated, raw
-    // only for a value no translation knows about.
-    $paymentMethodKey = 'booking_email.payment_methods.' . $appointment->payment_method;
-    $paymentMethodLabel = \Illuminate\Support\Facades\Lang::has($paymentMethodKey)
-        ? __($paymentMethodKey)
-        : $appointment->payment_method;
     // Customer-facing headings ("Ihre ...") never leak into the salon's copy.
     $isCustomer = ($audience ?? 'company') === 'customer';
     // Dates/times in the email's own locale (German: 30/12/2026, 14:30). The
     // model accessors stay untouched: the API serves them as they are. The
-    // time is wrapped in dir="ltr" so an Arabic email does not reorder
-    // "10:00 - 11:00" into "11:00 - 10:00".
+    // time is wrapped in dir="ltr" so an Arabic email keeps "10:00 AM" in order.
     $emailDate = fn ($a) => $a->appointment_date->format(\App\Support\DateFormat::date('M d, Y'));
-    $emailTime = fn ($a) => $a->start_time->format(\App\Support\DateFormat::time('h:i A'))
-        . ' - ' . $a->end_time->format(\App\Support\DateFormat::time('h:i A'));
+    $emailTime = fn ($a) => $a->start_time->format(\App\Support\DateFormat::time('h:i A'));
 @endphp
 
 @if($isCustomer)
@@ -30,10 +23,6 @@
     <tr>
         <td style="padding: 6px 0; color: #6b7280;">{{ __('booking_email.date') }}</td>
         <td style="padding: 6px 0; font-weight: 600; text-align: end;">{{ $emailDate($appointment) }}</td>
-    </tr>
-    <tr>
-        <td style="padding: 6px 0; color: #6b7280;">{{ __('booking_email.payment_method') }}</td>
-        <td style="padding: 6px 0; font-weight: 600; text-align: end;">{{ $paymentMethodLabel }}</td>
     </tr>
     @if($appointment->notes)
     <tr>

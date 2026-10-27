@@ -68,6 +68,13 @@ return [
     ],
 
     // Footer
+    // Cancelled because the provider is away and nobody could take the booking over
+    'cancelled_provider_unavailable' => [
+        'subject' => 'Booking cancelled — :number',
+        'intro'   => 'unfortunately we have to cancel your booking at :company: your stylist is not available at that time and no one else could take it over. We apologise for the inconvenience.',
+        'rebook'  => 'You are welcome to book a new appointment at any time.',
+    ],
+
     'thanks'   => 'Thank you for choosing :company! We look forward to your visit.',
     'footer'   => 'This is an automatically generated email. Please do not reply directly to this message.',
 ];

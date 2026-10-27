@@ -1066,7 +1066,12 @@
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-500">{{ __('dashboard.appointment_modal.provider') }}</span>
-                            <span class="font-medium">{{ $selectedAppointment->provider?->full_name }}</span>
+                            <span class="text-end">
+                                <span class="font-medium">{{ $selectedAppointment->provider?->full_name }}</span>
+                                @if ($selectedAppointment->reassignedFrom)
+                                    <span class="block text-xs text-gray-400">{{ __('dashboard.leave_conflicts.reassigned_from', ['name' => $selectedAppointment->reassignedFrom->full_name]) }}</span>
+                                @endif
+                            </span>
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-500">{{ __('dashboard.appointment_modal.status') }}</span>
@@ -1511,9 +1516,13 @@
     <div x-show="showTimeOffModal" x-cloak
         class="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4"
         @click.self="showTimeOffModal = false">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm" @click.stop>
+        <div class="bg-white rounded-xl shadow-2xl w-full" :class="timeOffStep === 'form' ? 'max-w-sm' : 'max-w-2xl'" @click.stop>
             <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                <h3 class="text-lg font-semibold text-gray-800">{{ __('dashboard.time_off_modal.title') }}</h3>
+                <h3 class="text-lg font-semibold text-gray-800">
+                    <span x-show="timeOffStep === 'form'">{{ __('dashboard.time_off_modal.title') }}</span>
+                    <span x-show="timeOffStep === 'conflicts'">{{ __('dashboard.leave_conflicts.title') }}</span>
+                    <span x-show="timeOffStep === 'plan'">{{ __('dashboard.leave_conflicts.plan_title') }}</span>
+                </h3>
                 <button @click="showTimeOffModal = false" class="text-gray-400 hover:text-gray-600">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1521,7 +1530,80 @@
                     </svg>
                 </button>
             </div>
-            <div class="p-5 space-y-4">
+
+            {{-- Step 2: the leave covers open bookings — they must be dealt with first. --}}
+            <div x-show="timeOffStep === 'conflicts'" class="p-5 space-y-4">
+                <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+                    x-text="@js(__('dashboard.leave_conflicts.warning')).replace(':count', timeOffPlan?.rows.length ?? 0)"></div>
+                <div class="max-h-72 overflow-y-auto overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-xs text-gray-500 border-b">
+                                <th class="py-2 pe-3">{{ __('dashboard.leave_conflicts.col_number') }}</th>
+                                <th class="py-2 pe-3">{{ __('dashboard.leave_conflicts.col_time') }}</th>
+                                <th class="py-2 pe-3">{{ __('dashboard.leave_conflicts.col_customer') }}</th>
+                                <th class="py-2">{{ __('dashboard.leave_conflicts.col_services') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="row in (timeOffPlan?.rows ?? [])" :key="row.appointment_id">
+                                <tr class="border-b border-gray-50">
+                                    <td class="py-2 pe-3 whitespace-nowrap text-gray-500" dir="ltr" x-text="'#' + row.number"></td>
+                                    <td class="py-2 pe-3 whitespace-nowrap" dir="ltr"
+                                        x-text="row.date_label + ' ' + row.start_time + '–' + row.end_time"></td>
+                                    <td class="py-2 pe-3" x-text="row.customer_name"></td>
+                                    <td class="py-2 text-gray-500" x-text="row.services"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {{-- Step 3: who takes which booking, and what has to be cancelled. --}}
+            <div x-show="timeOffStep === 'plan'" class="p-5 space-y-5 max-h-[70vh] overflow-y-auto">
+                <div x-show="timeOffPlanChanged"
+                    class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    {{ __('dashboard.leave_conflicts.changed') }}</div>
+
+                <template x-for="group in timeOffPlanGroups()" :key="group.action">
+                    <div x-show="group.rows.length > 0">
+                        <h4 class="text-sm font-semibold"
+                            :class="{ 'text-emerald-700': group.action === 'move', 'text-red-600': group.action === 'cancel', 'text-gray-700': group.action === 'blocked' }"
+                            x-text="group.heading.replace(':count', group.rows.length)"></h4>
+                        <p class="mt-0.5 mb-2 text-xs text-gray-500" x-text="group.hint"></p>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr class="text-left text-xs text-gray-500 border-b">
+                                        <th class="py-2 pe-3">{{ __('dashboard.leave_conflicts.col_number') }}</th>
+                                        <th class="py-2 pe-3">{{ __('dashboard.leave_conflicts.col_time') }}</th>
+                                        <th class="py-2 pe-3">{{ __('dashboard.leave_conflicts.col_customer') }}</th>
+                                        <th class="py-2 pe-3">{{ __('dashboard.leave_conflicts.col_services') }}</th>
+                                        <th class="py-2" x-show="group.action === 'move'">
+                                            {{ __('dashboard.leave_conflicts.col_new_provider') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="row in group.rows" :key="row.appointment_id">
+                                        <tr class="border-b border-gray-50">
+                                            <td class="py-2 pe-3 whitespace-nowrap text-gray-500" dir="ltr" x-text="'#' + row.number"></td>
+                                            <td class="py-2 pe-3 whitespace-nowrap" dir="ltr"
+                                                x-text="row.date_label + ' ' + row.start_time + '–' + row.end_time"></td>
+                                            <td class="py-2 pe-3" x-text="row.customer_name"></td>
+                                            <td class="py-2 pe-3 text-gray-500" x-text="row.services"></td>
+                                            <td class="py-2 font-medium text-emerald-700" x-show="group.action === 'move'"
+                                                x-text="row.target_provider_name"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div x-show="timeOffStep === 'form'" class="p-5 space-y-4">
                 <div>
                     <label
                         class="block text-xs font-medium text-gray-500 mb-1">{{ __('dashboard.time_off_modal.select_provider') }}</label>
@@ -1602,11 +1684,27 @@
                 @endif
             </div>
             <div class="px-5 py-3 bg-gray-50 rounded-b-xl flex justify-end space-x-2">
-                <button @click="showTimeOffModal = false"
+                <button x-show="timeOffStep === 'form'" @click="showTimeOffModal = false"
                     class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{{ __('dashboard.time_off_modal.cancel') }}</button>
-                <button @click="submitTimeOff()" :disabled="timeOffSaving"
+                <button x-show="timeOffStep !== 'form'" @click="timeOffStep = 'form'; timeOffPlan = null"
+                    class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">{{ __('dashboard.leave_conflicts.back') }}</button>
+
+                <button x-show="timeOffStep === 'form'" @click="submitTimeOff()" :disabled="timeOffSaving"
                     class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg">
                     <span x-show="!timeOffSaving">{{ __('dashboard.time_off_modal.save') }}</span>
+                    <span x-show="timeOffSaving">...</span>
+                </button>
+                <button x-show="timeOffStep === 'conflicts'" @click="tryTimeOffReassignment()" :disabled="timeOffSaving"
+                    class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg">
+                    <span x-show="!timeOffSaving">{{ __('dashboard.leave_conflicts.try_reassign') }}</span>
+                    <span x-show="timeOffSaving">...</span>
+                </button>
+                <button x-show="timeOffStep === 'plan'" @click="confirmTimeOffReassignment()"
+                    :disabled="timeOffSaving || (timeOffPlan?.blocked ?? 0) > 0"
+                    class="px-5 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    :class="(timeOffPlan?.cancellations ?? 0) > 0 ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600'">
+                    <span x-show="!timeOffSaving"
+                        x-text="(timeOffPlan?.cancellations ?? 0) > 0 ? @js(__('dashboard.leave_conflicts.confirm_with_cancel')) : @js(__('dashboard.leave_conflicts.confirm'))"></span>
                     <span x-show="timeOffSaving">...</span>
                 </button>
             </div>
@@ -1888,6 +1986,11 @@
                 showTimeOffModal: false,
                 timeOffSaving: false,
                 timeOffErrors: {},
+                // 'form' → 'conflicts' (the leave covers open bookings) → 'plan'
+                // (who takes which booking). The plan comes from the server.
+                timeOffStep: 'form',
+                timeOffPlan: null,
+                timeOffPlanChanged: false,
                 timeOff: {
                     providerId: '',
                     type: '1',
@@ -1975,6 +2078,71 @@
                     };
                     this.timeOffSaving = false;
                     this.timeOffErrors = {};
+                    this.timeOffStep = 'form';
+                    this.timeOffPlan = null;
+                    this.timeOffPlanChanged = false;
+                },
+
+                timeOffPayload() {
+                    return {
+                        providerId: this.timeOff.providerId,
+                        type: this.timeOff.type,
+                        startDate: this.timeOff.startDate,
+                        endDate: this.timeOff.endDate,
+                        startTime: this.timeOff.startTime,
+                        endTime: this.timeOff.endTime,
+                        reasonId: this.timeOff.reasonId,
+                    };
+                },
+
+                timeOffPlanGroups() {
+                    const rows = this.timeOffPlan?.rows ?? [];
+                    return [{
+                            action: 'move',
+                            heading: @js(__('dashboard.leave_conflicts.moves_heading')),
+                            hint: @js(__('dashboard.leave_conflicts.moves_hint')),
+                        },
+                        {
+                            action: 'cancel',
+                            heading: @js(__('dashboard.leave_conflicts.cancellations_heading')),
+                            hint: @js(__('dashboard.leave_conflicts.cancellations_hint')),
+                        },
+                        {
+                            action: 'blocked',
+                            heading: @js(__('dashboard.leave_conflicts.blocked_heading')),
+                            hint: @js(__('dashboard.leave_conflicts.blocked_hint')),
+                        },
+                    ].map(group => ({ ...group, rows: rows.filter(row => row.action === group.action) }));
+                },
+
+                async tryTimeOffReassignment() {
+                    // A fresh plan from the server, not the one from the first save.
+                    this.timeOffSaving = true;
+                    try {
+                        const result = await this.$wire.planTimeOffReassignment(this.timeOffPayload());
+                        if (result?.status === 'plan') {
+                            this.timeOffPlan = result.plan;
+                            this.timeOffPlanChanged = false;
+                            this.timeOffStep = 'plan';
+                        }
+                    } finally {
+                        this.timeOffSaving = false;
+                    }
+                },
+
+                async confirmTimeOffReassignment() {
+                    this.timeOffSaving = true;
+                    try {
+                        const result = await this.$wire.confirmTimeOffReassignment(
+                            this.timeOffPayload(), this.timeOffPlan.signature);
+                        if (result?.status === 'conflicts') {
+                            // The calendar moved under the plan: show the fresh one.
+                            this.timeOffPlan = result.plan;
+                            this.timeOffPlanChanged = true;
+                        }
+                    } finally {
+                        this.timeOffSaving = false;
+                    }
                 },
 
                 openTimeOffModalLocal() {
@@ -2003,15 +2171,12 @@
                     }
                     this.timeOffSaving = true;
                     try {
-                        await this.$wire.saveTimeOffFromAlpine({
-                            providerId: this.timeOff.providerId,
-                            type: this.timeOff.type,
-                            startDate: this.timeOff.startDate,
-                            endDate: this.timeOff.endDate,
-                            startTime: this.timeOff.startTime,
-                            endTime: this.timeOff.endTime,
-                            reasonId: this.timeOff.reasonId,
-                        });
+                        const result = await this.$wire.saveTimeOffFromAlpine(this.timeOffPayload());
+                        if (result?.status === 'conflicts') {
+                            this.timeOffPlan = result.plan;
+                            this.timeOffPlanChanged = false;
+                            this.timeOffStep = 'conflicts';
+                        }
                     } finally {
                         this.timeOffSaving = false;
                     }
