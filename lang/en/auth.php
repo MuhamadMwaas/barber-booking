@@ -33,4 +33,12 @@ return [
     'email_exists_title' => 'Account already exists',
     'email_exists_body' => 'An account with this email already exists. Please sign in to continue.',
 
+    // Returned (HTTP 409) when registering with a phone number that already exists.
+    'phone_exists_title' => 'This phone number is already linked to another account.',
+    'phone_exists_body' => 'Please use a different phone number or sign in.',
+
+    // Buttons of the "account already exists" dialog (email and phone).
+    'account_exists_login' => 'Sign in',
+    'account_exists_close' => 'Close',
+
 ];

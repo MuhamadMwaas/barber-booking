@@ -20,4 +20,12 @@ return [
     // Returned (HTTP 409) when registering with an email that already exists.
     'email_exists_title' => 'Konto bereits vorhanden',
     'email_exists_body' => 'Mit dieser E-Mail-Adresse wurde bereits ein Konto erstellt. Melden Sie sich an, um fortzufahren.',
+
+    // Returned (HTTP 409) when registering with a phone number that already exists.
+    'phone_exists_title' => 'Diese Handynummer ist bereits mit einem anderen Konto verknüpft.',
+    'phone_exists_body' => 'Bitte verwende eine andere Handynummer oder melde dich an.',
+
+    // Buttons of the "account already exists" dialog (email and phone).
+    'account_exists_login' => 'Anmelden',
+    'account_exists_close' => 'Schließen',
 ];

@@ -100,6 +100,45 @@ class AuthVerificationFlowTest extends TestCase
         $this->assertSame(1, User::query()->where('email', 'taken@example.com')->count());
     }
 
+    public function test_register_with_existing_phone_returns_conflict_dialog_payload(): void
+    {
+        User::create([
+            'first_name' => 'Existing',
+            'last_name' => 'Customer',
+            'registration_method' => 'phone',
+            'phone' => '+4915223917565',
+            'password' => bcrypt('Password@123'),
+        ]);
+
+        $expected = [
+            'ar' => ['رقم الهاتف مرتبط بحساب آخر', 'يرجى استخدام رقم هاتف آخر أو تسجيل الدخول', 'تسجيل الدخول', 'إغلاق'],
+            'de' => ['Diese Handynummer ist bereits mit einem anderen Konto verknüpft.', 'Bitte verwende eine andere Handynummer oder melde dich an.', 'Anmelden', 'Schließen'],
+        ];
+
+        foreach ($expected as $locale => [$title, $message, $login, $close]) {
+            // A national spelling of the same number is still the same account.
+            $this->postJson('/api/auth/register', [
+                'first_name' => 'Another',
+                'last_name' => 'Person',
+                'registration_method' => 'phone',
+                'phone' => '0152 2391 7565',
+                'password' => 'Password@123',
+                'password_confirmation' => 'Password@123',
+            ], ['Accept-Language' => $locale])
+                ->assertStatus(409)
+                ->assertJsonPath('success', false)
+                ->assertJsonPath('error_code', 'PHONE_ALREADY_EXISTS')
+                ->assertJsonPath('title', $title)
+                ->assertJsonPath('message', $message)
+                ->assertJsonPath('actions.login', $login)
+                ->assertJsonPath('actions.close', $close)
+                ->assertJsonMissingPath('user')
+                ->assertJsonMissingPath('access_token');
+        }
+
+        $this->assertSame(1, User::query()->where('phone', '+4915223917565')->count());
+    }
+
     public function test_register_with_phone_creates_unverified_user_without_tokens(): void
     {
         Queue::fake();

@@ -81,25 +81,43 @@ class RegisterRequest extends FormRequest
     }
 
     /**
-     * Intercept the duplicate-email case and return a dedicated, machine-readable
-     * 409 Conflict response so the mobile app can show its "account already
-     * exists" dialog (with Login / Close buttons) instead of routing the user to
-     * the OTP screen. Every other validation failure keeps the default 422.
+     * Intercept the duplicate-email and duplicate-phone cases and return a
+     * dedicated, machine-readable 409 Conflict response so the mobile app can
+     * show its "account already exists" dialog (with Login / Close buttons)
+     * instead of routing the user to the OTP screen. Every other validation
+     * failure keeps the default 422.
      */
     protected function failedValidation(Validator $validator): void
     {
-        $emailFailures = $validator->failed()['email'] ?? [];
+        $failed = $validator->failed();
 
-        if (array_key_exists('Unique', $emailFailures)) {
-            throw new HttpResponseException(response()->json([
-                'success'    => false,
-                'error_code' => 'EMAIL_ALREADY_EXISTS',
-                'title'      => __('auth.email_exists_title'),
-                'message'    => __('auth.email_exists_body'),
-            ], 409));
+        if (array_key_exists('Unique', $failed['email'] ?? [])) {
+            $this->throwAccountExists('EMAIL_ALREADY_EXISTS', 'auth.email_exists_title', 'auth.email_exists_body');
+        }
+
+        if (array_key_exists('Unique', $failed['phone'] ?? [])) {
+            $this->throwAccountExists(PhoneNumber::ERROR_TAKEN, 'auth.phone_exists_title', 'auth.phone_exists_body');
         }
 
         parent::failedValidation($validator);
+    }
+
+    /**
+     * The button labels travel with the text so the dialog never pairs a
+     * translated message with buttons in another language.
+     */
+    private function throwAccountExists(string $errorCode, string $titleKey, string $messageKey): never
+    {
+        throw new HttpResponseException(response()->json([
+            'success'    => false,
+            'error_code' => $errorCode,
+            'title'      => __($titleKey),
+            'message'    => __($messageKey),
+            'actions'    => [
+                'login' => __('auth.account_exists_login'),
+                'close' => __('auth.account_exists_close'),
+            ],
+        ], 409));
     }
 
     /**

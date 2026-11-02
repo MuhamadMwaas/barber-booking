@@ -93,6 +93,24 @@ class AccountVerificationService
 
         $user->forceFill($attributes)->save();
 
+        if ($otpType === OtpType::SMS_OTP) {
+            $this->claimGuestBookings($user);
+        }
+
         return $user->refresh();
+    }
+
+    /**
+     * The phone is now proven, so guest bookings staff made under it become
+     * this user's. A failure here must not undo or fail the verification — the
+     * link can be redone later with `appointments:claim-guest-bookings`.
+     */
+    private function claimGuestBookings(User $user): void
+    {
+        try {
+            app(GuestBookingClaimService::class)->claimFor($user);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 }

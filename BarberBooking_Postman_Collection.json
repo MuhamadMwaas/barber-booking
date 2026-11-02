@@ -270,7 +270,7 @@
               ],
               "query": []
             },
-            "description": "**الوصف:** تسجيل مستخدم جديد بالبريد. **لا يسجل دخول تلقائياً** — ينشئ الحساب ويرسل OTP ويُرجع `requires_otp_verification=true`. أكمل بـ Verify OTP للحصول على التوكن.\n\n**Validation:**\n- `password` min 8 + أحرف كبيرة/صغيرة + أرقام + رموز\n- `password_confirmation` مطلوب\n- `email` فريد — إذا مكرر يرجع `409 EMAIL_ALREADY_EXISTS`\n\n**Response في dev:** يحتوي `otp` للاختبار (لا يظهر في production)\n",
+            "description": "**الوصف:** تسجيل مستخدم جديد بالبريد. **لا يسجل دخول تلقائياً** — ينشئ الحساب ويرسل OTP ويُرجع `requires_otp_verification=true`. أكمل بـ Verify OTP للحصول على التوكن.\n\n**Validation:**\n- `password` min 8 + أحرف كبيرة/صغيرة + أرقام + رموز\n- `password_confirmation` مطلوب\n- `email` فريد — إذا مكرر يرجع `409 EMAIL_ALREADY_EXISTS`\n- `phone` فريد — إذا مكرر يرجع `409 PHONE_ALREADY_EXISTS`\n- استجابة الـ 409: `title` + `message` + `actions.login` + `actions.close` مترجمة حسب `Accept-Language` (ar/de/en)\n\n**Response في dev:** يحتوي `otp` للاختبار (لا يظهر في production)\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"registration_method\": \"email\",\n  \"email\": \"testuser_{{$timestamp}}@example.com\",\n  \"password\": \"Password1@\",\n  \"password_confirmation\": \"Password1@\"\n}",
