@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role;
 
 /**
  * The single place a Google sign-in is trusted.
@@ -182,6 +183,8 @@ class GoogleSignInService
                 $user->update(['avatar_url' => $googleUser['picture']]);
             }
 
+            $this->ensureCustomerRole($user);
+
             return $user;
         }
 
@@ -194,10 +197,12 @@ class GoogleSignInService
                 'email_verified_at' => $googleUser['email_verified'] ? ($user->email_verified_at ?? now()) : $user->email_verified_at,
             ]);
 
+            $this->ensureCustomerRole($user);
+
             return $user;
         }
 
-        return User::create([
+        $user = User::create([
             'google_id' => $googleUser['google_id'],
             'email' => $googleUser['email'],
             'first_name' => $googleUser['given_name'] ?: ($googleUser['name'] ?: 'User'),
@@ -208,6 +213,27 @@ class GoogleSignInService
             'email_verified_at' => $googleUser['email_verified'] ? now() : null,
             'email_verified_via_otp_at' => $googleUser['email_verified'] ? now() : null,
         ]);
+
+        $this->ensureCustomerRole($user);
+
+        return $user;
+    }
+
+    /**
+     * A Google sign-up is a customer, same as AuthController::register().
+     *
+     * Only a roleless account is given the role: linking by email can land on a
+     * staff account, which must not become a customer as well. The same check
+     * repairs Google accounts created before the role was assigned here.
+     */
+    private function ensureCustomerRole(User $user): void
+    {
+        if ($user->roles()->exists()) {
+            return;
+        }
+
+        Role::findOrCreate('customer', 'web');
+        $user->assignRole('customer');
     }
 
     /**

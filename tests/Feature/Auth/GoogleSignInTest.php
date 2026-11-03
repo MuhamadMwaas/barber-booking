@@ -7,6 +7,7 @@ use App\Services\Auth\GoogleSignInService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Mockery;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 /**
@@ -110,6 +111,51 @@ class GoogleSignInTest extends TestCase
         $user = User::where('email', 'ali@example.com')->firstOrFail();
         $this->assertSame('1122334455', $user->google_id);
         $this->assertNotNull($user->email_verified_at);
+        $this->assertSame(['customer'], $user->getRoleNames()->all());
+    }
+
+    public function test_mobile_sign_up_gets_the_customer_role(): void
+    {
+        $this->fakeGooglePayload($this->payload());
+
+        $this->postJson('/api/auth/google/mobile', ['id_token' => 'id-token', 'platform' => 'ios'])->assertOk();
+
+        $this->assertTrue(User::where('email', 'ali@example.com')->firstOrFail()->hasRole('customer'));
+    }
+
+    public function test_existing_roleless_google_account_is_given_the_customer_role(): void
+    {
+        $existing = User::create([
+            'first_name' => 'Ali',
+            'last_name' => 'Hasan',
+            'email' => 'ali@example.com',
+            'google_id' => '1122334455',
+            'password' => bcrypt('secret-password'),
+        ]);
+
+        $this->fakeGooglePayload($this->payload());
+
+        $this->postJson('/api/auth/google', ['token' => 'id-token'])->assertOk();
+
+        $this->assertSame(['customer'], $existing->fresh()->getRoleNames()->all());
+    }
+
+    public function test_linking_a_staff_account_by_email_does_not_add_the_customer_role(): void
+    {
+        Role::findOrCreate('provider', 'web');
+        $staff = User::create([
+            'first_name' => 'Staff',
+            'last_name' => 'Member',
+            'email' => 'ali@example.com',
+            'password' => bcrypt('secret-password'),
+        ]);
+        $staff->assignRole('provider');
+
+        $this->fakeGooglePayload($this->payload());
+
+        $this->postJson('/api/auth/google', ['token' => 'id-token'])->assertOk();
+
+        $this->assertSame(['provider'], $staff->fresh()->getRoleNames()->all());
     }
 
     public function test_extra_allowed_audience_is_accepted(): void
