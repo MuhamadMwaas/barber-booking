@@ -24,7 +24,8 @@ use Illuminate\Support\Facades\Log;
  *  - Numbers are compared through PhoneNumber::key(), the same rule the overlap
  *    guard uses, so `0176 1234567` typed at the counter matches `+49176…`.
  *  - Only guest rows (customer_id NULL) move. A booking that already belongs to
- *    an account is never re-assigned.
+ *    an account is never re-assigned, and neither is one left behind by a
+ *    deleted account (customer_account_deleted_at set).
  *  - The raw guest columns are kept as typed — they are what the salon recorded.
  *  - Idempotent: running it twice links nothing the second time.
  */
@@ -102,6 +103,9 @@ class GuestBookingClaimService
 
         Appointment::query()
             ->whereNull('customer_id')
+            // Left behind by a deleted account, not made at the counter: they
+            // belong to nobody now, least of all the next owner of the number.
+            ->whereNull('customer_account_deleted_at')
             ->whereNotNull('customer_phone')
             ->where('customer_phone', '!=', '')
             ->select(['id', 'customer_phone'])

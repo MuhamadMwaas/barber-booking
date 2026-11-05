@@ -37,6 +37,12 @@ Browser (Alpine.js) ←→ Livewire Server (PHP) via AJAX
 
 - Filament نفسه مبني على Livewire — نفس المحرك.
 
+## 4. لغة أيام الأسبوع
+
+- عناوين أيام الموظفين في نموذج التعديل ومدير الجداول وTimeline تأتي من `ProviderScheduledWork::getLocalizedDays()` باستخدام `lang/{locale}/schedule.php`.
+- عناوين أيام الصالون في `SalonScheduleManager` تأتي من `lang/{locale}/salon_schedule.php`، ضمن `days`.
+- تُحسب الأسماء حسب لغة الطلب الحالية (`ar` / `de` / `en`)؛ تبقى قيم `day_of_week` من 0 إلى 6 كما هي في قاعدة البيانات.
+
 ---
 
 *التالي: [`08-invoicing-printing/README.md`](../08-invoicing-printing/README.md)*

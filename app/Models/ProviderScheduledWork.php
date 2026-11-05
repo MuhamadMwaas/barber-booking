@@ -84,8 +84,7 @@ class ProviderScheduledWork extends Model
      */
     public function getLocalizedDayNameAttribute(): string
     {
-        $locale = app()->getLocale();
-        return $locale === 'ar' ? $this->day_name_ar : $this->day_name;
+        return self::getLocalizedDays()[$this->day_of_week] ?? 'Unknown';
     }
 
     /**
@@ -222,7 +221,10 @@ class ProviderScheduledWork extends Model
      */
     public static function getLocalizedDays(): array
     {
-        return app()->getLocale() === 'ar' ? self::DAYS_AR : self::DAYS;
+        return array_map(
+            fn (string $day): string => __('schedule.'.strtolower($day)),
+            self::DAYS,
+        );
     }
 
     /**

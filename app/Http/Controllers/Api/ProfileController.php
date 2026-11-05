@@ -105,7 +105,10 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
-        if ($user->hasRole('admin') || $user->hasRole('provider')) {
+        // Any staff role, not just admin/provider: this deletes the users row for
+        // good, and a manager or SuperAdmin removed here would take their
+        // schedules, leaves and audit trail with them.
+        if ($user->hasStaffRole()) {
             return response()->json([
                 'message' => 'This endpoint is available for customer accounts only.',
             ], 403);

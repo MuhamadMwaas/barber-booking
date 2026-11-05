@@ -196,8 +196,7 @@ class WeeklyScheduleTimeline extends Component
      */
     public function getLocalizedDayName(int $day): string
     {
-        $locale = app()->getLocale();
-        return $locale === 'ar' ? $this->getDayNameAr($day) : $this->getDayName($day);
+        return ProviderScheduledWork::getLocalizedDays()[$day] ?? 'Unknown';
     }
 
     /**

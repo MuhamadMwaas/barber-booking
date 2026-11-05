@@ -17,9 +17,10 @@ use Tests\TestCase;
 | `Feature/Reminders` holds the appointment-reminder channel suite.
 | `Feature/Filament` holds admin-panel regression tests (RM-01).
 | `Feature/Mail` holds the customer booking-email wording/language suite.
+| `Feature/Account` holds the end-to-end account deletion scenarios.
 |
 */
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
-    ->in('Feature/Booking', 'Feature/Money', 'Feature/Reminders', 'Feature/Filament', 'Feature/Authorization', 'Feature/Mail');
+    ->in('Feature/Booking', 'Feature/Money', 'Feature/Reminders', 'Feature/Filament', 'Feature/Authorization', 'Feature/Mail', 'Feature/Account');

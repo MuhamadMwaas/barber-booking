@@ -122,7 +122,6 @@ class SalonScheduleManager extends Component
     #[Computed]
     public function days(): array
     {
-        $locale = app()->getLocale();
         $days = [];
 
         $daysAr = [
@@ -140,7 +139,7 @@ class SalonScheduleManager extends Component
                 'number' => $num,
                 'name' => $name,
                 'name_ar' => $daysAr[$num],
-                'localized' => $locale === 'ar' ? $daysAr[$num] : $name,
+                'localized' => __('salon_schedule.days.'.strtolower($name)),
             ];
         }
 

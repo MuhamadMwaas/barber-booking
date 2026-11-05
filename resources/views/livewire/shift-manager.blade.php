@@ -47,7 +47,7 @@
                         <div class="flex h-10 w-10 items-center justify-center rounded-lg
                             {{ $shifts[$dayNum]['is_work_day'] ? 'bg-primary-100 dark:bg-primary-900/30' : 'bg-gray-100 dark:bg-gray-800' }}">
                             <span class="text-lg font-bold {{ $shifts[$dayNum]['is_work_day'] ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400' }}">
-                                {{ substr(__('schedule.' . $dayName), 0, 2) }}
+                                {{ mb_substr(__('schedule.' . $dayName), 0, 2) }}
                             </span>
                         </div>
                         <h3 class="text-lg font-bold text-gray-900 dark:text-white">

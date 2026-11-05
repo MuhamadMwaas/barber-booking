@@ -11,7 +11,7 @@ class BranchSeeder extends Seeder
     {
         $branches = [
             [
-                'name' => 'Main Branch - Downtown',
+                'name' => 'Look up - Landshut-Rupprechtstraße',
                 'adress' => '123 Main Street, Downtown Dubai',
                 'phone' => '+971-4-123-4567',
                 'email' => 'downtown@gmail.com',

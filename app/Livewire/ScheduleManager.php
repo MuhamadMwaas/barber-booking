@@ -163,19 +163,17 @@ class ScheduleManager extends Component
     #[Computed]
     public function days(): array
     {
-        $locale = app()->getLocale();
+        $localizedDays = ProviderScheduledWork::getLocalizedDays();
         $days = [];
 
         foreach (ProviderScheduledWork::DAYS as $num => $name) {
             $days[$num] = [
                 'number' => $num,
                 'name' => $name,
-                'name_ar' => ProviderScheduledWork::DAYS[$num],
+                'name_ar' => ProviderScheduledWork::DAYS_AR[$num],
                 'short' => ProviderScheduledWork::DAYS[$num],
-                'short_ar' => ProviderScheduledWork::DAYS[$num],
-                'localized' => $locale === 'ar'
-                    ? ProviderScheduledWork::DAYS[$num]
-                    : $name,
+                'short_ar' => ProviderScheduledWork::DAYS_AR[$num],
+                'localized' => $localizedDays[$num],
             ];
         }
 

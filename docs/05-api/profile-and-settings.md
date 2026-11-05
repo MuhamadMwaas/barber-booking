@@ -32,9 +32,23 @@ first_name, last_name, phone, address, city, image (file max 2MB)
 ## 4. `DELETE /api/profile` — حذف الحساب
 
 ```
-DELETE /api/profile
-→ AccountDeletionService: يلغي المواعيد القادمة + يجهل السابقة
+DELETE /api/profile   { current_password }   // إلزامي فقط إذا الحساب إلو كلمة سر
+→ 200 { success: true, message: "Account deleted successfully" }
+→ 403 حساب موظف (أي role من User::STAFF_ROLES)
+→ 422 current_password incorrect
 ```
+
+`AccountDeletionService::deleteCustomerAccount()` — كله داخل transaction واحدة:
+
+| الجدول | شو بيصير |
+|--------|----------|
+| `users` | **يُحذف نهائياً** (`forceDelete`) — مش soft delete. الإيميل والرقم بيرجعوا متاحين للتسجيل |
+| `appointments` | **تبقى**. الحقول الفاضية من `customer_name / customer_email / customer_phone` تتعبى من الحساب (القيم الموجودة ما تتغير)، بعدين `customer_id = NULL` و`customer_account_deleted_at = now()`. المواعيد القادمة PENDING تتلغى `USER_CANCELLED` |
+| `invoices` | **تبقى** بأرقامها ومبالغها، `customer_id = NULL`. الفاتورة المطبوعة بتاخد الاسم من الحجز |
+| `payments` | ما إلها رابط بالمستخدم — ما بتتأثر |
+| tokens, refresh tokens, devices, sessions, OTPs, reviews, notifications, saved payment methods, صورة البروفايل | تنحذف |
+
+> `customer_account_deleted_at` موجود ليمنع `GuestBookingClaimService` من اعتبار هالحجوزات حجوزات ضيف وتسليمها لأول حساب جديد يأكد نفس الرقم.
 
 ## 5. Phone Verification (بعد الدخول)
 
