@@ -38,7 +38,7 @@ class SalonSettingSeeder extends Seeder
                 'key' => 'max_daily_bookings',
                 'value' => '10',
                 'type' => 'integer',
-                'description' => 'Maximum days in advance for booking',
+                'description' => 'Maximum bookings per customer per day',
                 'setting_group' => 'booking',
             ],
             [
@@ -65,7 +65,7 @@ class SalonSettingSeeder extends Seeder
             [
                 'key' => 'max_services_per_booking',
                 'value' => 10,
-                'type' => 'boolean',
+                'type' => 'integer',
                 'description' => 'Maximum services per booking',
                 'setting_group' => 'general',
             ],
@@ -99,7 +99,7 @@ class SalonSettingSeeder extends Seeder
             ],
             [
                 'key' => 'payment_methods',
-                'value' => '["cash", "card", "online"]',
+                'value' => ['cash', 'card', 'online'],
                 'type' => 'json',
                 'description' => 'Available payment methods',
                 'setting_group' => 'payment',

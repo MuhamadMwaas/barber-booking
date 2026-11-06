@@ -23,7 +23,7 @@
 | **Services** | `Filament/Resources/Services/` | CRUD خدمات + ترجمات + تسعير |
 | **Service Categories** | `Filament/Resources/ServiceCategories/` | فئات الخدمات |
 | **Users** | `Filament/Resources/Users/` | إدارة المستخدمين |
-| **Salon Settings** | `Filament/Resources/SalonSettings/` | إعدادات key-value |
+| **Salon Settings** | `Filament/Resources/SalonSettings/` | تعديل قيم الإعدادات فقط (بدون إنشاء أو حذف)؛ المجموعات وتسميات المفاتيح وحدود القيم في `SalonSettingCatalog` |
 | **Invoice Templates** | `Filament/Resources/InvoiceTemplates/` | تصميم القوالب |
 | **Languages** | `Filament/Resources/Languages/` | اللغات |
 | **Reason Leaves** | `Filament/Resources/ReasonLeaves/` | أسباب الإجازة |

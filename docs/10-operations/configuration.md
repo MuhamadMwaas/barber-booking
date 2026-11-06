@@ -54,6 +54,10 @@ get_setting('max_booking_days', '10');
 | `book_buffer` | 60 | دقائق قبل الموعد |
 | `company_name/address/phone/tax_number` | — | للفاتورة |
 
+**إضافة إعداد جديد:** أضف صفًا عبر migration، وعرّف المفتاح في `SalonSettingCatalog`، وأضف `label` و`helper` في `resources.salon_setting.settings` باللغات الثلاث. لوحة الإدارة تعدّل القيم فقط، ولا تنشئ إعدادات ولا تحذفها: حذف صف `tax_rate` مثلًا يجعل الحجوزات تعود إلى ضريبة 0 بصمت.
+
+**إعدادات لا يقرؤها الكود حاليًا** (معلّمة `in_use => false` وتظهر كـ"غير مستخدم" في الصفحة): `cancellation_hours`, `auto_confirm_appointments`, `enable_online_payment`, `payment_methods`, `reminder_hours_before`, `branch_phone`, `branch_email`, `loyalty_points_enabled`, `points_per_aed`.
+
 ## 4. `AppSetting` / `UserSetting`
 
 - `AppSetting` = كتالوج (key, default, validation rule).

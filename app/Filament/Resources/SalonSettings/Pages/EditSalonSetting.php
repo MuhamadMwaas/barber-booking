@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\SalonSettings\Pages;
 
 use App\Filament\Resources\SalonSettings\SalonSettingResource;
-use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
 
@@ -15,13 +14,16 @@ class EditSalonSetting extends EditRecord
     {
         return [
             ViewAction::make(),
-            DeleteAction::make(),
         ];
     }
 
-        protected function mutateFormDataBeforeSave(array $data): array
+    protected function getRedirectUrl(): string
     {
-        return $data;
+        return static::getResource()::getUrl('index');
     }
 
+    protected function getSavedNotificationTitle(): ?string
+    {
+        return __('resources.salon_setting.updated_notification');
+    }
 }

@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\SalonSettings;
 
-use App\Filament\Resources\SalonSettings\Pages\CreateSalonSetting;
 use App\Filament\Resources\SalonSettings\Pages\EditSalonSetting;
 use App\Filament\Resources\SalonSettings\Pages\ListSalonSettings;
 use App\Filament\Resources\SalonSettings\Pages\ViewSalonSetting;
@@ -17,10 +16,13 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Database\Eloquent\Model;
 
 class SalonSettingResource extends Resource
 {
     use NavigationDefaultAccess, ResourceTranslation;
+
     protected static ?string $model = SalonSetting::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
@@ -30,6 +32,31 @@ class SalonSettingResource extends Resource
     protected static ?int $navigationSort = 60;
 
     protected static ?string $recordTitleAttribute = 'key';
+
+    /**
+     * Settings are defined by the code that reads them, so they are edited here
+     * but never added or removed. A hand-made key has no reader, and a deleted
+     * one fails quietly: without its row `tax_rate` falls back to 0 on bookings.
+     */
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return false;
+    }
+
+    public static function getRecordTitle(?Model $record): string|Htmlable|null
+    {
+        return $record ? SalonSettingCatalog::label($record->key) : null;
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -57,7 +84,6 @@ class SalonSettingResource extends Resource
     {
         return [
             'index' => ListSalonSettings::route('/'),
-            'create' => CreateSalonSetting::route('/create'),
             'view' => ViewSalonSetting::route('/{record}'),
             'edit' => EditSalonSetting::route('/{record}/edit'),
         ];

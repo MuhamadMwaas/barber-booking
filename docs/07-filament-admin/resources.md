@@ -61,7 +61,7 @@ InvoiceTemplates/
 | Services | ✅ | ✅ | ✅ | ✅ | Providers, Appointments |
 | ServiceCategories | ✅ | ✅ | ✅ | ✅ | — |
 | Users | ✅ | ✅ | ✅ | ✅ | Services, CustomerAppointments |
-| SalonSettings | ✅ | ✅ | ✅ | ✅ | — |
+| SalonSettings | — | ✅ | ✅ | ✅ | — |
 | InvoiceTemplates | ✅ | ✅ | ✅ | ✅ | — |
 | Languages | ✅ | ✅ | ✅ | ✅ | — |
 | ReasonLeaves | ✅ | ✅ | ✅ | — | — |
