@@ -94,7 +94,7 @@ class AdminPanelProvider extends PanelProvider {
             ->navigationGroups($this->navigationGroups())
             ->navigationItems([
                 NavigationItem::make('Staff Dashboard')
-                    ->url(fn() => route('staff.dashboard'), shouldOpenInNewTab: true)
+                    ->url(fn() => route('staff.dashboard'), shouldOpenInNewTab: false)
                     ->icon(Heroicon::OutlinedComputerDesktop)
                     ->group(fn() => __('navigation.operations'))
                     ->sort(0),
